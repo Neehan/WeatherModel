@@ -25,7 +25,7 @@ WEATHER_PARAMS = {
 }
 
 WEATHER_PARAMS = ",".join(WEATHER_PARAMS.values())
-SAVE_DIR = "data"
+SAVE_DIR = "data/nasa_power"
 
 
 # Function to split dates into intervals of 366 days or less
@@ -90,12 +90,12 @@ def fetch_weather_for_state(state_name, coordinates):
     longitude_min, longitude_max = min(longs), max(longs)
 
     start_date = datetime.strptime("19840101", "%Y%m%d")
-    end_date = datetime.strptime("20201231", "%Y%m%d")
+    end_date = datetime.strptime("20221231", "%Y%m%d")
     date_ranges = split_dates(start_date, end_date)
 
     chunk_counter = 0
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = []
         for start, end in date_ranges:
             params = {
