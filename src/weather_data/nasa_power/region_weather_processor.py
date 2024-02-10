@@ -7,11 +7,12 @@ import logging
 
 # if set true, will average values over week
 WEEKLY = True
+DATA_DIR = "data/nasa_power"
 
 
 def preprocess_weather_data(state_name):
     print(f"preprocessing data for {state_name}.")
-    with open("data/" + state_name + "_data.json", "r") as f:
+    with open(DATA_DIR + "/" + state_name + "_data.json", "r") as f:
         weather_json = json.load(f)
         f.close()
     weather_df = []
@@ -77,26 +78,38 @@ def preprocess_weather_data(state_name):
     ]
     suffix = "weekly" if WEEKLY else "daily"
 
-    weather_df.to_csv(f"data/{state_name}_regional_{suffix}.csv")
+    weather_df.to_csv(f"{DATA_DIR}/{state_name}_regional_{suffix}.csv")
     print("total coords: ", len(weather_df) / 39)
     return weather_df
 
 
 corn_belt = [
-    "Illinois",
-    "Indiana",
-    "Iowa",
-    "Kansas",
-    "Kentucky",
-    "Michigan",
-    "Minnesota",
-    "Missouri",
-    "Nebraska",
-    "North Dakota",
-    "Ohio",
-    "South Dakota",
-    "Wisconsin",
+    # "Illinois",
+    # "Indiana",
+    # "Iowa",
+    # "Kansas",
+    # "Kentucky",
+    # "Michigan",
+    # "Minnesota",
+    # "Missouri",
+    # "Nebraska",
+    # "North Dakota",
+    # "Ohio",
+    # "South Dakota",
+    # "Wisconsin",
+    # # neighbors
+    # "West Virginia",
+    # "Virginia",
+    # "North Carolina",
+    "Tennessee",
+    "Arkansas",
+    "Oklahoma",
+    "Colorado",
+    "Wyoming",
+    "Montana",
+    "Pennsylvania",
 ]
 
-for state in corn_belt:
-    _ = preprocess_weather_data(state)
+if __name__ == "__main__":
+    for state in corn_belt:
+        _ = preprocess_weather_data(state)

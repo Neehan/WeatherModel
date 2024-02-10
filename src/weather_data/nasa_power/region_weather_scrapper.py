@@ -87,7 +87,12 @@ def consolidate_data(state_name, total_chunks):
 def fetch_weather_for_state(state_name, coordinates):
     longs, lats = zip(*coordinates)
     latitude_min, latitude_max = min(lats), max(lats)
+    latitude_min = min(latitude_min, latitude_max - 2)
+    latitude_min = max(latitude_min, latitude_max - 10)
+
     longitude_min, longitude_max = min(longs), max(longs)
+    longitude_min = min(longitude_min, longitude_max - 2)
+    longitude_min = max(longitude_min, longitude_max - 10)
 
     start_date = datetime.strptime("19840101", "%Y%m%d")
     end_date = datetime.strptime("20221231", "%Y%m%d")
@@ -95,7 +100,7 @@ def fetch_weather_for_state(state_name, coordinates):
 
     chunk_counter = 0
 
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = []
         for start, end in date_ranges:
             params = {
@@ -141,13 +146,26 @@ corn_belt = [
     "Wisconsin",
 ]
 
+neighboring_states = [
+    # "West Virginia",
+    # "Virginia",
+    # "North Carolina",
+    # "Tennessee",
+    # "Arkansas",
+    # "Oklahoma",
+    # "Colorado",
+    # "Wyoming",
+    "Montana",
+    "Pennsylvania",
+]
+
 # corn_belt = ["Illinois"]
 
+if __name__ == "__main__":
+    with open("state_coords.json", "r") as f:
+        state_coords = json.load(f)
+        f.close()
 
-with open("state_coords.json", "r") as f:
-    state_coords = json.load(f)
-    f.close()
-
-for state_name in corn_belt:
-    print(f"fetching weather for {state_name}.")
-    fetch_weather_for_state(state_name, state_coords[state_name])
+    for state_name in neighboring_states:
+        print(f"fetching weather for {state_name}.")
+        fetch_weather_for_state(state_name, state_coords[state_name])
