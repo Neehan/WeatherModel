@@ -34,6 +34,7 @@ def train(
 ):
     model.train()
     total_loss = 0
+    loader_len = 0
     for (
         data,
         coords,
@@ -53,13 +54,14 @@ def train(
 
         loss = criterion(target_features, output)
         total_loss += loss.item()
+        loader_len += 1
 
         # Backward pass
         loss.backward()
         optimizer.step()
     scheduler.step()
 
-    return np.sqrt(total_loss / len(loader))
+    return np.sqrt(total_loss / loader_len)
 
 
 def training_loop(
