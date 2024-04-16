@@ -43,4 +43,3 @@ else:
 TQDM_OUTPUT = TqdmToLogger(logging.getLogger(), level=logging.INFO)
 TOTAL_WEATHER_VARS = 31
 CONTEXT_LENGTH = 180
-NUM_BUCKETS = 600

@@ -19,6 +19,9 @@ if __name__ == "__main__":
         "--n_input_features", help="number of input features", default=26, type=int
     )
     parser.add_argument(
+        "--n_buckets", help="number of buckets for quantization", default=600, type=int
+    )
+    parser.add_argument(
         "--n_epochs", help="number of training epochs", default=10, type=int
     )
     parser.add_argument(
@@ -44,7 +47,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model = Weatherformer(
-        input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS
+        input_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
+        num_buckets=args.n_buckets,
     ).to(DEVICE)
     model, losses = training_loop(
         model,
