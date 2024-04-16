@@ -61,9 +61,7 @@ class WFPositionalEncoding(nn.Module):
 
 
 class WFSelfAttention(nn.MultiheadAttention):
-    def __init__(
-        self, embed_dim, num_heads, max_len, dropout=0.1, device=None, dtype=None
-    ):
+    def __init__(self, embed_dim, num_heads, dropout=0.1, device=None, dtype=None):
         super(WFSelfAttention, self).__init__(
             embed_dim,
             num_heads,
@@ -187,7 +185,6 @@ class WFEncoderLayer(nn.TransformerEncoderLayer):
         self,
         d_model: int,
         nhead: int,
-        max_len: int,
         dim_feedforward: int = 2048,
         dropout: float = 0.1,
         layer_norm_eps: float = 1e-5,
@@ -211,7 +208,7 @@ class WFEncoderLayer(nn.TransformerEncoderLayer):
 
         # Using custom WFSelfAttention
         self.self_attn = WFSelfAttention(
-            d_model, nhead, max_len=max_len, dropout=dropout, **factory_kwargs
+            d_model, nhead, dropout=dropout, **factory_kwargs
         )
 
         # Implementation of Feedforward model
@@ -311,32 +308,58 @@ class WFTransformerEncoder(nn.TransformerEncoder):
 
 class Weatherformer(nn.Module):
     def __init__(
-        self, input_dim, output_dim, num_heads=8, num_layers=3, hidden_dim_factor=8
+        self,
+        input_dim,
+        output_dim,
+        num_buckets=600,
+        num_heads=8,
+        num_layers=3,
+        hidden_dim_factor=8,
     ):
         super(Weatherformer, self).__init__()
 
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.mask_value = nn.Parameter(torch.tensor([2.0]))
-        self.input_scaler = nn.Parameter(torch.tensor([1.0]))
-        hidden_dim = hidden_dim_factor * num_heads
-        feedforward_dim = hidden_dim * 4
-        self.embedding = nn.Linear(input_dim, hidden_dim)
+        self.num_buckets = num_buckets  # Number of quantization buckets
+        self.weather_min = -3
+        self.weather_max = 3
+        self.bucket_width = (
+            self.weather_max - self.weather_min
+        ) / self.num_buckets  # Width of each bucket
+        self.mask_index = self.num_buckets  # Index for masked values
+        self.hidden_dim = (
+            hidden_dim_factor * num_heads
+        )  # Dimension of each embedding vector
+
+        feedforward_dim = self.hidden_dim * 4
+
+        self.embedding = nn.Embedding(
+            self.num_buckets + 1, 16
+        )  # num_buckets buckets + 1 for mask
+        self.in_proj = nn.Linear(input_dim * 16, self.hidden_dim)
         self.positional_encoding = WFPositionalEncoding(
-            hidden_dim, max_len=CONTEXT_LENGTH
+            self.hidden_dim, max_len=CONTEXT_LENGTH
         )
         encoder_layer = WFEncoderLayer(
-            d_model=hidden_dim,
+            d_model=self.hidden_dim,
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
-            max_len=CONTEXT_LENGTH,
             device=DEVICE,
         )
         self.transformer_encoder = WFTransformerEncoder(
             encoder_layer, num_layers=num_layers
         )
+        self.out_proj = nn.Linear(self.hidden_dim, output_dim)
 
-        self.fc = nn.Linear(hidden_dim, output_dim)
+    def quantize(self, weather):
+        # Normalize and quantize the weather features
+        quantized_indices = (
+            (weather + self.weather_min) / self.bucket_width
+        ).long()  # Shift and scale to [0, num_buckets)
+        quantized_indices = torch.clamp(
+            quantized_indices, 0, self.num_buckets - 1
+        )  # Clamp indices to valid range
+        return quantized_indices
 
     def forward(
         self,
@@ -350,19 +373,26 @@ class Weatherformer(nn.Module):
         # temporal index is index in time and temporal granularity ()
         temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
 
-        # apply mask without modifying the data
-        weather = weather.clone()
+        batch_size, seq_len, weather_dim = weather.shape
 
-        # Zero out the target features in the cloned input data
-        weather *= self.input_scaler
-        # mask certain features in the input weather
+        quantized_indices = self.quantize(weather)
+
+        # Mask specific features
         if weather_feature_mask is not None:
-            weather[:, :, weather_feature_mask] = self.mask_value
+            quantized_indices[:, :, weather_feature_mask] = (
+                self.mask_index
+            )  # Use special index for masked values
 
-        weather = self.embedding(weather)
+        # Embed weather features
+        weather = self.embedding(quantized_indices).view(
+            batch_size, seq_len, -1
+        )  # Shape: [batch_size, seq_length, embed_dim * num_weather_vars]
+
+        # project embedding to hidden dimension
+        weather = self.in_proj(weather)
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
             weather, temporal_granularity, src_key_padding_mask=src_key_padding_mask
         )
-        weather = self.fc(weather)
+        weather = self.out_proj(weather)
         return weather
