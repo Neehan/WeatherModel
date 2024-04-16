@@ -89,17 +89,12 @@ class WFSelfAttention(nn.MultiheadAttention):
 
         self.dropout = nn.Dropout(dropout)
 
+        self.granularity_embed = nn.Embedding(
+            num_embeddings=31, embedding_dim=embed_dim
+        )  # up to 30 days + 1 for padding
+
         # Initialize weights
         self._init_parameters()
-
-        # Temporal distance scaler for each head
-        self.temporal_distance_scaler = nn.Linear(1, num_heads, **factory_kwargs)
-        self.distance_matrix = torch.arange(max_len, **factory_kwargs).expand(
-            1, max_len, max_len
-        )
-        self.distance_matrix = torch.abs(
-            self.distance_matrix - self.distance_matrix.transpose(1, 2)
-        )
 
     def _init_parameters(self):
         # Xavier uniform initialization for the linear layers
@@ -131,17 +126,16 @@ class WFSelfAttention(nn.MultiheadAttention):
 
         q, k, v = qkv[0], qkv[1], qkv[2]
 
+        gran_embed = self.granularity_embed(temporal_granularity).view(
+            batch_size * self.num_heads, 1, self.head_dim
+        )
+
+        q += gran_embed
+        k += gran_embed
+
         # Calculate scores
         attn_scores = torch.bmm(q, k.transpose(-2, -1)) * self.scaling
         # each head
-        temp_scaler = self.temporal_distance_scaler(temporal_granularity).unsqueeze(2)
-        temp_projection = temp_scaler * self.distance_matrix.unsqueeze(3)
-        temp_projection = temp_projection.view(
-            batch_size * self.num_heads, seq_length, seq_length
-        )
-
-        # add temporal distance projection
-        attn_scores += temp_projection
 
         # Apply attention mask if provided
         if attn_mask is not None:
@@ -207,7 +201,6 @@ class WFEncoderLayer(nn.TransformerEncoderLayer):
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             layer_norm_eps=layer_norm_eps,
-            bias=bias,
             device=device,
             dtype=dtype,
             batch_first=True,
@@ -355,7 +348,7 @@ class Weatherformer(nn.Module):
     ):
 
         # temporal index is index in time and temporal granularity ()
-        temporal_granularity = temporal_index[:, 1:].unsqueeze(2)
+        temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
 
         # apply mask without modifying the data
         weather = weather.clone()
