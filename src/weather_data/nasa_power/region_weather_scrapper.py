@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import time
 import os
-import argparse
+from grids import usa_states, mexico_grid, canada_grid
 
 WEATHER_PARAMS = {
     "Temperature at 2 Meters (C)": "T2M",
@@ -13,16 +13,38 @@ WEATHER_PARAMS = {
     "Temperature at 2 Meters Minimum (C)": "T2M_MIN",
     "Wind Direction at 2 Meters (Degrees)": "WD2M",
     "Wind Speed at 2 Meters (m/s)": "WS2M",
-    "Profile Soil (the layer from the surface down to the bedrock) Moisture (0 to 1)": "GWETPROF",
     "Surface Pressure (kPa)": "PS",
     "Specific Humidity at 2 Meters (g/Kg)": "QV2M",
-    "Snow Depth (cm)": "SNODP",
     "Precipitation Corrected (mm/day)": "PRECTOTCORR",
     "All Sky Surface Shortwave Downward Irradiance (MJ/m^2/day)": "ALLSKY_SFC_SW_DWN",
     "Evapotranspiration Energy Flux (MJ/m^2/day)": "EVPTRNS",
+    "Profile Soil (the layer from the surface down to the bedrock) Moisture (0 to 1)": "GWETPROF",
+    "Snow Depth (cm)": "SNODP",
     "Dew/Frost Point at 2 Meters (C)": "T2MDEW",
     "Cloud Amount (%)": "CLOUD_AMT",
+    # additional 14
+    "Evaporation Land (kg/m^2/s * 10^6)": "EVLAND",
+    "Wet Bulb Temperature at 2 Meters (C)": "T2MWET",
+    "Land Snowcover Fraction (0 to 1)": "FRSNO",
+    "All Sky Surface Longwave Downward Irradiance (MJ/m^2/day)": "ALLSKY_SFC_LW_DWN",
+    "All Sky Surface PAR Total (MJ/m^2/day)": "ALLSKY_SFC_PAR_TOT",
+    "All Sky Surface Albedo (0 to 1)": "ALLSKY_SRF_ALB",
+    "Precipitable Water (cm)": "PW",
+    "Surface Roughness (m)": "Z0M",
+    "Surface Air Density (kg/m^3) ": "RHOA",
+    "Relative Humidity at 2 Meters (%)": "RH2M",
+    "Cooling Degree Days Above 18.3 C": "CDD18_3",
+    "Heating Degree Days Below 18.3 C": "HDD18_3",
+    "Total Column Ozone (Dobson units)": "TO3",
+    "Aerosol Optical Depth 55": "AOD_55",
 }
+
+PART1 = False
+if PART1:
+    WEATHER_PARAMS = dict(list(WEATHER_PARAMS.items())[:14])
+else:
+    WEATHER_PARAMS = dict(list(WEATHER_PARAMS.items())[14:])
+
 
 WEATHER_PARAMS = ",".join(WEATHER_PARAMS.values())
 SAVE_DIR = "data/nasa_power"
@@ -41,7 +63,7 @@ def split_dates(start, end):
 
 def fetch_data_from_api(params):
     endpoint = "https://power.larc.nasa.gov/api/temporal/daily/regional"
-    retries = 3
+    retries = 2
     base_delay = 2  # Initial delay in seconds
 
     for attempt in range(retries):
@@ -80,19 +102,14 @@ def consolidate_data(state_name, total_chunks):
         with open(file_name, "r") as file:
             all_data.append(json.load(file))
     # Save consolidated data for the state
-    with open(f"{SAVE_DIR}/{state_name}_data.json", "w") as file:
+    suffix = "" if PART1 else "_pt2"
+    with open(f"{SAVE_DIR}/{state_name}_data{suffix}.json", "w") as file:
         json.dump(all_data, file)
 
 
-def fetch_weather_for_state(state_name, coordinates):
-    longs, lats = zip(*coordinates)
-    latitude_min, latitude_max = min(lats), max(lats)
-    latitude_min = min(latitude_min, latitude_max - 2)
-    latitude_min = max(latitude_min, latitude_max - 10)
-
-    longitude_min, longitude_max = min(longs), max(longs)
-    longitude_min = min(longitude_min, longitude_max - 2)
-    longitude_min = max(longitude_min, longitude_max - 10)
+def fetch_weather_for_state(
+    state_name, latitude_min, latitude_max, longitude_min, longitude_max
+):
 
     start_date = datetime.strptime("19840101", "%Y%m%d")
     end_date = datetime.strptime("20221231", "%Y%m%d")
@@ -100,7 +117,7 @@ def fetch_weather_for_state(state_name, coordinates):
 
     chunk_counter = 0
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         futures = []
         for start, end in date_ranges:
             params = {
@@ -130,42 +147,48 @@ def fetch_weather_for_state(state_name, coordinates):
         os.remove(file_name)
 
 
-corn_belt = [
-    "Illinois",
-    "Indiana",
-    "Iowa",
-    "Kansas",
-    "Kentucky",
-    "Michigan",
-    "Minnesota",
-    "Missouri",
-    "Nebraska",
-    "North Dakota",
-    "Ohio",
-    "South Dakota",
-    "Wisconsin",
-]
+def get_coordinates(coord_map, region_name, is_usa):
+    if is_usa:  # this is USA
+        longs, lats = zip(*coord_map[region_name])
+        latitude_min, latitude_max = min(lats), max(lats)
+        latitude_min = min(latitude_min, latitude_max - 2)
+        latitude_min = max(latitude_min, latitude_max - 8)
 
-neighboring_states = [
-    # "West Virginia",
-    # "Virginia",
-    # "North Carolina",
-    # "Tennessee",
-    # "Arkansas",
-    # "Oklahoma",
-    # "Colorado",
-    # "Wyoming",
-    "Montana",
-    "Pennsylvania",
-]
+        longitude_min, longitude_max = min(longs), max(longs)
+        longitude_min = min(longitude_min, longitude_max - 2)
+        longitude_min = max(longitude_min, longitude_max - 8)
+    else:
+        region_id = int(region_name.split("_")[1])
+        (latitude_max, longitude_min), (latitude_min, longitude_max) = coord_map[
+            region_id
+        ]
+    # print(latitude_min, latitude_max, longitude_min, longitude_max)
+    return latitude_min, latitude_max, longitude_min, longitude_max
 
-# corn_belt = ["Illinois"]
+
+COUNTRY = "USA"
 
 if __name__ == "__main__":
-    with open("state_coords.json", "r") as f:
-        state_coords = json.load(f)
-        f.close()
+    if COUNTRY == "USA":
+        with open("data/state_coords.json", "r") as f:
+            region_coords = json.load(f)
+            f.close()
+        region_names = usa_states
+    elif COUNTRY == "MEXICO":
+        region_coords = mexico_grid
+        region_names = [f"Mexico_{i}" for i in range(region_coords)]
+    elif COUNTRY == "CANADA":
+        region_coords = canada_grid
+        region_names = [f"Canada_{i}" for i in range(region_coords)]
 
-    for state_name in neighboring_states:
-        print(f"fetching weather for {state_name}.")
-        fetch_weather_for_state(state_name, state_coords[state_name])
+    for region_name in region_names:
+        print(f"fetching weather for {region_name}.")
+        latitude_min, latitude_max, longitude_min, longitude_max = get_coordinates(
+            region_coords, region_name, is_usa=True
+        )
+        print(f"latitude  range: {latitude_min:.2f}, {latitude_max:.2f}")
+        print(f"longitude range: {longitude_min:.2f}, {longitude_max:.2f}")
+
+        fetch_weather_for_state(
+            region_name, latitude_min, latitude_max, longitude_min, longitude_max
+        )

@@ -3,21 +3,61 @@ import numpy as np
 import json
 from tqdm import tqdm
 import logging
-
+import grids
 
 # if set true, will average values over week
-WEEKLY = True
+FREQUENCY = "weekly"
+ENGINEERED_FEATURES = True
 DATA_DIR = "data/nasa_power"
 
 
-def preprocess_weather_data(state_name):
-    print(f"preprocessing data for {state_name}.")
-    with open(DATA_DIR + "/" + state_name + "_data.json", "r") as f:
+def ea_from_t2m(x):
+    # teten's equation
+    A = 17.27 if x > 0 else 21.87
+    B = 237.3 if x > 0 else 265.5
+    return 0.6108 * np.exp((A * x) / (x + B))
+
+
+def compute_ET0(df):
+    # https://en.wikipedia.org/wiki/Penman%E2%80%93Monteith_equation#FAO_56_Penman-Monteith_equation
+    # Constants
+    gamma = 0.066  # Psychrometric constant, kPa/C
+    delta = (4098 * (0.6108 * np.exp(17.27 * df["T2M"] / (df["T2M"] + 237.3)))) / (
+        df["T2M"] + 237.3
+    ) ** 2  # Slope of vapor pressure curve
+    rn = df["ALLSKY_SFC_SW_DWN"]  # Net irradiance
+    G = 0  # Ground heat flux, usually 0 for daily computations
+    et0 = (
+        0.408 * delta * (rn - G)
+        + gamma * (900 / (df["T2M"] + 273)) * df["WS2M"] * df["VPD"]
+    ) / (delta + gamma * (1 + 0.34 * df["WS2M"]))
+    return et0
+
+
+def add_engineered_features(weather_df):
+    weather_df = weather_df.copy()
+    weather_df["VAP"] = weather_df["T2M"].apply(ea_from_t2m)
+
+    # convert g / kg to kg/kg
+    weather_df["QV2M"] /= 1000
+
+    # source: https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html
+    ea_actual = weather_df["QV2M"] / 1000 * 101.3 / (0.622 + 0.378 * weather_df["QV2M"])
+    weather_df["VPD"] = weather_df["VAP"] - ea_actual  # vapor pressure difference
+
+    # evapotranspiration for sample crop
+    weather_df["ET0"] = compute_ET0(weather_df)
+    return weather_df
+
+
+def read_and_consolidate_data(state_name, part2=False):
+    suffix = "_pt2" if part2 else ""
+    with open(DATA_DIR + "/" + state_name + f"_data{suffix}.json", "r") as f:
         weather_json = json.load(f)
         f.close()
     weather_df = []
 
-    logging.info(f"processing weather data for {state_name}")
+    print(f"processing weather data for {state_name} part {int(part2) + 1}.")
     for chunk in tqdm(weather_json):
         for record in chunk["features"]:
             df = pd.DataFrame.from_dict(record["properties"]["parameter"]).reset_index(
@@ -29,20 +69,31 @@ def preprocess_weather_data(state_name):
             weather_df.append(df)
 
     weather_df = pd.concat(weather_df, ignore_index=True)
-    # print(weather_df.head())
+    if part2:
+        weather_df.drop(columns=["alt"], inplace=True)
+    return weather_df
 
+
+def preprocess_weather_data(state_name):
+    weather_df1 = read_and_consolidate_data(state_name)
+    weather_df2 = read_and_consolidate_data(state_name, part2=True)
+
+    weather_df = pd.merge(weather_df1, weather_df2, on=["lat", "lng", "Date"])
     # Convert the index to datetime format
     weather_df["Date"] = pd.to_datetime(weather_df.Date, format="%Y%m%d")
     weather_df["Year"] = weather_df["Date"].dt.year
-    if WEEKLY:
+    if FREQUENCY == "weekly":
         pivot_column = "Week"
         last_suffix = "_53"
         weather_df["Week"] = weather_df.Date.dt.isocalendar().week
-
-    else:
+    elif FREQUENCY == "monthly":
+        pivot_column = "Month"
+        last_suffix = "_13"
+        weather_df["Month"] = weather_df.Date.dt.month
+    else:  # daily frequency by default
         pivot_column = "doy"
         last_suffix = "_366"
-        weather_df["doy"] = weather_df["Date"].dt.dayofyear
+        weather_df["doy"] = weather_df["Date"].dt.dayofyear.astype(int)
 
     # weather_df.set_index(["lat", "lng", "Year"], inplace=True)
     weather_df.drop(columns=["Date"], inplace=True)
@@ -56,11 +107,17 @@ def preprocess_weather_data(state_name):
                 print(f"{col} has missing values.")
             weather_df.loc[weather_df[col] < -997.0, col] = None
 
+    # add the engineered features
+    if ENGINEERED_FEATURES:
+        weather_df = add_engineered_features(weather_df)
+
     weather_df = (
         weather_df.groupby(index_cols + [pivot_column]).agg("mean").reset_index()
     )
     weather_df = weather_df.pivot(index=index_cols, columns=pivot_column)
-    weather_df.columns = [f"{measurement}_{i}" for measurement, i in weather_df.columns]
+    weather_df.columns = [
+        f"{measurement}_{int(i)}" for measurement, i in weather_df.columns
+    ]
     weather_df.reset_index(drop=False, inplace=True)
 
     last_cols = [col for col in weather_df.columns if col.endswith(last_suffix)]
@@ -76,40 +133,13 @@ def preprocess_weather_data(state_name):
         non_weather_cols
         + [col for col in weather_df.columns if col not in non_weather_cols]
     ]
-    suffix = "weekly" if WEEKLY else "daily"
+    suffix = FREQUENCY
 
     weather_df.to_csv(f"{DATA_DIR}/{state_name}_regional_{suffix}.csv")
     print("total coords: ", len(weather_df) / 39)
     return weather_df
 
 
-corn_belt = [
-    # "Illinois",
-    # "Indiana",
-    # "Iowa",
-    # "Kansas",
-    # "Kentucky",
-    # "Michigan",
-    # "Minnesota",
-    # "Missouri",
-    # "Nebraska",
-    # "North Dakota",
-    # "Ohio",
-    # "South Dakota",
-    # "Wisconsin",
-    # # neighbors
-    # "West Virginia",
-    # "Virginia",
-    # "North Carolina",
-    "Tennessee",
-    "Arkansas",
-    "Oklahoma",
-    "Colorado",
-    "Wyoming",
-    "Montana",
-    "Pennsylvania",
-]
-
 if __name__ == "__main__":
-    for state in corn_belt:
+    for state in grids.usa_states:
         _ = preprocess_weather_data(state)
