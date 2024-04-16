@@ -11,12 +11,6 @@ import utils
 np.random.seed(1234)
 torch.manual_seed(1234)
 
-train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
-train_loader_paths = {
-    frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(8)]
-    for frequency in ["weekly", "monthly"]
-}
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -49,16 +43,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    train_loader = utils.streaming_dataloader(
-        train_loader_paths, args.batch_size, shuffle=True
-    )
-
     model = Weatherformer(
         input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS
     ).to(DEVICE)
     model, losses = training_loop(
         model,
-        train_loader,
+        args.batch_size,
         num_input_features=args.n_input_features,
         num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
         num_epochs=args.n_epochs,

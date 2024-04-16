@@ -66,7 +66,7 @@ def train(
 
 def training_loop(
     model,
-    train_loader,
+    batch_size,
     num_input_features,
     num_output_features,
     num_epochs,
@@ -88,7 +88,16 @@ def training_loop(
         "train": [],
     }
 
+    train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
+    train_loader_paths = {
+        frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(8)]
+        for frequency in ["weekly", "monthly"]
+    }
+
     for epoch in range(num_epochs):
+        train_loader = utils.streaming_dataloader(
+            train_loader_paths, batch_size, shuffle=True
+        )
         train_loss = train(
             model,
             num_input_features,
