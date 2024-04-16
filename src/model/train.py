@@ -52,10 +52,7 @@ def train(
             :, :, target_indices
         ]
 
-        loss = criterion(
-            output,
-            target_features,
-        )
+        loss = criterion(target_features, output)
         total_loss += loss.item()
         loader_len += 1
 
@@ -113,7 +110,12 @@ def training_loop(
         )
 
         losses["train"].append(train_loss)
-        logging.info(f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}")
+
+        mask_value = model.mask_value.item()
+        input_scaler = model.input_scaler.item()
+        logging.info(
+            f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, mask: {mask_value:.4f}, scaler: {input_scaler:.4f}"
+        )
         if epoch % 5 == 4 or epoch == num_epochs - 1:
             torch.save(
                 model,
