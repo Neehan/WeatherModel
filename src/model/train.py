@@ -91,7 +91,7 @@ def training_loop(
     train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
     train_loader_paths = {
         frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(8)]
-        for frequency in ["weekly", "monthly"]
+        for frequency in ["daily", "weekly", "monthly"]
     }
 
     for epoch in range(num_epochs):
