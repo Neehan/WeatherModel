@@ -225,7 +225,6 @@ class Weatherformer(nn.Module):
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
             device=DEVICE,
-            dropout=0.0,
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers
