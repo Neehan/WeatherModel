@@ -50,7 +50,7 @@ class WFPositionalEncoding(nn.Module):
         custom_pe[:, :, 2::4] = torch.sin(lat_norm * self.div_term).unsqueeze(1)
         custom_pe[:, :, 3::4] = torch.cos(lon_norm * self.div_term).unsqueeze(1)
 
-        time_frequency = (self.position_list * self.div_term).unsqueeze(0)
+        time_frequency = (self.position_list[:seq_len, :] * self.div_term).unsqueeze(0)
         # encode time in 4k and 4k + 1
         custom_pe[:, :, 0::4] = torch.sin(time_frequency)
         custom_pe[:, :, 1::4] = torch.cos(time_frequency)
@@ -58,6 +58,140 @@ class WFPositionalEncoding(nn.Module):
         # Add positional encoding to input
         token_embedding += custom_pe
         return token_embedding
+
+
+# class WFSelfAttention(nn.MultiheadAttention):
+#     def __init__(self, embed_dim, num_heads, dropout=0.1, device=None, dtype=None):
+#         super(WFSelfAttention, self).__init__(
+#             embed_dim,
+#             num_heads,
+#             dropout=dropout,
+#             device=device,
+#             dtype=dtype,
+#             batch_first=True,
+#         )
+#         factory_kwargs = {"device": device, "dtype": dtype}
+
+#         self.embed_dim = embed_dim
+#         self.num_heads = num_heads
+#         self.head_dim = embed_dim // num_heads
+#         self.batch_first = True
+#         assert (
+#             self.head_dim * num_heads == embed_dim
+#         ), "embed_dim must be divisible by num_heads"
+
+#         self.scaling = self.head_dim**-0.5
+
+#         self.qkv_proj = nn.Linear(embed_dim, embed_dim * 3, **factory_kwargs)
+#         self.out_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
+
+#         self.dropout = nn.Dropout(dropout)
+
+#         self.granularity_embed = nn.Embedding(
+#             num_embeddings=31, embedding_dim=embed_dim
+#         )  # up to 30 days + 1 for padding
+
+#         # Initialize weights
+#         self._init_parameters()
+
+#     def _init_parameters(self):
+#         # Xavier uniform initialization for the linear layers
+#         nn.init.xavier_uniform_(self.qkv_proj.weight)
+
+#     def forward(
+#         self,
+#         x,
+#         temporal_granularity,
+#         key_padding_mask=None,
+#         need_weights=True,
+#         attn_mask=None,
+#         average_attn_weights=True,
+#     ):
+#         batch_size, seq_length, embed_dim = x.size()
+
+#         # self attention uses same x to create Q, K, V
+#         qkv = self.qkv_proj(x)
+#         qkv = (
+#             qkv.unflatten(-1, (3, embed_dim))
+#             .unsqueeze(0)
+#             .transpose(0, -2)
+#             .squeeze(-2)
+#             .contiguous()
+#         )
+#         qkv = qkv.view(
+#             3, seq_length, batch_size * self.num_heads, self.head_dim
+#         ).transpose(1, 2)
+
+#         q, k, v = qkv[0], qkv[1], qkv[2]
+
+#         gran_embed = self.granularity_embed(temporal_granularity).view(
+#             batch_size * self.num_heads, 1, self.head_dim
+#         )
+
+#         q += gran_embed
+#         k += gran_embed
+
+#         if key_padding_mask is not None:
+#             key_padding_mask = F._canonical_mask(
+#                 mask=key_padding_mask,
+#                 mask_name="key_padding_mask",
+#                 other_type=F._none_or_dtype(attn_mask),
+#                 other_name="attn_mask",
+#                 target_type=q.dtype,
+#             )
+#             print(key_padding_mask.shape)
+#             print(q.shape)
+#             print(k.transpose(-2, -1).shape)
+#             attn_scores = (
+#                 torch.baddbmm(key_padding_mask, q, k.transpose(-2, -1)) * self.scaling
+#             )
+#         else:
+#             # Calculate scores
+#             attn_scores = torch.bmm(q, k.transpose(-2, -1)) * self.scaling
+
+#         # Apply attention mask if provided
+#         # if attn_mask is not None:
+#         #     attn_scores = attn_scores.masked_fill(attn_mask == 0, float("-inf"))
+
+#         # # Apply key padding mask
+#         # if key_padding_mask is not None:
+#         #     attn_scores = attn_scores.view(
+#         #         batch_size, self.num_heads, seq_length, seq_length
+#         #     )
+#         #     attn_scores = attn_scores.masked_fill(
+#         #         key_padding_mask.unsqueeze(1).unsqueeze(2),
+#         #         float("-inf"),
+#         #     )
+#         #     attn_scores = attn_scores.view(
+#         #         batch_size * self.num_heads, seq_length, seq_length
+#         #     )
+
+#         # Softmax to get the weights
+#         attn_weights = F.softmax(attn_scores, dim=-1)
+#         attn_weights = self.dropout(attn_weights)
+
+#         # Multiply weights by values
+#         attn_output = torch.bmm(attn_weights, v)
+
+#         # Concatenate heads and put through final linear layer
+#         attn_output = (
+#             attn_output.transpose(0, 1)
+#             .contiguous()
+#             .view(batch_size * seq_length, embed_dim)
+#         )
+#         attn_output = self.out_proj(attn_output).view(batch_size, seq_length, embed_dim)
+
+#         if need_weights:
+#             # Optionally return attention weights
+#             attn_weights = attn_weights.view(
+#                 batch_size, self.num_heads, seq_length, seq_length
+#             )
+#             if average_attn_weights:
+#                 attn_weights = attn_weights.mean(dim=1)
+
+#             return attn_output, attn_weights
+#         else:
+#             return attn_output
 
 
 class Weatherformer(nn.Module):
@@ -78,6 +212,7 @@ class Weatherformer(nn.Module):
         # allow each weather feature to be scaled based on input mask
         # up to 30 days + 1 for padding, granuality changes the scaling
         self.input_scaler = nn.Embedding(num_embeddings=31, embedding_dim=input_dim)
+        torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
@@ -90,6 +225,7 @@ class Weatherformer(nn.Module):
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
             device=DEVICE,
+            dropout=0.0,
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers

@@ -134,7 +134,7 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        self.weather_transformer = Weatherformer(31, 48)
+        self.weather_transformer = Weatherformer(31, 48, max_len=SEQ_LEN)
         if pretrained_weatherformer is not None:
             self.weather_transformer.input_proj = copy.deepcopy(
                 pretrained_weatherformer.input_proj
@@ -185,14 +185,7 @@ class YieldPredictor(nn.Module):
             ),
             device=DEVICE,
         )
-        padded_weather[:, -SEQ_LEN:, weather_indices] = weather.clone()
-        padding_mask = torch.zeros(
-            (batch_size * n_years, self.weather_transformer.max_len),
-            dtype=torch.bool,
-            device=DEVICE,
-        )
-        padding_mask[:, :-SEQ_LEN] = True
-
+        padded_weather[:, :, weather_indices] = weather.clone()
         # create feature mask
         weather_feature_mask = torch.ones(
             self.weather_transformer.input_dim,
@@ -209,8 +202,7 @@ class YieldPredictor(nn.Module):
             coord,
             temporal_index,
             weather_feature_mask=weather_feature_mask,
-            src_key_padding_mask=padding_mask,
-        )[:, -SEQ_LEN:, :]
+        )
         weather = weather.view(batch_size * n_years, -1)
         weather = self.weather_fc(weather)
         weather = weather.view(batch_size, n_years, -1)
