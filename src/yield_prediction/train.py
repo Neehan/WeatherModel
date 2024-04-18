@@ -11,7 +11,7 @@ from .constants import *
 
 def compute_rmse(model, data_loader):
     model.eval()
-    device = model.device
+    device = DEVICE
     # Compute the RMSE on the training dataset
     mse_total = 0.0
     for weather, practices, soil, year, coord, y, y_past, mask in data_loader:
