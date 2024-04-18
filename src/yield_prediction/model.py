@@ -203,12 +203,12 @@ class YieldPredictor(nn.Module):
         padding_mask[:, :-SEQ_LEN] = True
 
         # create feature mask
-        weather_feature_mask = torch.zeros(
+        weather_feature_mask = torch.ones(
             self.weather_transformer.input_dim,
             dtype=torch.bool,
             device=DEVICE,
         )
-        weather_feature_mask[weather_indices] = True
+        weather_feature_mask[weather_indices] = False
 
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
         temporal_index = torch.cat([year, temporal_gran], dim=1)
