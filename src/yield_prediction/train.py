@@ -93,7 +93,15 @@ def training_loop(
             y,
             y_past,
             mask,
-        ) in enumerate(tqdm(train_loader)):
+        ) in enumerate(
+            tqdm(
+                train_loader,
+                file=TQDM_OUTPUT,
+                desc="Training",
+                dynamic_ncols=True,
+                mininterval=MIN_INTERVAL,
+            )
+        ):
             # Zero the gradients
             optimizer.zero_grad()
             weather = weather.to(device)

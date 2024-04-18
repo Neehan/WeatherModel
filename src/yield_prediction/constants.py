@@ -41,3 +41,6 @@ else:
         filename=DATA_DIR + "yield_predictor.log",
         filemode="w",
     )
+
+# minimum logging interval in seconds during training
+MIN_INTERVAL = 3 * 60
