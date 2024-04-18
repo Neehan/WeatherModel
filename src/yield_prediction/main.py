@@ -49,7 +49,7 @@ if __name__ == "__main__":
     pretrained_model = (
         None
         if args.no_pretraining
-        else torch.load(DATA_DIR + "weatherformer_0.2m_epoch_4.pth")
+        else torch.load(DATA_DIR + "trained_models/weatherformer_0.2m_epoch_4.pth")
     )
 
     model = YieldPredictor(pretrained_model).to(DEVICE)

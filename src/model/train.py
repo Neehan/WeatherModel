@@ -122,11 +122,12 @@ def training_loop(
             torch.save(
                 model,
                 DATA_DIR
-                + f"weatherformer_{total_params / 10**6:.1f}m_epoch_{epoch}.pth",
+                + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_epoch_{epoch}.pth",
             )
             torch.save(
                 model,
-                DATA_DIR + f"weatherformer_{total_params / 10**6:.1f}m_latest.pth",
+                DATA_DIR
+                + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_latest.pth",
             )
             utils.save_losses(losses, total_params)
     return model, losses
