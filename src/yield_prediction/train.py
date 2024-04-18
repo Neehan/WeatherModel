@@ -130,7 +130,8 @@ def training_loop(
         test_rmse = compute_rmse(model, test_loader)
         losses["test"].append(test_rmse)
         best_test_rmse = min(test_rmse, best_test_rmse)
-        logging.info("best test rmse: ", best_test_rmse)
-        logging.info("current test rmse: ", test_rmse)
-        logging.info("[%d / %d] loss: %.3f" % (epoch + 1, num_epochs, running_loss))
+        logging.info(
+            f"[{epoch+1} / {num_epochs} Test RMSE best: {best_test_rmse:.3f}, current: {test_rmse:.3f}"
+        )
+        logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
     return model, losses
