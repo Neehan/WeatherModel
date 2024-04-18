@@ -46,6 +46,7 @@ class CropDataset(Dataset):
 
         for idx in tqdm(
             range(len(self.index)),
+            # range(200),
             file=TQDM_OUTPUT,
             desc=f"Loading {which_dataset} Dataset",
             dynamic_ncols=True,
@@ -103,6 +104,7 @@ class CropDataset(Dataset):
 
     def __len__(self):
         return len(self.index)
+        # return 200
 
     def __getitem__(self, idx):
         return self.data[idx]  # weather, practices, soil, year, y, y_mean

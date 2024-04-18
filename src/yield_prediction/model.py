@@ -139,10 +139,6 @@ class YieldPredictor(nn.Module):
             self.weather_transformer.embedding = copy.deepcopy(
                 pretrained_weatherformer.embedding
             )
-            self.weather_transformer.embedding = copy.deepcopy(
-                pretrained_weatherformer.embedding
-            )
-
             self.weather_transformer.transformer_encoder = copy.deepcopy(
                 pretrained_weatherformer.transformer_encoder
             )
@@ -153,15 +149,10 @@ class YieldPredictor(nn.Module):
                 pretrained_weatherformer.input_scaler
             )
 
-            self.weather_fc = nn.Sequential(
-                nn.Linear(48 * SEQ_LEN, 120),
-                # nn.ReLu()
-            )
-        else:
-            self.weather_fc = nn.Sequential(
-                nn.Linear(6 * SEQ_LEN, 120),
-                # nn.ReLu()
-            )
+        self.weather_fc = nn.Sequential(
+            nn.Linear(48 * SEQ_LEN, 120),
+            # nn.ReLu()
+        )
 
         fc_dims = 120 + 40 + 14 + 1 + 1
         self.trend_transformer = TransformerModel(
