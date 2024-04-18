@@ -189,14 +189,14 @@ class YieldPredictor(nn.Module):
         padded_weather = torch.zeros(
             (
                 batch_size * n_years,
-                self.trend_transformer.max_len,
+                self.weather_transformer.max_len,
                 self.weather_transformer.input_dim,
             ),
             device=DEVICE,
         )
         padded_weather[:, -SEQ_LEN:, weather_indices] = weather
         padding_mask = torch.zeros(
-            (batch_size * n_years, self.trend_transformer.max_len),
+            (batch_size * n_years, self.weather_transformer.max_len),
             dtype=torch.bool,
             device=DEVICE,
         )

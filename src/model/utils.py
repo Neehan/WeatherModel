@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 def save_losses(losses, total_params):
     with open(
-        DATA_DIR + f"weatherformer_{total_params / 10**6:.1f}_losses.json", "w"
+        DATA_DIR + f"weatherformer_{total_params / 10**6:.1f}m_losses.json", "w"
     ) as f:
         json.dump(losses, f)
     f.close()

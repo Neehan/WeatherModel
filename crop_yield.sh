@@ -5,4 +5,4 @@
 module load anaconda/Python-ML-2023b
 
 # Run the script
-python -m src.yield_predictor.main "$@"
+python -m src.yield_prediction.main "$@"
