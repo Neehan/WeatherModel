@@ -22,3 +22,22 @@ STDOUT = os.environ.get("STDOUT", "False").lower() in ("true", "1", "t")
 
 TQDM_OUTPUT = TqdmToLogger(logging.getLogger(), level=logging.INFO)
 SEQ_LEN = 52
+
+if STDOUT:
+    # Configure logging to output to stdout
+    print("output all logs to stdout")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s][%(levelname)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[logging.StreamHandler()],
+    )
+else:
+    # Configure logging to write to a file
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s][%(levelname)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        filename=DATA_DIR + "yield_predictor.log",
+        filemode="w",
+    )

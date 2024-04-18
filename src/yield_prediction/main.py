@@ -1,10 +1,9 @@
 import argparse
 
 from .dataloader import read_soybean_dataset, get_train_test_loaders
-from .constants import *
 from .model import YieldPredictor
 from .train import training_loop
-
+from .constants import *
 
 parser = argparse.ArgumentParser()
 

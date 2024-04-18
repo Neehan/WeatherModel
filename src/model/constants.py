@@ -36,7 +36,7 @@ else:
         level=logging.INFO,
         format="[%(asctime)s][%(levelname)s]: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        filename=DATA_DIR + "main.log",
+        filename=DATA_DIR + "pretraining.log",
         filemode="w",
     )
 
