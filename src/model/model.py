@@ -243,16 +243,18 @@ class Weatherformer(nn.Module):
     ):
 
         # temporal index is index in time and temporal granularity ()
-        temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
-        temp_embedding = self.input_scaler(temporal_granularity)
+        # temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
+        # temp_embedding = self.input_scaler(temporal_granularity)
 
         # mask certain features in the input weather
         if weather_feature_mask is not None:
             # scaler for masked dimensions = true becomes zero
-            input_mask = (~weather_feature_mask).unsqueeze(0) * temp_embedding
+            # input_mask = (~weather_feature_mask).unsqueeze(0) * temp_embedding
 
             # mask the masked dimensions and scale the rest
-            weather = weather * input_mask.view(weather.shape[0], 1, -1)
+            # weather = weather * input_mask.view(weather.shape[0], 1, -1)
+            weather = weather.clone()
+            weather[:, :, weather_feature_mask] = 0
 
         weather = self.input_proj(weather)
         weather = self.positional_encoding(weather, coords)

@@ -185,7 +185,7 @@ class YieldPredictor(nn.Module):
             ),
             device=DEVICE,
         )
-        padded_weather[:, :, weather_indices] = weather.clone()
+        padded_weather[:, :, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
             self.weather_transformer.input_dim,
