@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from constants import *
+from .constants import *
 from typing import Optional
 
 
@@ -272,25 +272,6 @@ class WFTransformerEncoder(nn.TransformerEncoder):
         src_key_padding_mask: Optional[torch.Tensor] = None,
     ):
         output = src
-
-        # Prepare masks
-        src_key_padding_mask = F._canonical_mask(
-            mask=src_key_padding_mask,
-            mask_name="src_key_padding_mask",
-            other_type=F._none_or_dtype(mask),
-            other_name="mask",
-            target_type=src.dtype,
-        )
-
-        mask = F._canonical_mask(
-            mask=mask,
-            mask_name="mask",
-            other_type=None,
-            other_name="",
-            target_type=src.dtype,
-            check_other=False,
-        )
-
         # Assume each layer can handle `additional_input` as the second positional argument.
         for mod in self.layers:
             output = mod(
@@ -314,8 +295,9 @@ class Weatherformer(nn.Module):
 
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.mask_value = nn.Parameter(torch.tensor([2.0]))
-        self.input_scaler = nn.Parameter(torch.tensor([1.0]))
+        self.max_len = CONTEXT_LENGTH
+        # allow each weather feature to be scaled based on input mask
+        self.input_scaler = nn.Parameter(torch.tensor([1.0] * input_dim, device=DEVICE))
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
         self.embedding = nn.Linear(input_dim, hidden_dim)
@@ -346,14 +328,12 @@ class Weatherformer(nn.Module):
         # temporal index is index in time and temporal granularity ()
         temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
 
-        # apply mask without modifying the data
-        weather = weather.clone()
-
-        # Zero out the target features in the cloned input data
-        weather *= self.input_scaler
         # mask certain features in the input weather
         if weather_feature_mask is not None:
-            weather[:, :, weather_feature_mask] = self.mask_value
+            # scaler for masked dimensions = true becomes zero
+            input_mask = (~weather_feature_mask) * self.input_scaler
+            # mask the masked dimensions and scale the rest
+            weather *= input_mask.view(1, 1, -1)
 
         weather = self.embedding(weather)
         weather = self.positional_encoding(weather, coords)

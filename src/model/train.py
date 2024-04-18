@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
 
-import utils
-from constants import *
+from . import utils
+from .constants import *
 
 
 def swap_feature(weather_indices, num_input_features):
@@ -47,8 +47,10 @@ def train(
         swap_feature(weather_indices, num_input_features)
         target_indices = weather_indices[num_input_features:]
         target_features = data[:, :, target_indices]
+        target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
+        target_mask[target_indices] = True
 
-        output = model(data, coords, index, weather_feature_mask=target_indices)[
+        output = model(data, coords, index, weather_feature_mask=target_mask)[
             :, :, target_indices
         ]
 
@@ -111,10 +113,10 @@ def training_loop(
 
         losses["train"].append(train_loss)
 
-        mask_value = model.mask_value.item()
-        input_scaler = model.input_scaler.item()
+        input_scaler_mean = model.input_scaler.mean().item()
+        input_scaler_std = model.input_scaler.std().item()
         logging.info(
-            f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, mask: {mask_value:.4f}, scaler: {input_scaler:.4f}"
+            f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, input scaler mean: {input_scaler_mean:.4f}, std: {input_scaler_std:.4f}"
         )
         if epoch % 5 == 4 or epoch == num_epochs - 1:
             torch.save(

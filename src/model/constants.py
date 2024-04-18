@@ -3,7 +3,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import matplotlib.pyplot as plt
-from tqdm_to_logger import TqdmToLogger
+from .tqdm_to_logger import TqdmToLogger
 
 # Automatically finds and loads the .env file
 load_dotenv()

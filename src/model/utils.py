@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader, ConcatDataset
 import torch.optim as optim
-from constants import *
+from .constants import *
 import json
 from tqdm import tqdm
 

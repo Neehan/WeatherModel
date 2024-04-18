@@ -1,12 +1,10 @@
 import numpy as np
-import logging
 import torch
 import argparse
 
-from train import training_loop
-from model import Weatherformer
-from constants import *
-import utils
+from .train import training_loop
+from .model import Weatherformer
+from .constants import *
 
 np.random.seed(1234)
 torch.manual_seed(1234)
