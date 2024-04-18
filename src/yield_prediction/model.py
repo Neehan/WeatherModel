@@ -136,8 +136,8 @@ class YieldPredictor(nn.Module):
 
         self.weather_transformer = Weatherformer(31, 48)
         if pretrained_weatherformer is not None:
-            self.weather_transformer.embedding = copy.deepcopy(
-                pretrained_weatherformer.embedding
+            self.weather_transformer.input_proj = copy.deepcopy(
+                pretrained_weatherformer.input_proj
             )
             self.weather_transformer.transformer_encoder = copy.deepcopy(
                 pretrained_weatherformer.transformer_encoder
@@ -185,7 +185,7 @@ class YieldPredictor(nn.Module):
             ),
             device=DEVICE,
         )
-        padded_weather[:, -SEQ_LEN:, weather_indices] = weather
+        padded_weather[:, -SEQ_LEN:, weather_indices] = weather.clone()
         padding_mask = torch.zeros(
             (batch_size * n_years, self.weather_transformer.max_len),
             dtype=torch.bool,
