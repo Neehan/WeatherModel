@@ -19,13 +19,13 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Read the STDOUT environment variable
 STDOUT = os.environ.get("STDOUT", "False").lower() in ("true", "1", "t")
+TEST_ENV = os.environ.get("TEST_ENV", "False").lower() in ("true", "1", "t")
 
 TQDM_OUTPUT = TqdmToLogger(logging.getLogger(), level=logging.INFO)
 SEQ_LEN = 52
 
 if STDOUT:
     # Configure logging to output to stdout
-    print("output all logs to stdout")
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s][%(levelname)s]: %(message)s",

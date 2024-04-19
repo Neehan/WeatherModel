@@ -163,20 +163,14 @@ class YieldPredictor(nn.Module):
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 
     def forward(self, weather, soil, practices, year, coord, y_past, mask):
-        # summary_tokens = torch.full((weather.size(0), weather.size(1), weather.size(2), 1), 3).to(DEVICE)
-        # # Add summary token at the start of each weather sequence
-        # weather = torch.cat([summary_tokens, weather], dim=3)
+
         batch_size, n_years, n_features, n_weeks = weather.size()
         weather = weather.view(batch_size * n_years, -1, n_features)
 
         coord = coord.view(batch_size * n_years, 2)
         year = year.view(batch_size * n_years, 1)
-
         # [7, 8, 11, 1, 2, 29] are the closest weather feature ids according to pretraining
-        weather_indices = torch.tensor([7, 8, 11, 1, 2, 29], device=DEVICE)
-        # self.trend_transformer.max_len = 180
-
-        # create padded weather and mask
+        weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
         padded_weather = torch.zeros(
             (
                 batch_size * n_years,
@@ -185,7 +179,7 @@ class YieldPredictor(nn.Module):
             ),
             device=DEVICE,
         )
-        padded_weather[:, :, weather_indices] = weather
+        padded_weather[:, -SEQ_LEN:, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
             self.weather_transformer.input_dim,
@@ -194,6 +188,15 @@ class YieldPredictor(nn.Module):
         )
         weather_feature_mask[weather_indices] = False
 
+        # create padding mask
+        padding_mask = torch.ones(
+            (batch_size * n_years, self.weather_transformer.max_len),
+            dtype=torch.bool,
+            device=DEVICE,
+        )
+        padding_mask[:, -n_weeks:] = False
+
+        # create temporal index
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
         temporal_index = torch.cat([year, temporal_gran], dim=1)
 
@@ -202,7 +205,9 @@ class YieldPredictor(nn.Module):
             coord,
             temporal_index,
             weather_feature_mask=weather_feature_mask,
-        )
+            src_key_padding_mask=padding_mask,
+        )[:, -SEQ_LEN:, :]
+
         weather = weather.view(batch_size * n_years, -1)
         weather = self.weather_fc(weather)
         weather = weather.view(batch_size, n_years, -1)

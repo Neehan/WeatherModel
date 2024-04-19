@@ -209,15 +209,15 @@ class Weatherformer(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.max_len = max_len
-        # allow each weather feature to be scaled based on input mask
-        # up to 30 days + 1 for padding, granuality changes the scaling
-        self.input_scaler = nn.Embedding(num_embeddings=31, embedding_dim=input_dim)
+        self.input_scaler = nn.Embedding(
+            num_embeddings=TOTAL_WEATHER_VARS, embedding_dim=input_dim
+        )
         torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
 
-        self.input_proj = nn.Linear(input_dim, hidden_dim)
+        self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
         encoder_layer = nn.TransformerEncoderLayer(
             batch_first=True,
@@ -230,35 +230,37 @@ class Weatherformer(nn.Module):
             encoder_layer, num_layers=num_layers
         )
 
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.out_proj = nn.Linear(hidden_dim, output_dim)
 
     def forward(
         self,
         weather,
         coords,
         temporal_index,
-        weather_feature_mask=None,
-        src_key_padding_mask=None,
+        weather_feature_mask=None,  # n_features,
+        src_key_padding_mask=None,  # batch_size x seq_len
     ):
 
+        batch_size, seq_len, n_features = weather.shape
+
         # temporal index is index in time and temporal granularity ()
-        # temporal_granularity = temporal_index[:, 1:].unsqueeze(2).int()
-        # temp_embedding = self.input_scaler(temporal_granularity)
+        temporal_granularity = temporal_index[:, 1].int()
+        temp_embedding = self.input_scaler(temporal_granularity)
 
         # mask certain features in the input weather
         if weather_feature_mask is not None:
-            # scaler for masked dimensions = true becomes zero
-            # input_mask = (~weather_feature_mask).unsqueeze(0) * temp_embedding
+            # scalers for for masked dimensions = true becomes zero
+            temp_embedding = (~weather_feature_mask).unsqueeze(0) * temp_embedding
 
-            # mask the masked dimensions and scale the rest
-            # weather = weather * input_mask.view(weather.shape[0], 1, -1)
-            weather = weather.clone()
-            weather[:, :, weather_feature_mask] = 0
+        # mask the masked dimensions and scale the rest
+        weather = weather * temp_embedding.view(batch_size, 1, n_features)
+        weather[:, :, weather_feature_mask] = 0
 
-        weather = self.input_proj(weather)
+        weather = self.in_proj(weather)
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
-        weather = self.fc(weather)
+        weather = self.out_proj(weather)
+
         return weather

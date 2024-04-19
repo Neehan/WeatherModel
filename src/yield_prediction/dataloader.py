@@ -45,8 +45,7 @@ class CropDataset(Dataset):
         which_dataset = "Test" if test_dataset else "Training"
 
         for idx in tqdm(
-            range(len(self.index)),
-            # range(200),
+            range(1000 if TEST_ENV else len(self.index)),
             file=TQDM_OUTPUT,
             desc=f"Loading {which_dataset} Dataset",
             dynamic_ncols=True,
@@ -103,8 +102,7 @@ class CropDataset(Dataset):
             self.data.append((weather, practices, soil, year, coord, y, y_past, mask))
 
     def __len__(self):
-        return len(self.index)
-        # return 200
+        return 1000 if TEST_ENV else len(self.index)
 
     def __getitem__(self, idx):
         return self.data[idx]  # weather, practices, soil, year, y, y_mean
