@@ -319,8 +319,7 @@ class Weatherformer(nn.Module):
         #     dim_feedforward=feedforward_dim,
         #     device=DEVICE,
         # )
-        encoder_layer = nn.WFTransformerEncoder(
-            batch_first=True,
+        encoder_layer = WFEncoderLayer(
             d_model=hidden_dim,
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
