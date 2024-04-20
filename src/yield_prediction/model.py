@@ -165,7 +165,7 @@ class YieldPredictor(nn.Module):
 
     def forward(self, weather, soil, practices, year, coord, y_past, mask):
 
-        batch_size, n_years, n_features, n_weeks = weather.size()
+        batch_size, n_years, n_features, seq_len = weather.size()
         weather = weather.view(batch_size * n_years, -1, n_features)
 
         coord = coord.view(batch_size * n_years, 2)
@@ -175,12 +175,12 @@ class YieldPredictor(nn.Module):
         padded_weather = torch.zeros(
             (
                 batch_size * n_years,
-                self.weather_transformer.max_len,
+                seq_len,
                 self.weather_transformer.input_dim,
             ),
             device=DEVICE,
         )
-        padded_weather[:, -SEQ_LEN:, weather_indices] = weather
+        padded_weather[:, :, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
             self.weather_transformer.input_dim,
@@ -188,14 +188,6 @@ class YieldPredictor(nn.Module):
             device=DEVICE,
         )
         weather_feature_mask[weather_indices] = False
-
-        # create padding mask
-        padding_mask = torch.ones(
-            (batch_size * n_years, self.weather_transformer.max_len),
-            dtype=torch.bool,
-            device=DEVICE,
-        )
-        padding_mask[:, -n_weeks:] = False
 
         # create temporal index
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
@@ -206,8 +198,7 @@ class YieldPredictor(nn.Module):
             coord,
             temporal_index,
             weather_feature_mask=weather_feature_mask,
-            src_key_padding_mask=padding_mask,
-        )[:, -SEQ_LEN:, :]
+        )
 
         weather = weather.view(batch_size * n_years, -1)
         weather = self.weather_fc(weather)
