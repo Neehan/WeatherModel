@@ -136,8 +136,8 @@ class YieldPredictor(nn.Module):
 
         self.weather_transformer = Weatherformer(31, 48, max_len=SEQ_LEN)
         if pretrained_weatherformer is not None:
-            self.weather_transformer.input_proj = copy.deepcopy(
-                pretrained_weatherformer.input_proj
+            self.weather_transformer.in_proj = copy.deepcopy(
+                pretrained_weatherformer.in_proj
             )
             self.weather_transformer.transformer_encoder = copy.deepcopy(
                 pretrained_weatherformer.transformer_encoder

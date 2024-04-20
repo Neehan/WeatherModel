@@ -50,7 +50,7 @@ class WFPositionalEncoding(nn.Module):
         custom_pe[:, :, 2::4] = torch.sin(lat_norm * self.div_term).unsqueeze(1)
         custom_pe[:, :, 3::4] = torch.cos(lon_norm * self.div_term).unsqueeze(1)
 
-        time_frequency = (self.position_list[:seq_len, :] * self.div_term).unsqueeze(0)
+        time_frequency = (self.position_list * self.div_term).unsqueeze(0)
         # encode time in 4k and 4k + 1
         custom_pe[:, :, 0::4] = torch.sin(time_frequency)
         custom_pe[:, :, 1::4] = torch.cos(time_frequency)
@@ -199,9 +199,9 @@ class Weatherformer(nn.Module):
         self,
         input_dim,
         output_dim,
-        num_heads=8,
-        num_layers=3,
-        hidden_dim_factor=8,
+        num_heads=16,
+        num_layers=6,
+        hidden_dim_factor=16,
         max_len=CONTEXT_LENGTH,
     ):
         super(Weatherformer, self).__init__()
