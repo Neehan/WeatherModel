@@ -148,6 +148,7 @@ class YieldPredictor(nn.Module):
             self.weather_transformer.input_scaler = copy.deepcopy(
                 pretrained_weatherformer.input_scaler
             )
+            self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
         self.weather_fc = nn.Sequential(
             nn.Linear(48 * SEQ_LEN, 120),
