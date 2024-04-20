@@ -9,8 +9,6 @@ from ..model.tqdm_to_logger import TqdmToLogger
 load_dotenv()
 
 plt.style.use("ggplot")
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-torch.use_deterministic_algorithms(True)
 
 DATA_DIR = "data/"
 WEATHER_FILE_PATH = DATA_DIR + "nasa_power/train_dataset_weekly.pth"

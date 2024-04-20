@@ -152,7 +152,7 @@ def read_soybean_dataset(data_dir: str):
     )
     soybean_df = pd.read_csv(data_dir + full_filename)
     soybean_df["year_std"] = soybean_df["year"]
-    soybean_df = soybean_df.sort_values(["year", "loc_ID"])
+    soybean_df = soybean_df.sort_values(["loc_ID", "year"])
     return soybean_df
 
 

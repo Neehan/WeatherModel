@@ -1,9 +1,19 @@
 import argparse
+import os
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+import torch
+
+torch.use_deterministic_algorithms(True)
+
 
 from .dataloader import read_soybean_dataset, get_train_test_loaders
 from .model import YieldPredictor
 from .train import training_loop
 from .constants import *
+
+torch.manual_seed(1234)
+torch.cuda.manual_seed(1234)
 
 parser = argparse.ArgumentParser()
 
