@@ -1,5 +1,13 @@
-import numpy as np
+import os
+
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
 import torch
+
+torch.use_deterministic_algorithms(True)
+
+
+import numpy as np
 import argparse
 
 from .train import training_loop

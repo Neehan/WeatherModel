@@ -113,10 +113,11 @@ def training_loop(
 
         losses["train"].append(train_loss)
 
-        input_scaler_mean = model.input_scaler.mean().item()
-        input_scaler_std = model.input_scaler.std().item()
+        daily_scaler_mean = model.input_scaler.weight[1].mean().item()
+        weekly_scaler_mean = model.input_scaler.weight[7].mean().item()
+        monthly_scaler_mean = model.input_scaler.weight[30].mean().item()
         logging.info(
-            f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, input scaler mean: {input_scaler_mean:.4f}, std: {input_scaler_std:.4f}"
+            f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, scaler means daily: {daily_scaler_mean:.4f},  weekly: {weekly_scaler_mean:.4f},  monthly: {monthly_scaler_mean:.4f}"
         )
         if epoch % 5 == 4 or epoch == num_epochs - 1:
             torch.save(

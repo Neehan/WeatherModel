@@ -2,6 +2,7 @@ import argparse
 import os
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
 import torch
 
 torch.use_deterministic_algorithms(True)

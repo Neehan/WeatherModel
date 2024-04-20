@@ -9,8 +9,6 @@ from .tqdm_to_logger import TqdmToLogger
 load_dotenv()
 
 plt.style.use("ggplot")
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-torch.use_deterministic_algorithms(True)
 
 DATA_DIR = "data/"
 WEATHER_FILE_PATH = DATA_DIR + "nasa_power/train_dataset_weekly.pth"
@@ -42,4 +40,5 @@ else:
 
 TQDM_OUTPUT = TqdmToLogger(logging.getLogger(), level=logging.INFO)
 TOTAL_WEATHER_VARS = 31
+MAX_GRANULARITY_DAYS = 31
 CONTEXT_LENGTH = 180
