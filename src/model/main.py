@@ -20,6 +20,7 @@ torch.manual_seed(1234)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--batch_size", help="batch size", default=64, type=int)
     parser.add_argument(
         "--n_input_features", help="number of input features", default=26, type=int
@@ -48,6 +49,11 @@ if __name__ == "__main__":
     parser.set_defaults(train_attn=False)
 
     args = parser.parse_args()
+
+    args_dict = vars(args)
+    logging.info("Command-line arguments:")
+    for arg, value in args_dict.items():
+        logging.info(f"{arg}: {value}")
 
     model = Weatherformer(
         input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS

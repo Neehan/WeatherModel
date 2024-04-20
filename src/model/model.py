@@ -60,138 +60,231 @@ class WFPositionalEncoding(nn.Module):
         return token_embedding
 
 
-# class WFSelfAttention(nn.MultiheadAttention):
-#     def __init__(self, embed_dim, num_heads, dropout=0.1, device=None, dtype=None):
-#         super(WFSelfAttention, self).__init__(
-#             embed_dim,
-#             num_heads,
-#             dropout=dropout,
-#             device=device,
-#             dtype=dtype,
-#             batch_first=True,
-#         )
-#         factory_kwargs = {"device": device, "dtype": dtype}
+class WFSelfAttention(nn.MultiheadAttention):
+    def __init__(self, embed_dim, num_heads, dropout=0.1, device=None, dtype=None):
+        super(WFSelfAttention, self).__init__(
+            embed_dim,
+            num_heads,
+            dropout=dropout,
+            device=device,
+            dtype=dtype,
+            batch_first=True,
+        )
+        factory_kwargs = {"device": device, "dtype": dtype}
 
-#         self.embed_dim = embed_dim
-#         self.num_heads = num_heads
-#         self.head_dim = embed_dim // num_heads
-#         self.batch_first = True
-#         assert (
-#             self.head_dim * num_heads == embed_dim
-#         ), "embed_dim must be divisible by num_heads"
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.batch_first = True
+        assert (
+            self.head_dim * num_heads == embed_dim
+        ), "embed_dim must be divisible by num_heads"
 
-#         self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
 
-#         self.qkv_proj = nn.Linear(embed_dim, embed_dim * 3, **factory_kwargs)
-#         self.out_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
+        self.qkv_proj = nn.Linear(embed_dim, embed_dim * 3, **factory_kwargs)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
 
-#         self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
 
-#         self.granularity_embed = nn.Embedding(
-#             num_embeddings=31, embedding_dim=embed_dim
-#         )  # up to 30 days + 1 for padding
+        self.granularity_embed = nn.Embedding(
+            num_embeddings=31, embedding_dim=embed_dim
+        )  # up to 30 days + 1 for padding
 
-#         # Initialize weights
-#         self._init_parameters()
+        # Initialize weights
+        self._init_parameters()
 
-#     def _init_parameters(self):
-#         # Xavier uniform initialization for the linear layers
-#         nn.init.xavier_uniform_(self.qkv_proj.weight)
+    def _init_parameters(self):
+        # Xavier uniform initialization for the linear layers
+        nn.init.xavier_uniform_(self.qkv_proj.weight)
 
-#     def forward(
-#         self,
-#         x,
-#         temporal_granularity,
-#         key_padding_mask=None,
-#         need_weights=True,
-#         attn_mask=None,
-#         average_attn_weights=True,
-#     ):
-#         batch_size, seq_length, embed_dim = x.size()
+    def forward(
+        self,
+        x,
+        temporal_granularity,
+        key_padding_mask=None,
+        need_weights=True,
+        attn_mask=None,
+        average_attn_weights=True,
+    ):
+        batch_size, seq_length, embed_dim = x.size()
 
-#         # self attention uses same x to create Q, K, V
-#         qkv = self.qkv_proj(x)
-#         qkv = (
-#             qkv.unflatten(-1, (3, embed_dim))
-#             .unsqueeze(0)
-#             .transpose(0, -2)
-#             .squeeze(-2)
-#             .contiguous()
-#         )
-#         qkv = qkv.view(
-#             3, seq_length, batch_size * self.num_heads, self.head_dim
-#         ).transpose(1, 2)
+        # self attention uses same x to create Q, K, V
+        qkv = self.qkv_proj(x)
+        qkv = (
+            qkv.unflatten(-1, (3, embed_dim))
+            .unsqueeze(0)
+            .transpose(0, -2)
+            .squeeze(-2)
+            .contiguous()
+        )
+        qkv = qkv.view(
+            3, seq_length, batch_size * self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
-#         q, k, v = qkv[0], qkv[1], qkv[2]
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
-#         gran_embed = self.granularity_embed(temporal_granularity).view(
-#             batch_size * self.num_heads, 1, self.head_dim
-#         )
+        gran_embed = self.granularity_embed(temporal_granularity).view(
+            batch_size * self.num_heads, 1, self.head_dim
+        )
 
-#         q += gran_embed
-#         k += gran_embed
+        q += gran_embed
+        k += gran_embed
 
-#         if key_padding_mask is not None:
-#             key_padding_mask = F._canonical_mask(
-#                 mask=key_padding_mask,
-#                 mask_name="key_padding_mask",
-#                 other_type=F._none_or_dtype(attn_mask),
-#                 other_name="attn_mask",
-#                 target_type=q.dtype,
-#             )
-#             print(key_padding_mask.shape)
-#             print(q.shape)
-#             print(k.transpose(-2, -1).shape)
-#             attn_scores = (
-#                 torch.baddbmm(key_padding_mask, q, k.transpose(-2, -1)) * self.scaling
-#             )
-#         else:
-#             # Calculate scores
-#             attn_scores = torch.bmm(q, k.transpose(-2, -1)) * self.scaling
+        # Calculate scores
+        attn_scores = torch.bmm(q, k.transpose(-2, -1)) * self.scaling
+        # each head
 
-#         # Apply attention mask if provided
-#         # if attn_mask is not None:
-#         #     attn_scores = attn_scores.masked_fill(attn_mask == 0, float("-inf"))
+        # Apply attention mask if provided
+        if attn_mask is not None:
+            attn_scores = attn_scores.masked_fill(attn_mask == 0, float("-inf"))
 
-#         # # Apply key padding mask
-#         # if key_padding_mask is not None:
-#         #     attn_scores = attn_scores.view(
-#         #         batch_size, self.num_heads, seq_length, seq_length
-#         #     )
-#         #     attn_scores = attn_scores.masked_fill(
-#         #         key_padding_mask.unsqueeze(1).unsqueeze(2),
-#         #         float("-inf"),
-#         #     )
-#         #     attn_scores = attn_scores.view(
-#         #         batch_size * self.num_heads, seq_length, seq_length
-#         #     )
+        # Apply key padding mask
+        if key_padding_mask is not None:
+            attn_scores = attn_scores.view(
+                batch_size, self.num_heads, seq_length, seq_length
+            )
+            attn_scores = attn_scores.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2),
+                float("-inf"),
+            )
+            attn_scores = attn_scores.view(
+                batch_size * self.num_heads, seq_length, seq_length
+            )
 
-#         # Softmax to get the weights
-#         attn_weights = F.softmax(attn_scores, dim=-1)
-#         attn_weights = self.dropout(attn_weights)
+        # Softmax to get the weights
+        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
 
-#         # Multiply weights by values
-#         attn_output = torch.bmm(attn_weights, v)
+        # Multiply weights by values
+        attn_output = torch.bmm(attn_weights, v)
 
-#         # Concatenate heads and put through final linear layer
-#         attn_output = (
-#             attn_output.transpose(0, 1)
-#             .contiguous()
-#             .view(batch_size * seq_length, embed_dim)
-#         )
-#         attn_output = self.out_proj(attn_output).view(batch_size, seq_length, embed_dim)
+        # Concatenate heads and put through final linear layer
+        attn_output = (
+            attn_output.transpose(0, 1)
+            .contiguous()
+            .view(batch_size * seq_length, embed_dim)
+        )
+        attn_output = self.out_proj(attn_output).view(batch_size, seq_length, embed_dim)
 
-#         if need_weights:
-#             # Optionally return attention weights
-#             attn_weights = attn_weights.view(
-#                 batch_size, self.num_heads, seq_length, seq_length
-#             )
-#             if average_attn_weights:
-#                 attn_weights = attn_weights.mean(dim=1)
+        if need_weights:
+            # Optionally return attention weights
+            attn_weights = attn_weights.view(
+                batch_size, self.num_heads, seq_length, seq_length
+            )
+            if average_attn_weights:
+                attn_weights = attn_weights.mean(dim=1)
 
-#             return attn_output, attn_weights
-#         else:
-#             return attn_output
+            return attn_output, attn_weights
+        else:
+            return attn_output
+
+
+class WFEncoderLayer(nn.TransformerEncoderLayer):
+    def __init__(
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int = 2048,
+        dropout: float = 0.1,
+        layer_norm_eps: float = 1e-5,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
+        super(WFEncoderLayer, self).__init__(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            layer_norm_eps=layer_norm_eps,
+            device=device,
+            dtype=dtype,
+            batch_first=True,
+        )
+
+        factory_kwargs = {"device": device, "dtype": dtype}
+        self.batch_first = True
+
+        # Using custom WFSelfAttention
+        self.self_attn = WFSelfAttention(
+            d_model, nhead, dropout=dropout, **factory_kwargs
+        )
+
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward, bias=bias, **factory_kwargs)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model, bias=bias, **factory_kwargs)
+
+        self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        src: torch.Tensor,
+        temporal_granularity: torch.Tensor,
+        src_mask: Optional[torch.Tensor] = None,
+        src_key_padding_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        # Forward pass through custom WFSelfAttention
+        src2 = self.self_attn(
+            src,
+            temporal_granularity,
+            key_padding_mask=src_key_padding_mask,
+            attn_mask=src_mask,
+            need_weights=False,
+        )
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+
+        # Forward pass through Feedforward Network
+        src2 = self.linear2(self.dropout(F.relu(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+
+        return src
+
+
+class WFTransformerEncoder(nn.TransformerEncoder):
+    def __init__(
+        self,
+        encoder_layer: nn.Module,
+        num_layers: int,
+        norm=None,
+        enable_nested_tensor=True,
+        mask_check=True,
+    ):
+        super().__init__(
+            encoder_layer,
+            num_layers,
+            norm,
+            enable_nested_tensor,
+            mask_check,
+        )
+
+    def forward(
+        self,
+        src: torch.Tensor,
+        temporal_granularity: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        src_key_padding_mask: Optional[torch.Tensor] = None,
+    ):
+        output = src
+        # Assume each layer can handle `additional_input` as the second positional argument.
+        for mod in self.layers:
+            output = mod(
+                output,
+                temporal_granularity,
+                src_mask=mask,
+                src_key_padding_mask=src_key_padding_mask,
+            )
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        return output
 
 
 class Weatherformer(nn.Module):
@@ -219,14 +312,21 @@ class Weatherformer(nn.Module):
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
-        encoder_layer = nn.TransformerEncoderLayer(
+        # encoder_layer = nn.TransformerEncoderLayer(
+        #     batch_first=True,
+        #     d_model=hidden_dim,
+        #     nhead=num_heads,
+        #     dim_feedforward=feedforward_dim,
+        #     device=DEVICE,
+        # )
+        encoder_layer = nn.WFTransformerEncoder(
             batch_first=True,
             d_model=hidden_dim,
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
             device=DEVICE,
         )
-        self.transformer_encoder = nn.TransformerEncoder(
+        self.transformer_encoder = WFTransformerEncoder(
             encoder_layer, num_layers=num_layers
         )
 
@@ -259,7 +359,9 @@ class Weatherformer(nn.Module):
         weather = self.in_proj(weather)
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
-            weather, src_key_padding_mask=src_key_padding_mask
+            weather,
+            temporal_granularity.unsqueeze(1).unsqueeze(2),
+            src_key_padding_mask=src_key_padding_mask,
         )
         weather = self.out_proj(weather)
 
