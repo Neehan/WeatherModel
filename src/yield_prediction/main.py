@@ -50,6 +50,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    args_dict = vars(args)
+    logging.info("Command-line arguments:")
+    for arg, value in args_dict.items():
+        logging.info(f"{arg}: {value}")
+
     # load the datasets
     soybean_df = read_soybean_dataset(DATA_DIR)
     train_loader, test_loader = get_train_test_loaders(
@@ -60,7 +65,7 @@ if __name__ == "__main__":
     pretrained_model = (
         None
         if args.no_pretraining
-        else torch.load(DATA_DIR + "trained_models/weatherformer_0.2m_epoch_4.pth")
+        else torch.load(DATA_DIR + "trained_models/weatherformer_4.8m_latest.pth")
     )
 
     model = YieldPredictor(pretrained_model).to(DEVICE)
