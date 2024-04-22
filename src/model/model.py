@@ -60,146 +60,12 @@ class WFPositionalEncoding(nn.Module):
         return token_embedding
 
 
-# class WFSelfAttention(nn.MultiheadAttention):
-#     def __init__(self, embed_dim, num_heads, dropout=0.1, device=None, dtype=None):
-#         super(WFSelfAttention, self).__init__(
-#             embed_dim,
-#             num_heads,
-#             dropout=dropout,
-#             device=device,
-#             dtype=dtype,
-#             batch_first=True,
-#         )
-#         factory_kwargs = {"device": device, "dtype": dtype}
-
-#         self.embed_dim = embed_dim
-#         self.num_heads = num_heads
-#         self.head_dim = embed_dim // num_heads
-#         self.batch_first = True
-#         assert (
-#             self.head_dim * num_heads == embed_dim
-#         ), "embed_dim must be divisible by num_heads"
-
-#         self.scaling = self.head_dim**-0.5
-
-#         self.qkv_proj = nn.Linear(embed_dim, embed_dim * 3, **factory_kwargs)
-#         self.out_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
-
-#         self.dropout = nn.Dropout(dropout)
-
-#         self.granularity_embed = nn.Embedding(
-#             num_embeddings=31, embedding_dim=embed_dim
-#         )  # up to 30 days + 1 for padding
-
-#         # Initialize weights
-#         self._init_parameters()
-
-#     def _init_parameters(self):
-#         # Xavier uniform initialization for the linear layers
-#         nn.init.xavier_uniform_(self.qkv_proj.weight)
-
-#     def forward(
-#         self,
-#         x,
-#         temporal_granularity,
-#         key_padding_mask=None,
-#         need_weights=True,
-#         attn_mask=None,
-#         average_attn_weights=True,
-#     ):
-#         batch_size, seq_length, embed_dim = x.size()
-
-#         # self attention uses same x to create Q, K, V
-#         qkv = self.qkv_proj(x)
-#         qkv = (
-#             qkv.unflatten(-1, (3, embed_dim))
-#             .unsqueeze(0)
-#             .transpose(0, -2)
-#             .squeeze(-2)
-#             .contiguous()
-#         )
-#         qkv = qkv.view(
-#             3, seq_length, batch_size * self.num_heads, self.head_dim
-#         ).transpose(1, 2)
-
-#         q, k, v = qkv[0], qkv[1], qkv[2]
-
-#         gran_embed = self.granularity_embed(temporal_granularity).view(
-#             batch_size * self.num_heads, 1, self.head_dim
-#         )
-
-#         q += gran_embed
-#         k += gran_embed
-
-#         if key_padding_mask is not None:
-#             key_padding_mask = F._canonical_mask(
-#                 mask=key_padding_mask,
-#                 mask_name="key_padding_mask",
-#                 other_type=F._none_or_dtype(attn_mask),
-#                 other_name="attn_mask",
-#                 target_type=q.dtype,
-#             )
-#             print(key_padding_mask.shape)
-#             print(q.shape)
-#             print(k.transpose(-2, -1).shape)
-#             attn_scores = (
-#                 torch.baddbmm(key_padding_mask, q, k.transpose(-2, -1)) * self.scaling
-#             )
-#         else:
-#             # Calculate scores
-#             attn_scores = torch.bmm(q, k.transpose(-2, -1)) * self.scaling
-
-#         # Apply attention mask if provided
-#         # if attn_mask is not None:
-#         #     attn_scores = attn_scores.masked_fill(attn_mask == 0, float("-inf"))
-
-#         # # Apply key padding mask
-#         # if key_padding_mask is not None:
-#         #     attn_scores = attn_scores.view(
-#         #         batch_size, self.num_heads, seq_length, seq_length
-#         #     )
-#         #     attn_scores = attn_scores.masked_fill(
-#         #         key_padding_mask.unsqueeze(1).unsqueeze(2),
-#         #         float("-inf"),
-#         #     )
-#         #     attn_scores = attn_scores.view(
-#         #         batch_size * self.num_heads, seq_length, seq_length
-#         #     )
-
-#         # Softmax to get the weights
-#         attn_weights = F.softmax(attn_scores, dim=-1)
-#         attn_weights = self.dropout(attn_weights)
-
-#         # Multiply weights by values
-#         attn_output = torch.bmm(attn_weights, v)
-
-#         # Concatenate heads and put through final linear layer
-#         attn_output = (
-#             attn_output.transpose(0, 1)
-#             .contiguous()
-#             .view(batch_size * seq_length, embed_dim)
-#         )
-#         attn_output = self.out_proj(attn_output).view(batch_size, seq_length, embed_dim)
-
-#         if need_weights:
-#             # Optionally return attention weights
-#             attn_weights = attn_weights.view(
-#                 batch_size, self.num_heads, seq_length, seq_length
-#             )
-#             if average_attn_weights:
-#                 attn_weights = attn_weights.mean(dim=1)
-
-#             return attn_output, attn_weights
-#         else:
-#             return attn_output
-
-
 class Weatherformer(nn.Module):
     def __init__(
         self,
         input_dim,
         output_dim,
-        num_heads=16,
+        num_heads=33,
         num_layers=6,
         hidden_dim_factor=16,
         max_len=CONTEXT_LENGTH,
@@ -209,13 +75,18 @@ class Weatherformer(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.max_len = max_len
+
+        hidden_dim = hidden_dim_factor * num_heads
+        feedforward_dim = hidden_dim * 4
+
         self.input_scaler = nn.Embedding(
             num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         )
         torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
-        hidden_dim = hidden_dim_factor * num_heads
-        feedforward_dim = hidden_dim * 4
+        self.temporal_pos_encoding = nn.Embedding(
+            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        )
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
@@ -257,6 +128,9 @@ class Weatherformer(nn.Module):
         weather[:, :, weather_feature_mask] = 0
 
         weather = self.in_proj(weather)
+        # add temporal positional encoding
+        weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
+
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask

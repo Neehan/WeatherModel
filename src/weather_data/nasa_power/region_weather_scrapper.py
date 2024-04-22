@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import time
 import os
-from grids import usa_states, mexico_grid, canada_grid
+from grids import GRID
+
+PART1 = False
+REGION = "MEXICO"  # "USA", "MEXICO" or "CANADA"
+
 
 WEATHER_PARAMS = {
     "Temperature at 2 Meters (C)": "T2M",
@@ -39,7 +43,6 @@ WEATHER_PARAMS = {
     "Aerosol Optical Depth 55": "AOD_55",
 }
 
-PART1 = False
 if PART1:
     WEATHER_PARAMS = dict(list(WEATHER_PARAMS.items())[:14])
 else:
@@ -63,7 +66,7 @@ def split_dates(start, end):
 
 def fetch_data_from_api(params):
     endpoint = "https://power.larc.nasa.gov/api/temporal/daily/regional"
-    retries = 2
+    retries = 3
     base_delay = 2  # Initial delay in seconds
 
     for attempt in range(retries):
@@ -166,25 +169,20 @@ def get_coordinates(coord_map, region_name, is_usa):
     return latitude_min, latitude_max, longitude_min, longitude_max
 
 
-COUNTRY = "USA"
-
 if __name__ == "__main__":
-    if COUNTRY == "USA":
+    if REGION == "USA":
         with open("data/state_coords.json", "r") as f:
             region_coords = json.load(f)
             f.close()
-        region_names = usa_states
-    elif COUNTRY == "MEXICO":
-        region_coords = mexico_grid
-        region_names = [f"Mexico_{i}" for i in range(region_coords)]
-    elif COUNTRY == "CANADA":
-        region_coords = canada_grid
-        region_names = [f"Canada_{i}" for i in range(region_coords)]
+        region_names = GRID["USA"]
+    else:
+        region_coords = GRID[REGION]
+        region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
 
     for region_name in region_names:
         print(f"fetching weather for {region_name}.")
         latitude_min, latitude_max, longitude_min, longitude_max = get_coordinates(
-            region_coords, region_name, is_usa=True
+            region_coords, region_name, is_usa=(REGION == "USA")
         )
         print(f"latitude  range: {latitude_min:.2f}, {latitude_max:.2f}")
         print(f"longitude range: {longitude_min:.2f}, {longitude_max:.2f}")

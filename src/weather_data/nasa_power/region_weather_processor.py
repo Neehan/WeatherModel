@@ -6,9 +6,10 @@ import logging
 import grids
 
 # if set true, will average values over week
-FREQUENCY = "weekly"
+FREQUENCY = "weekly"  # daily, weekly, monthly
 ENGINEERED_FEATURES = True
 DATA_DIR = "data/nasa_power"
+REGION = "MEXICO"
 
 
 def ea_from_t2m(x):
@@ -141,5 +142,10 @@ def preprocess_weather_data(state_name):
 
 
 if __name__ == "__main__":
-    for state in grids.usa_states:
-        _ = preprocess_weather_data(state)
+    if REGION == "USA":
+        for state in grids.GRID[REGION]:
+            _ = preprocess_weather_data(state)
+    else:
+        regions = [f"{REGION.lower()}_{i}" for i in range(len(grids.GRID[REGION]))]
+        for region in grids.GRID[REGION]:
+            _ = preprocess_weather_data(region)
