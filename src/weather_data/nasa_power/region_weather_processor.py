@@ -6,7 +6,7 @@ import logging
 import grids
 
 # if set true, will average values over week
-FREQUENCY = "weekly"  # daily, weekly, monthly
+FREQUENCY = "daily"  # daily, weekly, monthly
 ENGINEERED_FEATURES = True
 DATA_DIR = "data/nasa_power"
 REGION = "MEXICO"
@@ -51,14 +51,14 @@ def add_engineered_features(weather_df):
     return weather_df
 
 
-def read_and_consolidate_data(state_name, part2=False):
+def read_and_consolidate_data(region_name, part2=False):
     suffix = "_pt2" if part2 else ""
-    with open(DATA_DIR + "/" + state_name + f"_data{suffix}.json", "r") as f:
+    with open(DATA_DIR + "/" + region_name + f"_data{suffix}.json", "r") as f:
         weather_json = json.load(f)
         f.close()
     weather_df = []
 
-    print(f"processing weather data for {state_name} part {int(part2) + 1}.")
+    print(f"processing weather data for {region_name} part {int(part2) + 1}.")
     for chunk in tqdm(weather_json):
         for record in chunk["features"]:
             df = pd.DataFrame.from_dict(record["properties"]["parameter"]).reset_index(
@@ -75,9 +75,9 @@ def read_and_consolidate_data(state_name, part2=False):
     return weather_df
 
 
-def preprocess_weather_data(state_name):
-    weather_df1 = read_and_consolidate_data(state_name)
-    weather_df2 = read_and_consolidate_data(state_name, part2=True)
+def preprocess_weather_data(region_name):
+    weather_df1 = read_and_consolidate_data(region_name)
+    weather_df2 = read_and_consolidate_data(region_name, part2=True)
 
     weather_df = pd.merge(weather_df1, weather_df2, on=["lat", "lng", "Date"])
     # Convert the index to datetime format
@@ -125,27 +125,27 @@ def preprocess_weather_data(state_name):
     weather_df.drop(columns=last_cols, inplace=True)
     weather_df = weather_df.bfill()
     weather_df = weather_df.fillna(method="pad", axis=1)
-    weather_df["State"] = state_name
+    weather_df["region"] = region_name
 
     weather_df.reset_index(inplace=True, drop=True)
     # reorder the columns
-    non_weather_cols = ["State", "Year", "lat", "lng", "alt"]
+    non_weather_cols = ["region", "Year", "lat", "lng", "alt"]
     weather_df = weather_df[
         non_weather_cols
         + [col for col in weather_df.columns if col not in non_weather_cols]
     ]
     suffix = FREQUENCY
 
-    weather_df.to_csv(f"{DATA_DIR}/{state_name}_regional_{suffix}.csv")
+    weather_df.to_csv(f"{DATA_DIR}/{region_name}_regional_{suffix}.csv")
     print("total coords: ", len(weather_df) / 39)
     return weather_df
 
 
 if __name__ == "__main__":
     if REGION == "USA":
-        for state in grids.GRID[REGION]:
-            _ = preprocess_weather_data(state)
+        for region in grids.GRID[REGION]:
+            _ = preprocess_weather_data(region)
     else:
         regions = [f"{REGION.lower()}_{i}" for i in range(len(grids.GRID[REGION]))]
-        for region in grids.GRID[REGION]:
+        for region in regions:
             _ = preprocess_weather_data(region)

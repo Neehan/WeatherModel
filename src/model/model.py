@@ -84,9 +84,9 @@ class Weatherformer(nn.Module):
         )
         torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
-        self.temporal_pos_encoding = nn.Embedding(
-            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
-        )
+        # self.temporal_pos_encoding = nn.Embedding(
+        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        # )
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
@@ -129,7 +129,7 @@ class Weatherformer(nn.Module):
 
         weather = self.in_proj(weather)
         # add temporal positional encoding
-        weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
+        # weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
 
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
