@@ -1,4 +1,5 @@
 import requests
+import pandas as pd
 from datetime import datetime, timedelta
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -7,8 +8,8 @@ import time
 import os
 from grids import GRID
 
-PART1 = True
-REGION = "SOUTHAMERICA"  # "USA", "MEXICO" or "CANADA"
+PART1 = False
+REGION = "USA"  # "USA", "MEXICO", "CANADA" or "SOUTHAMERICA"
 
 
 WEATHER_PARAMS = {
@@ -150,39 +151,22 @@ def fetch_weather_for_state(
         os.remove(file_name)
 
 
-def get_coordinates(coord_map, region_name, is_usa):
-    if is_usa:  # this is USA
-        longs, lats = zip(*coord_map[region_name])
-        latitude_min, latitude_max = min(lats), max(lats)
-        latitude_min = min(latitude_min, latitude_max - 2)
-        latitude_min = max(latitude_min, latitude_max - 8)
+def get_coordinates(coord_map, region_name):
 
-        longitude_min, longitude_max = min(longs), max(longs)
-        longitude_min = min(longitude_min, longitude_max - 2)
-        longitude_min = max(longitude_min, longitude_max - 8)
-    else:
-        region_id = int(region_name.split("_")[1])
-        (latitude_max, longitude_min), (latitude_min, longitude_max) = coord_map[
-            region_id
-        ]
+    region_id = int(region_name.split("_")[1])
+    (latitude_max, longitude_min), (latitude_min, longitude_max) = coord_map[region_id]
     # print(latitude_min, latitude_max, longitude_min, longitude_max)
     return latitude_min, latitude_max, longitude_min, longitude_max
 
 
 if __name__ == "__main__":
-    if REGION == "USA":
-        with open("data/state_coords.json", "r") as f:
-            region_coords = json.load(f)
-            f.close()
-        region_names = GRID["USA"]
-    else:
-        region_coords = GRID[REGION]
-        region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
+    region_coords = GRID[REGION]
+    region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
 
     for region_name in region_names:
         print(f"fetching weather for {region_name}.")
         latitude_min, latitude_max, longitude_min, longitude_max = get_coordinates(
-            region_coords, region_name, is_usa=(REGION == "USA")
+            region_coords, region_name
         )
         print(f"latitude  range: {latitude_min:.2f}, {latitude_max:.2f}")
         print(f"longitude range: {longitude_min:.2f}, {longitude_max:.2f}")

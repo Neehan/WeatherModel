@@ -142,10 +142,6 @@ def preprocess_weather_data(region_name):
 
 
 if __name__ == "__main__":
-    if REGION == "USA":
-        for region in grids.GRID[REGION]:
-            _ = preprocess_weather_data(region)
-    else:
-        regions = [f"{REGION.lower()}_{i}" for i in range(len(grids.GRID[REGION]))]
-        for region in regions:
-            _ = preprocess_weather_data(region)
+    regions = [f"{REGION.lower()}_{i}" for i in range(len(grids.GRID[REGION]))]
+    for region in regions:
+        _ = preprocess_weather_data(region)

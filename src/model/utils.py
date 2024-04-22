@@ -29,9 +29,7 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
     )
 
 
-def streaming_dataloader(
-    dataloader_dir, split="train", batch_size=32, shuffle=True, num_chunks=8
-):
+def streaming_dataloader(file_paths_dict, batch_size=32, shuffle=True):
     """
     A generator function that streams data from multiple sources,
     each having multiple TensorDataset files stored on disk.
@@ -44,15 +42,28 @@ def streaming_dataloader(
     Yields:
     Tensor: Yields one batch of data at a time as specified by the DataLoader.
     """
-    file_paths_list = [
-        dataloader_dir + f"{split}_dataset_chunk_{i}.pt" for i in range(num_chunks)
-    ]
+    # Assume each source list in the dictionary has the same number of chunks
+    num_chunks = len(list(file_paths_dict.values())[0])
+    source_keys = list(file_paths_dict.keys())
 
-    for file_path in tqdm(
-        file_paths_list, desc=split, file=TQDM_OUTPUT, dynamic_ncols=True
+    for chunk_index in tqdm(
+        range(num_chunks), desc="Training", file=TQDM_OUTPUT, dynamic_ncols=True
     ):
-        dataset = torch.load(file_path)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        combined_dataset = []
+
+        for source in source_keys:
+            file_path = file_paths_dict[source][chunk_index]
+            dataset = torch.load(file_path)  # Ensure that this returns a TensorDataset
+            combined_dataset.append(dataset)
+
+        if len(combined_dataset) > 1:
+            combined_dataset = ConcatDataset(combined_dataset)
+        else:
+            combined_dataset = combined_dataset[0]
+
+        dataloader = DataLoader(
+            combined_dataset, batch_size=batch_size, shuffle=shuffle
+        )
 
         # Yield batches from the combined DataLoader
         for data in dataloader:
