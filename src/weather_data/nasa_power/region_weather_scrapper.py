@@ -9,7 +9,7 @@ import os
 from grids import GRID
 
 PART1 = False
-REGION = "USA"  # "USA", "MEXICO", "CANADA" or "SOUTHAMERICA"
+REGION = "SOUTHAMERICA"  # "USA", "MEXICO", "CANADA" or "SOUTHAMERICA"
 
 
 WEATHER_PARAMS = {
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     region_coords = GRID[REGION]
     region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
 
-    for region_name in region_names:
+    for i, region_name in enumerate(region_names):
         print(f"fetching weather for {region_name}.")
         latitude_min, latitude_max, longitude_min, longitude_max = get_coordinates(
             region_coords, region_name

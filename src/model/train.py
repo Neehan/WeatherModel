@@ -55,6 +55,8 @@ def train(
         ]
 
         loss = criterion(target_features, output)
+
+        print(loss.item())
         total_loss += loss.item()
         loader_len += 1
 
@@ -92,7 +94,7 @@ def training_loop(
 
     train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
     train_loader_paths = {
-        frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(8)]
+        frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(45)]
         for frequency in ["daily", "weekly", "monthly"]
     }
 

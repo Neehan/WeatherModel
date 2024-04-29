@@ -4,20 +4,20 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import TensorDataset
 import json
+from grids import GRID
 
 MAX_LENGTH = 180
-
-# FREQUENCY = "daily"
-# FREQUENCY_DAYS = 1
-# SEQUENCE_LEN = 365
+FREQUENCY = "daily"
+FREQUENCY_DAYS = 1
+SEQUENCE_LEN = 365
 
 # FREQUENCY = "weekly"
 # FREQUENCY_DAYS = 7
 # SEQUENCE_LEN = 52
 
-FREQUENCY = "monthly"
-FREQUENCY_DAYS = 30
-SEQUENCE_LEN = 12
+# FREQUENCY = "monthly"
+# FREQUENCY_DAYS = 30
+# SEQUENCE_LEN = 12
 
 FILE_SUFFIX = FREQUENCY
 NUM_YEARS = 39
@@ -61,59 +61,9 @@ torch.manual_seed(1234)
 torch.use_deterministic_algorithms(True)
 
 DATA_DIR = "data/nasa_power"
-CORN_BELT = [
-    # Corn Belt
-    "Illinois",
-    "Indiana",
-    "Iowa",
-    "Kansas",
-    "Kentucky",
-    "Michigan",
-    "Minnesota",
-    "Missouri",
-    "Nebraska",
-    "North Dakota",
-    "Ohio",
-    "South Dakota",
-    "Wisconsin",
-    # neighbors corn belt
-    "West Virginia",
-    "Virginia",
-    "North Carolina",
-    "Tennessee",
-    "Arkansas",
-    "Oklahoma",
-    "Colorado",
-    "Wyoming",
-    "Montana",
-    "Pennsylvania",
-    # rest of continental US
-    "Alabama",
-    "Arizona",
-    "California",
-    "Connecticut",
-    "Delaware",
-    "Florida",
-    "Georgia",
-    "Idaho",
-    "Louisiana",
-    "Maine",
-    "Maryland",
-    "Massachusetts",
-    "Mississippi",
-    "Nevada",
-    "New Hampshire",
-    "New Jersey",
-    "New Mexico",
-    "New York",
-    "Oregon",
-    "Rhode Island",
-    "South Carolina",
-    "Texas",
-    "Utah",
-    "Vermont",
-    "Washington",
-]
+REGION = "SOUTHAMERICA"
+region_coords = GRID[REGION]
+region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
 
 
 def read_and_concatenate_csv(file_paths):
@@ -131,7 +81,7 @@ def preprocess_data(weather_df):
     Preprocess the DataFrame: drop duplicates and standardize columns.
     """
     print("Standardizing the columns.")
-    if FREQUENCY == "weekly":
+    if FREQUENCY == "weekly" and REGION == "USA":
         param_means = dict()
         param_stds = dict()
     else:
@@ -142,7 +92,7 @@ def preprocess_data(weather_df):
 
     for param in tqdm(WEATHER_PARAMS):
         weather_cols = [f"{param}_{i}" for i in range(1, SEQUENCE_LEN + 1)]
-        if FREQUENCY == "weekly":
+        if FREQUENCY == "weekly" and REGION == "USA":
             param_mean = weather_df[weather_cols].values.mean()
             param_std = weather_df[weather_cols].values.std()
             param_means[param] = param_mean
@@ -217,18 +167,19 @@ def save_dataset(train_dataset, part_id, file_path):
 
 
 if __name__ == "__main__":
-    # input_paths = [
-    #     f"{DATA_DIR}/{state}_regional_{FILE_SUFFIX}.csv" for state in CORN_BELT
-    # ]
+    num_regions = len(region_names)
+    input_paths = [
+        f"{DATA_DIR}/{region}_regional_{FILE_SUFFIX}.csv"
+        for region in region_names[2 * (num_regions // 3 + 1) :]
+    ]
+    weather_df = read_and_concatenate_csv(input_paths)
+    print("saving the merged dataset")
+    weather_df.to_csv(DATA_DIR + f"/{REGION.lower()}_weather_{FILE_SUFFIX}_pt3.csv")
 
-    print("reading weather datasets")
-    weather_df = pd.read_csv(
-        DATA_DIR + f"/united_states_weather_{FILE_SUFFIX}.csv", index_col=[0]
-    )
-    # weather_df = read_and_concatenate_csv(input_paths)
-
-    # print("saving the merged dataset")
-    # weather_df.to_csv(DATA_DIR + f"/united_states_weather_{FILE_SUFFIX}.csv")
+    # print("reading weather datasets")
+    # weather_df = pd.read_csv(
+    #     DATA_DIR + f"/{REGION.lower()}_weather_{FILE_SUFFIX}_pt1.csv", index_col=[0]
+    # )
 
     print("preprocessing.")
     weather_df = preprocess_data(weather_df)
@@ -239,9 +190,10 @@ if __name__ == "__main__":
     dataset_length = len(weather_df)
 
     print("creating dataset.")
-    for start_index in tqdm(range(0, dataset_length, 500 * NUM_YEARS)):
-        part_id = start_index // (500 * NUM_YEARS)
-        end_index = min(dataset_length, start_index + 500 * NUM_YEARS)
+    chunk_length = 320 * NUM_YEARS
+    for start_index in tqdm(range(0, dataset_length, chunk_length)):
+        part_id = start_index // chunk_length + 36
+        end_index = min(dataset_length, start_index + chunk_length)
         train_dataset = create_dataset(weather_df.iloc[start_index:end_index])
         save_dataset(train_dataset, part_id, DATA_DIR)
     # train_dataset, val_dataset = torch.utils.data.random_split(dataset, [0.95, 0.05])

@@ -26,7 +26,7 @@ if __name__ == "__main__":
         "--n_input_features", help="number of input features", default=26, type=int
     )
     parser.add_argument(
-        "--n_epochs", help="number of training epochs", default=10, type=int
+        "--n_epochs", help="number of training epochs", default=50, type=int
     )
     parser.add_argument(
         "--init_lr", help="initial learning rate", default=0.0005, type=float
