@@ -9,7 +9,7 @@ import grids
 FREQUENCY = "daily"  # daily, weekly, monthly
 ENGINEERED_FEATURES = True
 DATA_DIR = "data/nasa_power"
-REGION = "SOUTHAMERICA"
+REGION = "USA"
 
 
 def ea_from_t2m(x):

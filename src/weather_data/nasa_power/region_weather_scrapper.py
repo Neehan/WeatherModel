@@ -8,8 +8,8 @@ import time
 import os
 from grids import GRID
 
-PART1 = False
-REGION = "SOUTHAMERICA"  # "USA", "MEXICO", "CANADA" or "SOUTHAMERICA"
+PART1 = True
+REGION = "USA"  # "USA", "CENTRALAMERICA", "CANADA" or "SOUTHAMERICA"
 
 
 WEATHER_PARAMS = {
