@@ -31,55 +31,30 @@ torch.use_deterministic_algorithms(True)
 
 DATA_DIR = "data/nasa_power"
 REGIONS = [
-    "usa_pt1",
-    "usa_pt2",
-    "southamerica_pt1",
-    "southamerica_pt2",
-    "southamerica_pt3",
+    f"{region.lower()}_{i}"
+    for region, coords in GRID.items()
+    for i, _ in enumerate(coords)
+    if region == "CENTRALAMERICA"
 ]
 
 
-def read_and_concatenate_csv(file_paths):
-    """
-    Read multiple CSV files and concatenate them into a single DataFrame.
-    """
-    weather_dfs = [pd.read_csv(file, index_col=False) for file in tqdm(file_paths)]
-    return pd.concat(weather_dfs, ignore_index=True).drop_duplicates(
-        subset=["Year", "lat", "lng"]
-    )
-
-
-def preprocess_data(weather_df, frequency, region, sequence_len):
+def preprocess_data(weather_df, sequence_len):
     """
     Preprocess the DataFrame: drop duplicates and standardize columns.
     """
     print("Standardizing the columns.")
-    if frequency == "weekly" and region == "USA":
-        print("recreating means and stds for normalization.")
-        param_means = dict()
-        param_stds = dict()
-    else:
-        with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
-            scalers = json.load(f)
-            param_means, param_stds = scalers["param_means"], scalers["param_stds"]
-            f.close()
+
+    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
+        scalers = json.load(f)
+        param_means, param_stds = scalers["param_means"], scalers["param_stds"]
+        f.close()
 
     for param in tqdm(WEATHER_PARAMS):
         weather_cols = [f"{param}_{i}" for i in range(1, sequence_len + 1)]
-        if frequency == "weekly" and region == "USA":
-            param_mean = weather_df[weather_cols].values.mean()
-            param_std = weather_df[weather_cols].values.std()
-            param_means[param] = param_mean
-            param_stds[param] = param_std
-        else:
-            param_mean = param_means[param]
-            param_std = param_stds[param]
+        param_mean = param_means[param]
+        param_std = param_stds[param]
 
         weather_df[weather_cols] = (weather_df[weather_cols] - param_mean) / param_std
-
-    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "w") as f:
-        json.dump({"param_means": param_means, "param_stds": param_stds}, f)
-        f.close()
 
     print("Sorting by location and year")
     weather_df = weather_df.sort_values(by=["lat", "lng", "Year"])
@@ -129,20 +104,16 @@ def create_dataset(weather_df, seq_len, frequency_days):
     coords_tensor = torch.tensor(coords, dtype=torch.float32)
     index_tensor = torch.tensor(index, dtype=torch.float32)
 
-    # print("weather tensor shape: ", weather_tensor.shape)
-    # print("coords tensor shape: ", coords_tensor.shape)
-    # print("index tensor shape: ", index_tensor.shape)
-
     return TensorDataset(weather_tensor, coords_tensor, index_tensor)
 
 
-def save_dataset(train_dataset, file_suffix, part_id, file_path):
+def save_dataset(train_dataset, filename, file_path):
     """
     Save the DataLoaders for future use.
     """
     torch.save(
         train_dataset,
-        file_path + f"/processed/weather_dataset_{file_suffix}_{part_id}.pth",
+        file_path + filename,
     )
 
 
@@ -155,41 +126,20 @@ if __name__ == "__main__":
 
         print(f"processing {frequency} weather data")
 
-        offset = 0
+        file_id = 109  # up to 33 is us and south am data
 
         for region_id in REGIONS:
-            region = region_id.split("_")[0].upper()
-            region_coords = GRID[region]
-            region_names = [f"{region.lower()}_{i}" for i in range(len(region_coords))]
+            region_name = region_id.split("_")[0].upper()
 
-            # num_regions = len(region_names)
-            # input_paths = [
-            #     f"{DATA_DIR}/{region}_regional_{FILE_SUFFIX}.csv"
-            #     for region in region_names[2 * (num_regions // 3 + 1) :]
-            # ]
-            # weather_df = read_and_concatenate_csv(input_paths)
-            # print("saving the merged dataset")
-            # weather_df.to_csv(DATA_DIR + f"/{region.lower()}_weather_{FILE_SUFFIX}_pt3.csv")
+            print(f"reading weather dataset for {region_id.upper()}")
 
-            print(f"reading weather datasets for {region_id.upper()}")
-            if (
-                frequency == "daily"
-                or frequency == "weekly"
-                and region == "SOUTHAMERICA"
-            ):
-                filepart = "_" + region_id.split("_")[1]
-            else:
-                filepart = ""
-                if int(region_id.split("_")[1][-1]) > 1:
-                    continue
             weather_df = pd.read_csv(
-                DATA_DIR
-                + f"/csvs/{region.lower()}_weather_{file_suffix}{filepart}.csv",
-                index_col=[0],
+                f"{DATA_DIR}/csvs/{region_id}_regional_{file_suffix}.csv",
+                index_col=False,
             )
 
             print("preprocessing.")
-            weather_df = preprocess_data(weather_df, frequency, region, sequence_len)
+            weather_df = preprocess_data(weather_df, sequence_len)
 
             assert (
                 len(weather_df) % NUM_YEARS == 0
@@ -197,13 +147,7 @@ if __name__ == "__main__":
             dataset_length = len(weather_df)
 
             print("creating dataset.")
-            chunk_length = 320 * NUM_YEARS
-            for start_index in range(0, dataset_length, chunk_length):
-                part_id = start_index // chunk_length + offset
-                end_index = min(dataset_length, start_index + chunk_length)
-                train_dataset = create_dataset(
-                    weather_df.iloc[start_index:end_index], sequence_len, frequency_days
-                )
-                save_dataset(train_dataset, file_suffix, part_id, DATA_DIR)
-                print("part_id: ", part_id)
-            offset = part_id + 1
+            train_dataset = create_dataset(weather_df, sequence_len, frequency_days)
+            filename = f"/processed/weather_dataset_{file_suffix}_{file_id}.pt"
+            save_dataset(train_dataset, filename, DATA_DIR)
+            file_id = file_id + 1

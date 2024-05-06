@@ -5,11 +5,9 @@ from tqdm import tqdm
 import logging
 import grids
 
-# if set true, will average values over week
-FREQUENCY = "daily"  # daily, weekly, monthly
 ENGINEERED_FEATURES = True
 DATA_DIR = "data/nasa_power"
-REGION = "USA"
+REGION = "CENTRALAMERICA"
 
 
 def ea_from_t2m(x):
@@ -75,7 +73,7 @@ def read_and_consolidate_data(region_name, part2=False):
     return weather_df
 
 
-def preprocess_weather_data(region_name):
+def preprocess_weather_data(region_name, frequency):
     weather_df1 = read_and_consolidate_data(region_name)
     weather_df2 = read_and_consolidate_data(region_name, part2=True)
 
@@ -83,11 +81,11 @@ def preprocess_weather_data(region_name):
     # Convert the index to datetime format
     weather_df["Date"] = pd.to_datetime(weather_df.Date, format="%Y%m%d")
     weather_df["Year"] = weather_df["Date"].dt.year
-    if FREQUENCY == "weekly":
+    if frequency == "weekly":
         pivot_column = "Week"
         last_suffix = "_53"
         weather_df["Week"] = weather_df.Date.dt.isocalendar().week
-    elif FREQUENCY == "monthly":
+    elif frequency == "monthly":
         pivot_column = "Month"
         last_suffix = "_13"
         weather_df["Month"] = weather_df.Date.dt.month
@@ -134,14 +132,16 @@ def preprocess_weather_data(region_name):
         non_weather_cols
         + [col for col in weather_df.columns if col not in non_weather_cols]
     ]
-    suffix = FREQUENCY
+    suffix = frequency
 
-    weather_df.to_csv(f"{DATA_DIR}/{region_name}_regional_{suffix}.csv")
+    weather_df.to_csv(f"{DATA_DIR}/csvs/{region_name}_regional_{suffix}.csv")
     print("total coords: ", len(weather_df) / 39)
     return weather_df
 
 
 if __name__ == "__main__":
     regions = [f"{REGION.lower()}_{i}" for i in range(len(grids.GRID[REGION]))]
-    for region in regions:
-        _ = preprocess_weather_data(region)
+    for frequency in ["daily", "weekly", "monthly"]:
+        print(f"processing {REGION} data for {frequency} frequency.")
+        for region in regions:
+            _ = preprocess_weather_data(region, frequency)
