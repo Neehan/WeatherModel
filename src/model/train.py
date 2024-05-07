@@ -67,6 +67,42 @@ def train(
     return np.sqrt(total_loss / loader_len)
 
 
+@torch.no_grad()
+def validate(
+    model,
+    num_input_features,
+    loader,
+    weather_indices,
+    device,
+):
+    model.eval()
+    total_loss = 0
+    loader_len = 0
+    for (
+        data,
+        coords,
+        index,
+    ) in loader:
+        data, coords, index = data.to(device), coords.to(device), index.to(device)
+        # swap one input and output feature of weather indices
+        swap_feature(weather_indices, num_input_features)
+        target_indices = weather_indices[num_input_features:]
+        target_features = data[:, :, target_indices]
+        target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
+        target_mask[target_indices] = True
+
+        output = model(data, coords, index, weather_feature_mask=target_mask)[
+            :, :, target_indices
+        ]
+
+        loss = F.mse_loss(target_features, output)
+
+        total_loss += loss.item()
+        loader_len += 1
+
+    return np.sqrt(total_loss / loader_len)
+
+
 def training_loop(
     model,
     batch_size,
@@ -92,15 +128,33 @@ def training_loop(
     }
 
     train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
+
+    train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
+
     train_loader_paths = {
-        frequency: [train_loader_dir + f"_{frequency}_{i}.pth" for i in range(45)]
+        frequency: [train_loader_dir + f"_{frequency}_{i}.pt" for i in train_indices]
+        for frequency in ["daily", "weekly", "monthly"]
+    }
+
+    test_loader_paths = {
+        frequency: [train_loader_dir + f"_{frequency}_{i}.pt" for i in TEST_PART_IDS]
         for frequency in ["daily", "weekly", "monthly"]
     }
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
-            train_loader_paths, batch_size, shuffle=True
+            train_loader_paths,
+            batch_size,
+            shuffle=True,
         )
+
+        test_loader = utils.streaming_dataloader(
+            test_loader_paths,
+            batch_size,
+            shuffle=True,
+            split="test",
+        )
+
         train_loss = train(
             model,
             num_input_features,
@@ -112,13 +166,21 @@ def training_loop(
             DEVICE,
         )
 
+        val_loss = validate(
+            model,
+            num_input_features,
+            test_loader,
+            weather_indices,
+            DEVICE,
+        )
+
         losses["train"].append(train_loss)
+        losses["val"].append(val_loss)
 
         daily_scaler_mean = model.input_scaler.weight[1].mean().item()
         weekly_scaler_mean = model.input_scaler.weight[7].mean().item()
-        monthly_scaler_mean = model.input_scaler.weight[30].mean().item()
         logging.info(
-            f"Epoch {epoch+1}: Train Loss: {train_loss:.3f}, scaler means daily: {daily_scaler_mean:.3f},  weekly: {weekly_scaler_mean:.3f},  monthly: {monthly_scaler_mean:.3f}"
+            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means daily: {daily_scaler_mean:.3f},  weekly: {weekly_scaler_mean:.3f}"
         )
         if epoch % 5 == 4 or epoch == num_epochs - 1:
             torch.save(
