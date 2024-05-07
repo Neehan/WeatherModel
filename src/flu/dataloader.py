@@ -3,94 +3,21 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from .constants import *
+from . import utils
 
 
 class FluDataset(Dataset):
-    def __init__(self, weather_path, flu_cases_path, history_weeks=52):
-        self.history_weeks = history_weeks
-        self.weather_columns = [
-            f"{varname}_{weekno}"
-            for varname in WEATHER_PARAMS
-            for weekno in range(1, 53)
-        ]
-        self.dataframe = self.read_data(weather_path, flu_cases_path)
+    def __init__(self, dataset):
+        self.data = dataset
 
-    def read_data(self, weather_path, flu_cases_path):
-        # Load the weather and the flu data
-        flu_df = pd.read_json(flu_cases_path)
-        print(flu_df.head())
+    def __len__(self):
+        return len(self.data)
 
-    #     flu_df = flu_df[
-    #         [
-    #             "epiweek",
-    #             "region",
-    #             "num_ili",
-    #             "num_patients",
-    #         ]
-    #     ]
-    #     flu_df["Year"] = flu_df["epiweek"] // 100
-    #     flu_df["Week"] = flu_df["epiweek"] % 100
-
-    #     flu_df = flu_df.drop(columns=["epiweek"])
-
-    #     flu_df = flu_df.pivot(index=["Year", "region"], columns="Week")
-    #     flu_df.columns = [f"{column}_{int(i)}" for column, i in flu_df.columns]
-    #     flu_df.reset_index(drop=False, inplace=True)
-
-    #     weather_df = pd.read_csv(weather_path)
-    #     # Preprocess the weather data to get relevant columns
-    #     weather_df = weather_df[
-    #         ["Year", "lat", "lng", "region"] + self.weather_columns
-    #     ].sort_values(by=["region", "Year"])
-
-    #     weather_df["Year"] = weather_df.Year.astype(int)
-
-    #     data_df = pd.merge(flu_df, weather_df, on=["region", "Year"], how="right")
-    #     data_df = data_df.bfill()
-    #     print(data_df.head())
-    #     return data_df
-
-    # def __len__(self):
-    #     return len(self.dataframe) - self.history_weeks
-
-    # def __getitem__(self, idx):
-    #     start_idx = idx
-    #     end_idx = idx + self.history_weeks
-
-    #     # Features from past year's weather
-    #     weather_features = self.dataframe.iloc[start_idx:end_idx][
-    #         weather_columns
-    #     ].values.flatten()
-
-    #     # Target variable from flu data
-    #     target = self.dataframe.iloc[end_idx]["num_ili"]
-
-    #     # Past num_ili and num_patients as features
-    #     past_ili_patients = self.dataframe.iloc[start_idx:end_idx][
-    #         ["num_ili", "num_patients"]
-    #     ].values.flatten()
-
-    #     features = np.concatenate([weather_features, past_ili_patients])
-
-    #     return torch.tensor(features, dtype=torch.float), torch.tensor(
-    #         target, dtype=torch.float
-    #     )
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 
-# # Usage
-# dataset = FluDataset(merged_df)
-# dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# # Assuming use of CUDA if available
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# # Example of getting a batch
-# for features, targets in dataloader:
-#     features, targets = features.to(device), targets.to(device)
-#     # proceed with training...
-
-
-def read_data(weather_columns, weather_path, flu_cases_path, n_past_weeks=3):
+def load_data(weather_path, flu_cases_path, n_past_weeks):
     # Load the weather and the flu data
     flu_df = pd.read_json(flu_cases_path)
     flu_df = pd.DataFrame(flu_df.epidata.values.tolist())
@@ -115,6 +42,9 @@ def read_data(weather_columns, weather_path, flu_cases_path, n_past_weeks=3):
     )
 
     weather_df = pd.read_csv(weather_path)
+    weather_columns = [
+        f"{varname}_{weekno}" for varname in WEATHER_PARAMS for weekno in range(1, 53)
+    ]
     # Preprocess the weather data to get relevant columns
     weather_df = weather_df[
         ["Year", "lat", "lng", "region"] + weather_columns
@@ -122,14 +52,19 @@ def read_data(weather_columns, weather_path, flu_cases_path, n_past_weeks=3):
 
     weather_df["Year"] = weather_df.Year.astype(int)
 
-    data_df = pd.merge(flu_df, weather_df, on=["region", "Year"], how="right")
-    num_regions = len(set(data_df["region"]))
+    flu_params = ["num_ili", "num_patients"]
 
     flu_cases_columns = [
-        f"{column}_{i}" for column in ["num_ili", "num_patients"] for i in range(1, 53)
+        f"{column}_{i}" for column in flu_params for i in range(1, SEQ_LEN + 1)
     ]
+    data_df = pd.merge(flu_df, weather_df, on=["region", "Year"], how="right")
 
-    num_features = len(WEATHER_PARAMS) + 2
+    # standardize weather
+    data_df = utils.standardize_data(data_df, WEATHER_PARAMS + flu_params, SEQ_LEN)
+
+    num_regions = len(set(data_df["region"]))
+
+    num_features = len(WEATHER_PARAMS) + len(flu_params)
 
     data_array = np.transpose(
         data_df[weather_columns + flu_cases_columns].values.reshape(
@@ -152,10 +87,6 @@ def read_data(weather_columns, weather_path, flu_cases_path, n_past_weeks=3):
             sample_values = np.zeros((n_past_weeks, num_features))
             mask = np.ones((n_past_weeks,)).astype(bool)
             sample_start = min(week_id + 1, n_past_weeks)
-
-            print(sample_start)
-            print(sample_values[-sample_start:, :].shape)
-            print("data entry", data_array.shape)
 
             sample_values[-sample_start:, :] = data_array[
                 region_id, week_id - sample_start + 1 : week_id + 1, :
@@ -186,11 +117,21 @@ def read_data(weather_columns, weather_path, flu_cases_path, n_past_weeks=3):
     return samples
 
 
-weather_columns = [
-    f"{varname}_{weekno}" for varname in WEATHER_PARAMS for weekno in range(1, 53)
-]
+def train_test_split(
+    weather_path, flu_cases_path, n_past_weeks=52, test_weeks=52, batch_size=64
+):
+    dataset: list = load_data(weather_path, flu_cases_path, n_past_weeks)
+    dataset_size = len(dataset)  # Total number of items in the dataset
+    train_size = dataset_size - test_weeks  # 80% of the dataset for training
 
-weather_path = DATA_DIR + "weather_weekly.csv"
-flu_cases_path = DATA_DIR + "flu_cases.json"
+    # Create Subset objects for train and test sets
+    train_dataset = FluDataset(dataset[:train_size])
+    test_dataset = FluDataset(dataset[train_size:])
 
-_ = read_data(weather_columns, weather_path, flu_cases_path)
+    # Create the DataLoader for training and testing
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=False
+    )  # Shuffling is False because data is time-dependent
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    return train_loader, test_loader

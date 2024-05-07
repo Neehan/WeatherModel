@@ -16,7 +16,7 @@ class FluPredictor(nn.Module):
     ):
         super().__init__()
 
-        self.weather_transformer = Weatherformer(31, 48, max_len=SEQ_LEN)
+        self.weather_transformer = Weatherformer(WEATHER_PARAMS, 48, max_len=SEQ_LEN)
         if pretrained_weatherformer is not None:
             self.weather_transformer.in_proj = copy.deepcopy(
                 pretrained_weatherformer.in_proj
@@ -44,35 +44,39 @@ class FluPredictor(nn.Module):
         # Fully connected layer to output the predicted flu cases
         self.fc = nn.Linear(hidden_dim, 1)
 
-    def forward(self, weather, coord, year, y_past_week, y_last_year_same_week):
-        batch_size, n_years, n_features, seq_len = weather.size()
+    def forward(
+        self,
+        weather,
+        mask,
+        weather_index,
+        coord,
+        ili_past,
+        tot_cases_past,
+    ):
+        batch_size, seq_len, n_features = weather.size()
+        weather_feature_mask = torch.zeros(
+            (
+                batch_size,
+                seq_len,
+                self.weather_transformer.input_dim,
+            ),
+            device=DEVICE,
+        )
 
-        # Process each year's weather data
-        processed_weather = []
-        for i in range(n_years):
-            weather_slice = weather[:, i, :, :]
-            coord_slice = coord[:, i, :]
-            year_slice = year[:, i, :]
-
-            # Flatten dimensions for processing
-            weather_slice = weather_slice.view(batch_size, seq_len, n_features)
-            coord_slice = coord_slice.view(batch_size, 2)
-            year_slice = year_slice.view(batch_size, 1)
-
-            weather_out = self.weather_transformer(
-                weather_slice, coord_slice, year_slice
-            )
-            processed_weather.append(weather_out)
-
-        # Stack processed weather data
-        processed_weather = torch.stack(processed_weather, dim=1)
+        weather = self.weather_transformer(
+            weather,
+            coord,
+            weather_index,
+            weather_feature_mask=weather_feature_mask,
+            src_key_padding_mask=mask,
+        )
 
         # Concatenate processed weather, last year's same week flu cases, and last week's flu cases
         combined_input = torch.cat(
             [
-                processed_weather,
-                y_last_year_same_week.unsqueeze(-1),
-                y_past_week.unsqueeze(-1),
+                weather,
+                ili_past,
+                tot_cases_past,
             ],
             dim=-1,
         )

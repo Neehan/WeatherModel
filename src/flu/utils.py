@@ -1,6 +1,33 @@
+import json
 import pandas as pd
 import logging
 from constants import *
+
+
+def standardize_data(data_df, columns, sequence_len):
+    """
+    Preprocess the DataFrame: drop duplicates and standardize columns.
+    """
+    print("Standardizing the columns.")
+
+    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
+        scalers = json.load(f)
+        param_means, param_stds = scalers["param_means"], scalers["param_stds"]
+        f.close()
+
+    for i, param in enumerate(columns):
+        param_cols = [f"{param}_{i}" for i in range(1, sequence_len + 1)]
+        if i < len(columns) - 2:
+            param_mean = param_means[param]
+            param_std = param_stds[param]
+        else:
+            param_mean = data_df[param_cols].values.mean()
+            param_std = data_df[param_cols].values.std()
+
+            logging.info(f"{param} mean {param_mean:.2f}, std {param_std:.2f}")
+
+        data_df[param_cols] = (data_df[param_cols] - param_mean) / param_std
+    return data_df
 
 
 def filter_and_save_weather_data(
