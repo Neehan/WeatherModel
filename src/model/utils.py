@@ -29,7 +29,7 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
     )
 
 
-def streaming_dataloader(file_paths_dict, batch_size=32, shuffle=True):
+def streaming_dataloader(file_paths_dict, batch_size=32, shuffle=True, split="train"):
     """
     A generator function that streams data from multiple sources,
     each having multiple TensorDataset files stored on disk.
@@ -47,7 +47,11 @@ def streaming_dataloader(file_paths_dict, batch_size=32, shuffle=True):
     source_keys = list(file_paths_dict.keys())
 
     for chunk_index in tqdm(
-        range(num_chunks), desc="Training", file=TQDM_OUTPUT, dynamic_ncols=True
+        range(num_chunks),
+        desc="Training" if split.lower() == "train" else "Validating",
+        file=TQDM_OUTPUT,
+        dynamic_ncols=True,
+        mininterval=5 * 60,
     ):
         combined_dataset = []
 

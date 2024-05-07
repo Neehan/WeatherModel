@@ -143,15 +143,11 @@ def training_loop(
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
-            train_loader_paths,
-            batch_size,
-            shuffle=True,
+            train_loader_paths, batch_size, shuffle=True, split="train"
         )
 
         test_loader = utils.streaming_dataloader(
-            test_loader_paths,
-            batch_size,
-            shuffle=True,
+            test_loader_paths, batch_size, shuffle=True, split="validation"
         )
 
         train_loss = train(
