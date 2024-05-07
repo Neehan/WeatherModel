@@ -152,7 +152,6 @@ def training_loop(
             test_loader_paths,
             batch_size,
             shuffle=True,
-            split="test",
         )
 
         train_loss = train(
