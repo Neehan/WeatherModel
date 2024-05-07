@@ -121,12 +121,17 @@ class Weatherformer(nn.Module):
         # mask certain features in the input weather
         if weather_feature_mask is not None:
             # scalers for for masked dimensions = true becomes zero
-            temp_embedding = (~weather_feature_mask).unsqueeze(0)  # * temp_embedding
+            temp_embedding = (
+                (~weather_feature_mask)
+                .unsqueeze(0)
+                .unsqueeze(1)
+                .expand((batch_size, -1, -1))
+            )  # * temp_embedding
         else:
             temp_embedding = torch.ones((batch_size, 1, n_features), device=DEVICE)
 
         # mask the masked dimensions and scale the rest
-        weather = weather * temp_embedding.view(batch_size, 1, n_features)
+        weather = weather * temp_embedding  # .view(batch_size, 1, n_features)
         weather[:, :, weather_feature_mask] = 0
 
         weather = self.in_proj(weather)
