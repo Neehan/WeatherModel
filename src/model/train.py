@@ -114,7 +114,7 @@ def training_loop(
     decay_factor,
 ):
     total_params = sum(p.numel() for p in model.parameters())
-    logging.info(f"Total number of parameters: {total_params}")
+    logging.info(f"Total number of parameters: {total_params/10**6:.2f}M")
 
     feature_dim = num_input_features + num_output_features
     weather_indices = torch.arange(feature_dim)

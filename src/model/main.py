@@ -32,7 +32,7 @@ if __name__ == "__main__":
         "--init_lr", help="initial learning rate", default=0.0005, type=float
     )
     parser.add_argument(
-        "--n_warmup_epochs", help="number of warm-up epochs", default=2, type=float
+        "--n_warmup_epochs", help="number of warm-up epochs", default=5, type=float
     )
     parser.add_argument(
         "--decay_factor",
