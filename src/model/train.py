@@ -125,6 +125,7 @@ def training_loop(
 
     losses = {
         "train": [],
+        "val": [],
     }
 
     train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
