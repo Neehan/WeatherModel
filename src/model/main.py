@@ -5,6 +5,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import torch
 
 torch.use_deterministic_algorithms(True)
+import torch.nn as nn
 
 
 import numpy as np
@@ -66,6 +67,13 @@ if __name__ == "__main__":
     ).to(DEVICE)
 
     logging.info(str(model))
+
+    if torch.cuda.device_count() > 1:
+        logging.info(
+            f"Found {torch.cuda.device_count()} GPUs. Using DataParallel class to parellelize training."
+        )
+        args.batch_size = args.batch_size * torch.cuda.device_count()
+        model = nn.DataParallel(model)
 
     model, losses = training_loop(
         model,
