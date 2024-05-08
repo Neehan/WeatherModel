@@ -63,7 +63,10 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
 
     model = Weatherformer(
-        input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS, **model_size_params
+        input_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
+        device=DEVICE,
+        **model_size_params,
     ).to(DEVICE)
 
     logging.info(str(model))

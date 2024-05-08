@@ -7,7 +7,7 @@ from typing import Optional
 
 
 class WFPositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len, device=DEVICE):
+    def __init__(self, d_model, max_len, device):
         assert (
             d_model % 4 == 0
         ), "d_model should be divisible by 4 for separate encoding"
@@ -25,7 +25,7 @@ class WFPositionalEncoding(nn.Module):
             torch.arange(0, d_model, 4).float() * (-math.log(10000.0) / d_model)
         ).to(device)
 
-    def forward(self, token_embedding, coords, device=DEVICE):
+    def forward(self, token_embedding, coords):
         """
         Forward method for adding positional encoding.
 
@@ -37,6 +37,9 @@ class WFPositionalEncoding(nn.Module):
         Returns:
         Tensor with positional encoding added, same shape as x.
         """
+        device = coords.device
+        div_term = self.div_term.to(device)
+
         batch_size, seq_len, d_model = token_embedding.shape
         latitude, longitude = coords[:, :1], coords[:, 1:]
         # Normalize latitude and longitude
@@ -47,10 +50,10 @@ class WFPositionalEncoding(nn.Module):
         custom_pe = torch.zeros(batch_size, seq_len, d_model, device=device)
 
         # geo pe
-        custom_pe[:, :, 2::4] = torch.sin(lat_norm * self.div_term).unsqueeze(1)
-        custom_pe[:, :, 3::4] = torch.cos(lon_norm * self.div_term).unsqueeze(1)
+        custom_pe[:, :, 2::4] = torch.sin(lat_norm * div_term).unsqueeze(1)
+        custom_pe[:, :, 3::4] = torch.cos(lon_norm * div_term).unsqueeze(1)
 
-        time_frequency = (self.position_list[:seq_len, :] * self.div_term).unsqueeze(0)
+        time_frequency = (self.position_list[:seq_len, :] * div_term).unsqueeze(0)
         # encode time in 4k and 4k + 1
         custom_pe[:, :, 0::4] = torch.sin(time_frequency)
         custom_pe[:, :, 1::4] = torch.cos(time_frequency)
@@ -69,6 +72,7 @@ class Weatherformer(nn.Module):
         num_layers=8,
         hidden_dim_factor=24,
         max_len=CONTEXT_LENGTH,
+        device=DEVICE,
     ):
         super(Weatherformer, self).__init__()
 
@@ -89,13 +93,15 @@ class Weatherformer(nn.Module):
         # )
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
-        self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
+        self.positional_encoding = WFPositionalEncoding(
+            hidden_dim, max_len=max_len, device=device
+        )
         encoder_layer = nn.TransformerEncoderLayer(
             batch_first=True,
             d_model=hidden_dim,
             nhead=num_heads,
             dim_feedforward=feedforward_dim,
-            device=DEVICE,
+            device=device,
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers
