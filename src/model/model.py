@@ -39,6 +39,7 @@ class WFPositionalEncoding(nn.Module):
         """
         device = coords.device
         div_term = self.div_term.to(device)
+        position_list = self.position_list.to(device)
 
         batch_size, seq_len, d_model = token_embedding.shape
         latitude, longitude = coords[:, :1], coords[:, 1:]
@@ -53,7 +54,7 @@ class WFPositionalEncoding(nn.Module):
         custom_pe[:, :, 2::4] = torch.sin(lat_norm * div_term).unsqueeze(1)
         custom_pe[:, :, 3::4] = torch.cos(lon_norm * div_term).unsqueeze(1)
 
-        time_frequency = (self.position_list[:seq_len, :] * div_term).unsqueeze(0)
+        time_frequency = (position_list[:seq_len, :] * div_term).unsqueeze(0)
         # encode time in 4k and 4k + 1
         custom_pe[:, :, 0::4] = torch.sin(time_frequency)
         custom_pe[:, :, 1::4] = torch.cos(time_frequency)
