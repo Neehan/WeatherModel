@@ -27,12 +27,12 @@ class FluPredictor(nn.Module):
             self.weather_transformer.positional_encoding = copy.deepcopy(
                 pretrained_weatherformer.positional_encoding
             )
-            # self.weather_transformer.input_scaler = copy.deepcopy(
-            #     pretrained_weatherformer.input_scaler
-            # )
-            self.weather_transformer.temporal_pos_encoding = copy.deepcopy(
-                pretrained_weatherformer.temporal_pos_encoding
+            self.weather_transformer.input_scaler = copy.deepcopy(
+                pretrained_weatherformer.input_scaler
             )
+            # self.weather_transformer.temporal_pos_encoding = copy.deepcopy(
+            #     pretrained_weatherformer.temporal_pos_encoding
+            # )
 
         # LSTM for predicting flu cases
         self.lstm = nn.LSTM(

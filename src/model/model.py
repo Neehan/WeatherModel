@@ -79,14 +79,14 @@ class Weatherformer(nn.Module):
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
 
-        # self.input_scaler = nn.Embedding(
-        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
-        # )
-        # torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
-
-        self.temporal_pos_encoding = nn.Embedding(
-            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        self.input_scaler = nn.Embedding(
+            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         )
+        torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
+
+        # self.temporal_pos_encoding = nn.Embedding(
+        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        # )
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(hidden_dim, max_len=max_len)
@@ -116,27 +116,19 @@ class Weatherformer(nn.Module):
 
         # temporal index is index in time and temporal granularity ()
         temporal_granularity = temporal_index[:, 1].int()
-        # temp_embedding = self.input_scaler(temporal_granularity)
-
-        # mask certain features in the input weather
-        if weather_feature_mask is not None:
-            # scalers for for masked dimensions = true becomes zero
-            temp_embedding = (
-                (~weather_feature_mask)
-                .unsqueeze(0)
-                .unsqueeze(1)
-                .expand((batch_size, -1, -1))
-            )  # * temp_embedding
-        else:
-            temp_embedding = torch.ones((batch_size, 1, n_features), device=DEVICE)
+        temp_embedding = self.input_scaler(temporal_granularity)
 
         # mask the masked dimensions and scale the rest
-        weather = weather * temp_embedding  # .view(batch_size, 1, n_features)
-        weather[:, :, weather_feature_mask] = 0
+        weather = weather * temp_embedding.view(batch_size, 1, n_features)
+        if weather_feature_mask is not None:
+            weather[:, :, weather_feature_mask] = 0
+
+            # scalers for for masked dimensions = true becomes zero
+            # temp_embedding = (~weather_feature_mask).unsqueeze(0) * temp_embedding
 
         weather = self.in_proj(weather)
         # add temporal positional encoding
-        weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
+        # weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
 
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(

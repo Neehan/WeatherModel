@@ -26,7 +26,7 @@ if __name__ == "__main__":
         "--n_input_features", help="number of input features", default=26, type=int
     )
     parser.add_argument(
-        "--n_epochs", help="number of training epochs", default=50, type=int
+        "--n_epochs", help="number of training epochs", default=75, type=int
     )
     parser.add_argument(
         "--init_lr", help="initial learning rate", default=0.0005, type=float
@@ -40,16 +40,29 @@ if __name__ == "__main__":
         default=0.99,
         type=float,
     )
+    parser.add_argument(
+        "--model_size",
+        help="model size small (2M), medium (8M), and large (25M)",
+        default="small",
+        type=str,
+    )
 
     args = parser.parse_args()
-
     args_dict = vars(args)
     logging.info("Command-line arguments:")
     for arg, value in args_dict.items():
         logging.info(f"{arg}: {value}")
 
+    model_size = args.model_size.lower()
+    if model_size == "small":
+        model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
+    elif model_size == "medium":
+        model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
+    elif model_size == "large":
+        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
+
     model = Weatherformer(
-        input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS
+        input_dim=TOTAL_WEATHER_VARS, output_dim=TOTAL_WEATHER_VARS, **model_size_params
     ).to(DEVICE)
 
     logging.info(str(model))

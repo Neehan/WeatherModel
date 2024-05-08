@@ -128,19 +128,11 @@ def training_loop(
         "val": [],
     }
 
-    train_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
+    data_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
 
     train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
-
-    train_loader_paths = {
-        frequency: [train_loader_dir + f"_{frequency}_{i}.pt" for i in train_indices]
-        for frequency in ["daily", "weekly", "monthly"]
-    }
-
-    test_loader_paths = {
-        frequency: [train_loader_dir + f"_{frequency}_{i}.pt" for i in TEST_PART_IDS]
-        for frequency in ["daily", "weekly", "monthly"]
-    }
+    train_loader_paths = [data_loader_dir + f"_combined_{i}.pt" for i in train_indices]
+    test_loader_paths = [data_loader_dir + f"_combined_{i}.pt" for i in TEST_PART_IDS]
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
@@ -173,12 +165,12 @@ def training_loop(
         losses["train"].append(train_loss)
         losses["val"].append(val_loss)
 
-        # daily_scaler_mean = model.input_scaler.weight[1].mean().item()
-        # weekly_scaler_mean = model.input_scaler.weight[7].mean().item()
+        daily_scaler_mean = model.input_scaler.weight[1].mean().item()
+        weekly_scaler_mean = model.input_scaler.weight[7].mean().item()
         logging.info(
-            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}"
+            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means: daily {daily_scaler_mean:.3f}, weekly: {weekly_scaler_mean:.3f}"
         )
-        if epoch % 5 == 4 or epoch == num_epochs - 1:
+        if epoch % 2 == 1 or epoch == num_epochs - 1:
             torch.save(
                 model,
                 DATA_DIR

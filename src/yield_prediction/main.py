@@ -23,10 +23,10 @@ parser.add_argument(
     "--n_past_years", help="number of past years to look at", default=6, type=int
 )
 parser.add_argument(
-    "--n_epochs", help="number of training epoches", default=20, type=int
+    "--n_epochs", help="number of training epoches", default=30, type=int
 )
 parser.add_argument(
-    "--init_lr", help="initial learning rate for Adam", default=0.0009, type=float
+    "--init_lr", help="initial learning rate for Adam", default=0.0006, type=float
 )
 parser.add_argument(
     "--lr_decay_factor",
