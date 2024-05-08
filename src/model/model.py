@@ -121,6 +121,9 @@ class Weatherformer(nn.Module):
         # mask the masked dimensions and scale the rest
         weather = weather * temp_embedding.view(batch_size, 1, n_features)
         if weather_feature_mask is not None:
+            # if the shape is batch_size x weather indices, keep the first copy
+            if len(weather_feature_mask.shape) > 1:
+                weather_feature_mask = weather_feature_mask[0, :]
             weather[:, :, weather_feature_mask] = 0
 
             # scalers for for masked dimensions = true becomes zero

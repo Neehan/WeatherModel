@@ -49,6 +49,7 @@ def train(
         target_features = data[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
         target_mask[target_indices] = True
+        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
 
         output = model(data, coords, index, weather_feature_mask=target_mask)[
             :, :, target_indices
@@ -90,6 +91,7 @@ def validate(
         target_features = data[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
         target_mask[target_indices] = True
+        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
 
         output = model(data, coords, index, weather_feature_mask=target_mask)[
             :, :, target_indices
