@@ -113,4 +113,4 @@ if __name__ == "__main__":
             num_warmup_epochs=args.n_warmup_epochs,
         )
         total_best_mae += best_mae
-    logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.78:.3f}")
+    logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.73:.3f}")
