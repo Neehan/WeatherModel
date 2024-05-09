@@ -103,7 +103,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
             if target_week_id >= data_array.shape[1]:
                 break
 
-            ili_target = data_array[region_id, target_week_id, -2]
+            ili_target = data_array[region_id, week_id + 1 : target_week_id + 1, -2]
 
             weather_index = (
                 np.ones((n_past_weeks, 1)) * 7
