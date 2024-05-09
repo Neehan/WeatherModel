@@ -9,11 +9,11 @@ import math
 from .constants import *
 
 
-def compute_rmse(model, data_loader):
+def compute_mae(model, data_loader):
     model.eval()
     device = DEVICE
     # Compute the RMSE on the training dataset
-    mse_total = 0.0
+    mae_total = 0.0
     for data in data_loader:
         (
             weather,
@@ -28,14 +28,12 @@ def compute_rmse(model, data_loader):
         # Forward pass
         output = model(weather, mask, weather_index, coords, ili_past, tot_cases_past)
         # Compute the mean squared error
-        mse = F.mse_loss(output, ili_target)
+        mae = F.l1_loss(output, ili_target)
 
         # Accumulate the MSE over all batches
-        mse_total += mse.item()
+        mae_total += mae.item()
 
-    # Compute the RMSE
-    rmse = math.sqrt(mse_total / len(data_loader))
-    return rmse
+    return mae / len(data_loader)
 
 
 # Warm-up and decay function
@@ -122,7 +120,7 @@ def training_loop(
         running_loss /= len(train_loader)
         running_loss = math.sqrt(running_loss)
         losses["train"].append(running_loss)
-        test_rmse = compute_rmse(model, test_loader)
+        test_rmse = compute_mae(model, test_loader)
         losses["test"].append(test_rmse)
         best_test_rmse = min(test_rmse, best_test_rmse)
         logging.info(

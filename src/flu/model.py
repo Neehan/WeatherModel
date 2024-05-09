@@ -91,8 +91,8 @@ class FluPredictor(nn.Module):
     def __init__(
         self,
         pretrained_weatherformer: Weatherformer = None,
-        hidden_dim=64,
-        num_layers=1,
+        hidden_dim=48,
+        num_layers=3,
         **weatherformer_size_params
     ):
         super().__init__()
@@ -121,7 +121,7 @@ class FluPredictor(nn.Module):
             # )
 
         self.trend_transformer = TransformerModel(
-            input_dim=hidden_dim + 2,
+            input_dim=hidden_dim + 4,
             output_dim=hidden_dim,
             num_layers=num_layers,
         )
@@ -159,6 +159,7 @@ class FluPredictor(nn.Module):
                 weather,
                 ili_past.unsqueeze(2),
                 tot_cases_past.unsqueeze(2),
+                coord.unsqueeze(1).expand(-1, weather.shape[1], -1),
             ],
             dim=2,
         )

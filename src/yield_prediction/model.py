@@ -108,7 +108,11 @@ class TransformerModel(nn.Module):
 
 
 class YieldPredictor(nn.Module):
-    def __init__(self, pretrained_weatherformer: Weatherformer = None):
+    def __init__(
+        self,
+        pretrained_weatherformer: Weatherformer = None,
+        **weatherformer_size_params
+    ):
         super().__init__()
         self.soil_cnn = nn.Sequential(
             nn.Conv1d(
@@ -134,7 +138,9 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        self.weather_transformer = Weatherformer(31, 48, max_len=SEQ_LEN)
+        self.weather_transformer = Weatherformer(
+            31, 48, max_len=SEQ_LEN, **weatherformer_size_params
+        )
         if pretrained_weatherformer is not None:
             self.weather_transformer.in_proj = copy.deepcopy(
                 pretrained_weatherformer.in_proj
