@@ -6,6 +6,8 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import torch
 import numpy as np
 
+np.random.seed(1234)
+
 torch.use_deterministic_algorithms(True)
 
 
