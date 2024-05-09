@@ -18,9 +18,9 @@ torch.cuda.manual_seed(1234)
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--batch_size", help="batch size", default=64, type=int)
+parser.add_argument("--batch_size", help="batch size", default=32, type=int)
 parser.add_argument(
-    "--n_past_weeks", help="number of past weeks to look at", default=104, type=int
+    "--n_past_weeks", help="number of past weeks to look at", default=52 * 3, type=int
 )
 
 parser.add_argument(

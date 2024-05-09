@@ -78,7 +78,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
     )  # num_regions x (num_years * seq len) x num input features
 
     # shift by 40 cause first 40 weeks of the first year are empty
-    data_array = data_array[:, 40:, :]
+    data_array = data_array[:, 39:, :]
 
     coords = data_df[["lat", "lng"]].values.reshape(num_regions, -1, 2)
 
@@ -93,7 +93,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
             sample_values[n_past_weeks - sample_start :, :] = data_array[
                 region_id, week_id - sample_start + 1 : week_id + 1, :
             ]
-            mask[-sample_start:] = False
+            mask[n_past_weeks - sample_start :] = False
             ili_past = sample_values[:, -2]
             tot_cases_past = sample_values[:, -1]
             weather = sample_values[:, :-2]
@@ -121,14 +121,13 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
                     ili_target.astype("float32"),
                 )
             )
-
     return samples
 
 
 def train_test_split(
     weather_path,
     flu_cases_path,
-    n_past_weeks=52,
+    n_past_weeks=3,
     n_future_weeks=1,
     test_year=2016,
     batch_size=64,

@@ -33,7 +33,7 @@ def compute_mae(model, data_loader):
         # Accumulate the MSE over all batches
         mae_total += mae.item()
 
-    return mae / len(data_loader)
+    return mae_total / len(data_loader)
 
 
 # Warm-up and decay function
@@ -89,7 +89,7 @@ def training_loop(
                 file=TQDM_OUTPUT,
                 desc="Training",
                 dynamic_ncols=True,
-                # mininterval=MIN_INTERVAL,
+                mininterval=MIN_INTERVAL,
             )
         ):
             # Zero the gradients
