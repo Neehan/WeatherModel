@@ -89,12 +89,11 @@ if __name__ == "__main__":
         None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
     )
 
-    model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
-
     n_test_years = 5
     total_best_mae = 0
     for test_year in range(2023 - n_test_years, 2023):
         logging.info(f"Testing on year {test_year}")
+        model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
         train_loader, test_loader = train_test_split(
             weather_path,
             flu_cases_path,
@@ -113,4 +112,5 @@ if __name__ == "__main__":
             num_warmup_epochs=args.n_warmup_epochs,
         )
         total_best_mae += best_mae
+        del model
     logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.73:.3f}")
