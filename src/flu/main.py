@@ -40,7 +40,7 @@ parser.add_argument(
     type=float,
 )
 parser.add_argument(
-    "--n_warmup_epochs", help="number of warmup epoches", default=3, type=float
+    "--n_warmup_epochs", help="number of warmup epoches", default=5, type=float
 )
 
 parser.add_argument(
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     n_test_years = 5
     total_best_mae = 0
-    for test_year in range(2020 - n_test_years, 2020):
+    for test_year in range(2023 - n_test_years, 2023):
         logging.info(f"Testing on year {test_year}")
         # load the pretrained model
         pretrained_model = (
