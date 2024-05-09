@@ -68,7 +68,6 @@ def train(
     return np.sqrt(total_loss / loader_len)
 
 
-@torch.no_grad()
 def validate(
     model,
     num_input_features,
@@ -93,9 +92,10 @@ def validate(
         target_mask[target_indices] = True
         target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
 
-        output = model(data, coords, index, weather_feature_mask=target_mask)[
-            :, :, target_indices
-        ]
+        with torch.no_grad():
+            output = model(data, coords, index, weather_feature_mask=target_mask)[
+                :, :, target_indices
+            ]
 
         loss = F.mse_loss(target_features, output)
 
@@ -143,6 +143,14 @@ def training_loop(
 
         test_loader = utils.streaming_dataloader(
             test_loader_paths, batch_size, shuffle=True, split="validation"
+        )
+
+        val_loss = validate(
+            model,
+            num_input_features,
+            test_loader,
+            weather_indices,
+            DEVICE,
         )
 
         train_loss = train(
