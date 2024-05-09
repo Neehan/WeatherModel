@@ -145,14 +145,6 @@ def training_loop(
             test_loader_paths, batch_size, shuffle=True, split="validation"
         )
 
-        # val_loss = validate(
-        #     model,
-        #     num_input_features,
-        #     test_loader,
-        #     weather_indices,
-        #     DEVICE,
-        # )
-
         train_loss = train(
             model,
             num_input_features,
@@ -165,7 +157,7 @@ def training_loop(
         )
 
         val_loss = validate(
-            model,
+            model.module,  # do the validation on single gpu else error message (no idea why)
             num_input_features,
             test_loader,
             weather_indices,
