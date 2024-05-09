@@ -69,10 +69,6 @@ if __name__ == "__main__":
     for arg, value in args_dict.items():
         logging.info(f"{arg}: {value}")
 
-    # load the datasets
-    weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
-    flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
-
     model_size = args.model_size.lower()
     if model_size == "small":
         model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
@@ -84,16 +80,20 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    # load the pretrained model
-    pretrained_model = (
-        None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
-    )
-
     n_test_years = 5
     total_best_mae = 0
     for test_year in range(2023 - n_test_years, 2023):
         logging.info(f"Testing on year {test_year}")
+        # load the pretrained model
+        pretrained_model = (
+            None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+        )
+
         model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
+        # load the datasets
+        weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
+        flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
+
         train_loader, test_loader = train_test_split(
             weather_path,
             flu_cases_path,
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             test_year=test_year,
         )
-        model, losses, best_mae = training_loop(
+        losses, best_mae = training_loop(
             model,
             train_loader,
             test_loader,
@@ -112,5 +112,4 @@ if __name__ == "__main__":
             num_warmup_epochs=args.n_warmup_epochs,
         )
         total_best_mae += best_mae
-        del model
     logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.73:.3f}")

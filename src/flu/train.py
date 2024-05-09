@@ -127,4 +127,4 @@ def training_loop(
             f"[{epoch+1} / {num_epochs} Test MAE best: {best_test_mae:.3f}, current: {test_mae:.3f}"
         )
         logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
-    return model, losses, best_test_mae
+    return losses, best_test_mae
