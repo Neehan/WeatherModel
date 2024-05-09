@@ -91,7 +91,7 @@ def training_loop(
                 file=TQDM_OUTPUT,
                 desc="Training",
                 dynamic_ncols=True,
-                mininterval=MIN_INTERVAL,
+                # mininterval=MIN_INTERVAL,
             )
         ):
             # Zero the gradients

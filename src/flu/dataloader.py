@@ -17,7 +17,7 @@ class FluDataset(Dataset):
         return self.data[idx]
 
 
-def load_data(weather_path, flu_cases_path, n_past_weeks):
+def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
     # Load the weather and the flu data
     flu_df = pd.read_json(flu_cases_path)
     flu_df = pd.DataFrame(flu_df.epidata.values.tolist())
@@ -25,9 +25,8 @@ def load_data(weather_path, flu_cases_path, n_past_weeks):
         [
             "epiweek",
             "region",
-            "num_ili",
-            "num_patients",
         ]
+        + FLU_DATASET_PARAMS
     ]
     flu_df["Year"] = flu_df["epiweek"] // 100
     flu_df["Week"] = flu_df["epiweek"] % 100
@@ -52,19 +51,19 @@ def load_data(weather_path, flu_cases_path, n_past_weeks):
 
     weather_df["Year"] = weather_df.Year.astype(int)
 
-    flu_params = ["num_ili", "num_patients"]
-
     flu_cases_columns = [
-        f"{column}_{i}" for column in flu_params for i in range(1, SEQ_LEN + 1)
+        f"{column}_{i}" for column in FLU_DATASET_PARAMS for i in range(1, SEQ_LEN + 1)
     ]
     data_df = pd.merge(flu_df, weather_df, on=["region", "Year"], how="right")
 
     # standardize weather
-    data_df = utils.standardize_data(data_df, WEATHER_PARAMS + flu_params, SEQ_LEN)
+    data_df = utils.standardize_data(
+        data_df, WEATHER_PARAMS + FLU_DATASET_PARAMS, SEQ_LEN
+    )
 
     num_regions = len(set(data_df["region"]))
 
-    num_features = len(WEATHER_PARAMS) + len(flu_params)
+    num_features = len(WEATHER_PARAMS) + len(FLU_DATASET_PARAMS)
 
     data_array = np.transpose(
         data_df[weather_columns + flu_cases_columns].values.reshape(
@@ -83,34 +82,40 @@ def load_data(weather_path, flu_cases_path, n_past_weeks):
     samples = []
 
     for region_id in range(data_array.shape[0]):
-        for week_id in range(1, data_array.shape[1]):
+        for week_id in range(data_array.shape[1]):
             sample_values = np.zeros((n_past_weeks, num_features))
             mask = np.ones((n_past_weeks,)).astype(bool)
             sample_start = min(week_id + 1, n_past_weeks)
 
-            sample_values[-sample_start:, :] = data_array[
+            sample_values[n_past_weeks - sample_start :, :] = data_array[
                 region_id, week_id - sample_start + 1 : week_id + 1, :
             ]
             mask[-sample_start:] = False
-            ili_past = sample_values[:-1, -2]
-            ili_target = sample_values[-1, -2]
-            tot_cases_past = sample_values[:-1, -1]
+            ili_past = sample_values[:, -2]
+            tot_cases_past = sample_values[:, -1]
             weather = sample_values[:, :-2]
 
+            # target week is in future
+            target_week_id = week_id + n_future_weeks
+            if target_week_id >= data_array.shape[1]:
+                break
+
+            ili_target = data_array[region_id, target_week_id, -2]
+
             weather_index = (
-                np.ones((n_past_weeks, 2)) * 7
+                np.ones((n_past_weeks, 1)) * 7
             )  # used by weather transformer
-            sample_coords = np.repeat(coords[region_id, :1, :], n_past_weeks, axis=0)
+            sample_coords = coords[region_id, 0, :]
 
             samples.append(
                 (
-                    weather,
-                    mask,
-                    weather_index,
-                    sample_coords,
-                    ili_past,
-                    tot_cases_past,
-                    ili_target,
+                    weather.astype("float32"),
+                    mask.astype("bool"),
+                    weather_index.astype("int"),
+                    sample_coords.astype("float32"),
+                    ili_past.astype("float32"),
+                    tot_cases_past.astype("float32"),
+                    ili_target.astype("float32"),
                 )
             )
 
@@ -118,9 +123,16 @@ def load_data(weather_path, flu_cases_path, n_past_weeks):
 
 
 def train_test_split(
-    weather_path, flu_cases_path, n_past_weeks=52, test_weeks=52, batch_size=64
+    weather_path,
+    flu_cases_path,
+    n_past_weeks=52,
+    n_future_weeks=1,
+    test_weeks=52,
+    batch_size=64,
 ):
-    dataset: list = load_data(weather_path, flu_cases_path, n_past_weeks)
+    dataset: list = load_data(
+        weather_path, flu_cases_path, n_past_weeks, n_future_weeks
+    )
     dataset_size = len(dataset)  # Total number of items in the dataset
     train_size = dataset_size - test_weeks  # 80% of the dataset for training
 

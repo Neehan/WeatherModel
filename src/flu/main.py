@@ -20,8 +20,13 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--batch_size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n_past_weeks", help="number of past years to look at", default=52, type=int
+    "--n_past_weeks", help="number of past weeks to look at", default=52, type=int
 )
+
+parser.add_argument(
+    "--n_future_weeks", help="number of weeks to predict ahead", default=1, type=int
+)
+
 parser.add_argument(
     "--n_epochs", help="number of training epoches", default=20, type=int
 )
@@ -39,18 +44,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--load-model",
-    help="load pretrained model",
-    default="trained_models/weatherformer_4.8m_latest.pth",
-    type=str,
-)
-
-parser.add_argument(
     "--no-pretraining",
     dest="no_pretraining",
     action="store_true",
     help="don't use the pretrained model",
 )
+
+parser.add_argument(
+    "--model_size",
+    help="model size small (2M), medium (8M), and large (25M)",
+    default="small",
+    type=str,
+)
+
 parser.set_defaults(no_pretraining=False)
 
 
@@ -64,18 +70,34 @@ if __name__ == "__main__":
         logging.info(f"{arg}: {value}")
 
     # load the datasets
-    weather_path = DATA_DIR + "weather_weekly.csv"
-    flu_cases_path = DATA_DIR + "flu_cases.json"
+    weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
+    flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
     train_loader, test_loader = train_test_split(
-        weather_path, flu_cases_path, args.n_past_weeks, batch_size=args.batch_size
+        weather_path,
+        flu_cases_path,
+        args.n_past_weeks,
+        args.n_future_weeks,
+        batch_size=args.batch_size,
     )
+
+    model_size = args.model_size.lower()
+    if model_size == "small":
+        model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
+        load_model_path = "trained_models/weatherformer_1.9m_latest.pth"
+    elif model_size == "medium":
+        model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
+        load_model_path = "trained_models/weatherformer_8.2m_latest.pth"
+
+    elif model_size == "large":
+        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
+        load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
     # load the pretrained model
     pretrained_model = (
-        None if args.no_pretraining else torch.load(DATA_DIR + args.load_model)
+        None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
     )
 
-    model = FluPredictor(pretrained_model).to(DEVICE)
+    model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
     model, losses = training_loop(
         model,
         train_loader,
@@ -85,8 +107,3 @@ if __name__ == "__main__":
         lr_decay_factor=args.lr_decay_factor,
         num_warmup_epochs=args.n_warmup_epochs,
     )
-
-
-if __name__ == "__main__":
-
-    _ = read_data(weather_columns, weather_path, flu_cases_path)

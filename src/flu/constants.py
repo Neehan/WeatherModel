@@ -10,7 +10,7 @@ load_dotenv()
 
 plt.style.use("ggplot")
 
-DATA_DIR = "data/flu_cases/"
+DATA_DIR = "data/"
 SEQ_LEN = 52
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,3 +83,5 @@ WEATHER_PARAMS = {
 }
 
 WEATHER_PARAMS = list(WEATHER_PARAMS.values())
+
+FLU_DATASET_PARAMS = ["ili", "num_patients"]

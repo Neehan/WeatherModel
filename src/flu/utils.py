@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 import logging
-from constants import *
+from .constants import *
 
 
 def standardize_data(data_df, columns, sequence_len):
@@ -9,8 +9,9 @@ def standardize_data(data_df, columns, sequence_len):
     Preprocess the DataFrame: drop duplicates and standardize columns.
     """
     print("Standardizing the columns.")
+    data_df = data_df.fillna(0)
 
-    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
+    with open(DATA_DIR + f"nasa_power/processed/weather_param_scalers.json", "r") as f:
         scalers = json.load(f)
         param_means, param_stds = scalers["param_means"], scalers["param_stds"]
         f.close()
