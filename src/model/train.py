@@ -145,13 +145,13 @@ def training_loop(
             test_loader_paths, batch_size, shuffle=True, split="validation"
         )
 
-        val_loss = validate(
-            model,
-            num_input_features,
-            test_loader,
-            weather_indices,
-            DEVICE,
-        )
+        # val_loss = validate(
+        #     model,
+        #     num_input_features,
+        #     test_loader,
+        #     weather_indices,
+        #     DEVICE,
+        # )
 
         train_loss = train(
             model,
