@@ -83,11 +83,11 @@ if __name__ == "__main__":
     pretrained_model = (
         None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
     )
-    model = YieldPredictor(pretrained_model, **model_size_params).to(DEVICE)
 
     total_best_val_loss = 0
 
     for n in range(5):
+
         test_states = np.random.choice(
             np.array(list(soybean_states)), size=2, replace=False
         )
@@ -99,6 +99,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
         )
 
+        model = YieldPredictor(pretrained_model, **model_size_params).to(DEVICE)
         model, losses, best_val_loss = training_loop(
             model,
             train_loader,
