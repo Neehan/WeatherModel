@@ -8,8 +8,7 @@ def standardize_data(data_df, columns, sequence_len):
     """
     Preprocess the DataFrame: drop duplicates and standardize columns.
     """
-    print("Standardizing the columns.")
-    data_df = data_df.fillna(0)
+    data_df = data_df.bfill()
 
     with open(DATA_DIR + f"nasa_power/processed/weather_param_scalers.json", "r") as f:
         scalers = json.load(f)

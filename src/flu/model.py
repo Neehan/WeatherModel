@@ -100,7 +100,7 @@ class FluPredictor(nn.Module):
         self.weather_transformer = Weatherformer(
             len(WEATHER_PARAMS),
             hidden_dim,
-            max_len=SEQ_LEN,
+            max_len=SEQ_LEN * 7,
             **weatherformer_size_params
         )
         if pretrained_weatherformer is not None:

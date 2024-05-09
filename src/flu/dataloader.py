@@ -40,6 +40,9 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
         columns=[column for column in flu_df.columns if column.endswith("_53")]
     )
 
+    # keep only NYC cases
+    flu_df = flu_df.loc[flu_df.region == "nyc"].sort_values(by=["Year"])
+
     weather_df = pd.read_csv(weather_path)
     weather_columns = [
         f"{varname}_{weekno}" for varname in WEATHER_PARAMS for weekno in range(1, 53)
@@ -54,7 +57,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
     flu_cases_columns = [
         f"{column}_{i}" for column in FLU_DATASET_PARAMS for i in range(1, SEQ_LEN + 1)
     ]
-    data_df = pd.merge(flu_df, weather_df, on=["region", "Year"], how="right")
+    data_df = pd.merge(flu_df, weather_df, on=["region", "Year"])
 
     # standardize weather
     data_df = utils.standardize_data(
@@ -127,18 +130,19 @@ def train_test_split(
     flu_cases_path,
     n_past_weeks=52,
     n_future_weeks=1,
-    test_weeks=52,
+    test_year=2016,
     batch_size=64,
 ):
     dataset: list = load_data(
         weather_path, flu_cases_path, n_past_weeks, n_future_weeks
     )
     dataset_size = len(dataset)  # Total number of items in the dataset
-    train_size = dataset_size - test_weeks  # 80% of the dataset for training
+    test_start_idx = (2023 - test_year) * 52
+    test_end_idx = test_start_idx + 52
 
     # Create Subset objects for train and test sets
-    train_dataset = FluDataset(dataset[:train_size])
-    test_dataset = FluDataset(dataset[train_size:])
+    train_dataset = FluDataset(dataset[:test_start_idx])
+    test_dataset = FluDataset(dataset[test_start_idx:test_end_idx])
 
     # Create the DataLoader for training and testing
     train_loader = DataLoader(
