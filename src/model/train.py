@@ -167,19 +167,19 @@ def training_loop(
         losses["train"].append(train_loss)
         losses["val"].append(val_loss)
 
-        daily_scaler_mean = model.input_scaler.weight[1].mean().item()
-        weekly_scaler_mean = model.input_scaler.weight[7].mean().item()
+        daily_scaler_mean = model.module.input_scaler.weight[1].mean().item()
+        weekly_scaler_mean = model.module.input_scaler.weight[7].mean().item()
         logging.info(
             f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means: daily {daily_scaler_mean:.3f}, weekly: {weekly_scaler_mean:.3f}"
         )
         if epoch % 2 == 1 or epoch == num_epochs - 1:
             torch.save(
-                model,
+                model.module,
                 DATA_DIR
                 + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_epoch_{epoch}.pth",
             )
             torch.save(
-                model,
+                model.module,
                 DATA_DIR
                 + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_latest.pth",
             )
