@@ -4,6 +4,7 @@ import os
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 import torch
+import numpy as np
 
 torch.use_deterministic_algorithms(True)
 
@@ -65,9 +66,7 @@ if __name__ == "__main__":
 
     # load the datasets
     soybean_df = read_soybean_dataset(DATA_DIR)
-    train_loader, test_loader = get_train_test_loaders(
-        soybean_df, n_past_years=args.n_past_years, batch_size=args.batch_size
-    )
+    soybean_states = set(soybean_df["State"].values)
 
     model_size = args.model_size.lower()
     if model_size == "small":
@@ -84,14 +83,31 @@ if __name__ == "__main__":
     pretrained_model = (
         None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
     )
-
     model = YieldPredictor(pretrained_model, **model_size_params).to(DEVICE)
-    model, losses = training_loop(
-        model,
-        train_loader,
-        test_loader,
-        num_epochs=args.n_epochs,
-        init_lr=args.init_lr,
-        lr_decay_factor=args.lr_decay_factor,
-        num_warmup_epochs=args.n_warmup_epochs,
-    )
+
+    total_best_val_loss = 0
+
+    for n in range(5):
+        test_states = np.random.choice(
+            np.array(list(soybean_states)), size=2, replace=False
+        )
+        logging.info(f"Testing on: {test_states}")
+        train_loader, test_loader = get_train_test_loaders(
+            soybean_df,
+            test_states,
+            n_past_years=args.n_past_years,
+            batch_size=args.batch_size,
+        )
+
+        model, losses, best_val_loss = training_loop(
+            model,
+            train_loader,
+            test_loader,
+            num_epochs=args.n_epochs,
+            init_lr=args.init_lr,
+            lr_decay_factor=args.lr_decay_factor,
+            num_warmup_epochs=args.n_warmup_epochs,
+        )
+        total_best_val_loss += best_val_loss
+
+    print(f"Average of best val. loss: {total_best_val_loss/5*11.03:3f} Bu/Acre.")

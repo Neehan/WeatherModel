@@ -134,4 +134,4 @@ def training_loop(
             f"[{epoch+1} / {num_epochs} Test RMSE best: {best_test_rmse:.3f}, current: {test_rmse:.3f}"
         )
         logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
-    return model, losses
+    return model, losses, best_test_rmse
