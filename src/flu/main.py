@@ -93,9 +93,7 @@ if __name__ == "__main__":
     total_best_mae = 0
     for test_year in range(2023 - n_test_years, 2023):
         logging.info(f"Testing on year {test_year}")
-        model = FluPredictor(
-            pretrained_model, args.n_future_weeks, **model_size_params
-        ).to(DEVICE)
+        model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
         train_loader, test_loader = train_test_split(
             weather_path,
             flu_cases_path,
