@@ -93,7 +93,7 @@ if __name__ == "__main__":
     for n in range(5):
 
         test_states = np.random.choice(
-            np.array(list(soybean_states)), size=2, replace=False
+            np.array(sorted(list(soybean_states))), size=2, replace=False
         )
         logging.info(f"Testing on: {test_states}")
         train_loader, test_loader = get_train_test_loaders(
