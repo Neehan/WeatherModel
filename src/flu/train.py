@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 plt.style.use("ggplot")
 
 
-def compute_mae(model, data_loader, plot=False):
+def compute_mae(model, data_loader, n_eval_weeks, plot=False):
     model.eval()
     device = DEVICE
     # Compute the mae on the training dataset
@@ -51,7 +51,7 @@ def compute_mae(model, data_loader, plot=False):
             .tolist()
         )
         # Compute the mean squared error
-        mae = F.l1_loss(output, ili_target)
+        mae = F.l1_loss(output[:, :n_eval_weeks], ili_target[:, :n_eval_weeks])
 
         # Accumulate the MSE over all batches
         mae_total += mae.item()
@@ -86,6 +86,7 @@ def training_loop(
     init_lr=0.0009,
     num_warmup_epochs=2,
     lr_decay_factor=0.95,
+    n_eval_weeks=1,
 ):
 
     losses = {
@@ -149,10 +150,7 @@ def training_loop(
         running_loss /= len(train_loader)
         # running_loss = math.sqrt(running_loss)
         losses["train"].append(running_loss)
-        test_mae = compute_mae(
-            model,
-            test_loader,
-        )
+        test_mae = compute_mae(model, test_loader, n_eval_weeks)
         losses["test"].append(test_mae)
         best_test_mae = min(test_mae, best_test_mae)
         if epoch % 5 == 4:

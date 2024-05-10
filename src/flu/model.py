@@ -92,7 +92,7 @@ class FluPredictor(nn.Module):
         self,
         pretrained_weatherformer: Weatherformer,
         weatherformer_size_params,
-        n_future_weeks=1,
+        n_predict_weeks=5,
         hidden_dim=48,
         num_layers=3,
     ):
@@ -128,7 +128,7 @@ class FluPredictor(nn.Module):
         )
 
         # Fully connected layer to output the predicted flu cases
-        self.fc = nn.Linear(hidden_dim, n_future_weeks)
+        self.fc = nn.Linear(hidden_dim, n_predict_weeks)
 
     def forward(
         self,

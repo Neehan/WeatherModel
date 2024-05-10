@@ -17,7 +17,7 @@ class FluDataset(Dataset):
         return self.data[idx]
 
 
-def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
+def load_data(weather_path, flu_cases_path, n_past_weeks, n_predict_weeks):
     # Load the weather and the flu data
     flu_df = pd.read_json(flu_cases_path)
     flu_df = pd.DataFrame(flu_df.epidata.values.tolist())
@@ -99,7 +99,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_future_weeks):
             weather = sample_values[:, :-2]
 
             # target week is in future
-            target_week_id = week_id + n_future_weeks
+            target_week_id = week_id + n_predict_weeks
             if target_week_id >= data_array.shape[1]:
                 break
 
@@ -128,12 +128,12 @@ def train_test_split(
     weather_path,
     flu_cases_path,
     n_past_weeks=3,
-    n_future_weeks=1,
+    n_predict_weeks=1,
     test_year=2016,
     batch_size=64,
 ):
     dataset: list = load_data(
-        weather_path, flu_cases_path, n_past_weeks, n_future_weeks
+        weather_path, flu_cases_path, n_past_weeks, n_predict_weeks
     )
     dataset_size = len(dataset)  # Total number of items in the dataset
     test_start_idx = dataset_size - (2023 - test_year) * 52

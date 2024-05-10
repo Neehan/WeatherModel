@@ -28,8 +28,11 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--n_future_weeks", help="number of weeks to predict ahead", default=1, type=int
+    "--n_predict_weeks", help="number of weeks to predict ahead", default=5, type=int
 )
+parser.add_argument(
+    "--n_eval_weeks", help="number of weeks to evaluate ahead", default=1, type=int
+)  # basically you could predict 5 weeks during training, but only evaluate on 1 week advance
 
 parser.add_argument(
     "--n_epochs", help="number of training epoches", default=25, type=int
@@ -94,9 +97,9 @@ if __name__ == "__main__":
         )
 
         model = FluPredictor(
-            pretrained_model, model_size_params, args.n_future_weeks
+            pretrained_model, model_size_params, args.n_predict_weeks
         ).to(DEVICE)
-        # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_future_weeks).to(
+        # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_predict_weeks).to(
         #     DEVICE
         # )
         # load the datasets
@@ -107,7 +110,7 @@ if __name__ == "__main__":
             weather_path,
             flu_cases_path,
             args.n_past_weeks,
-            args.n_future_weeks,
+            args.n_predict_weeks,
             batch_size=args.batch_size,
             test_year=test_year,
         )
@@ -119,6 +122,7 @@ if __name__ == "__main__":
             init_lr=args.init_lr,
             lr_decay_factor=args.lr_decay_factor,
             num_warmup_epochs=args.n_warmup_epochs,
+            n_eval_weeks=args.n_eval_weeks,
         )
         total_best_mae += best_mae
     logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.73:.3f}")
