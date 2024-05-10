@@ -145,6 +145,10 @@ class FluPredictor(nn.Module):
             device=DEVICE,
             dtype=torch.bool,
         )
+        weather_indices = torch.tensor(
+            [0, 4, 6, 7, 8, 24, 25], device=DEVICE, dtype=torch.int
+        )
+        weather_feature_mask[weather_indices] = False
 
         weather = self.weather_transformer(
             weather,
