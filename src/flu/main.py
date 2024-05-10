@@ -22,6 +22,9 @@ parser.add_argument("--batch_size", help="batch size", default=32, type=int)
 parser.add_argument(
     "--n_past_weeks", help="number of past weeks to look at", default=52 * 3, type=int
 )
+parser.add_argument(
+    "--year_cutoff", help="cut off data until this year", default=2020, type=int
+)
 
 parser.add_argument(
     "--n_future_weeks", help="number of weeks to predict ahead", default=1, type=int
@@ -80,9 +83,9 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    n_test_years = 5
+    n_test_years = 4
     total_best_mae = 0
-    for test_year in range(2023 - n_test_years, 2023):
+    for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
         logging.info(f"Testing on year {test_year}")
         # load the pretrained model
         pretrained_model = (
@@ -101,6 +104,7 @@ if __name__ == "__main__":
             args.n_future_weeks,
             batch_size=args.batch_size,
             test_year=test_year,
+            year_cutoff=args.year_cutoff,
         )
         losses, best_mae = training_loop(
             model,
