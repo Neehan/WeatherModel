@@ -89,6 +89,8 @@ if __name__ == "__main__":
 
     n_test_years = 4
     total_best_mae = 0
+
+    assert args.n_past_weeks > 52, "need at least one year of past data"
     for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
         logging.info(f"Testing on year {test_year}")
         # load the pretrained model

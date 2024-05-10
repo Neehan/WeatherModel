@@ -183,4 +183,6 @@ class FluPredictor(nn.Module):
 
         # Predict current week's flu cases
         predicted_flu_cases = self.fc(output)
-        return predicted_flu_cases  # .squeeze()
+        return (
+            ili_past[:, -51 : -51 + predicted_flu_cases.shape[1]] + predicted_flu_cases
+        )  # .squeeze()

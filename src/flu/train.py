@@ -109,6 +109,9 @@ def training_loop(
             num_warmup_epochs=num_warmup_epochs, decay_factor=lr_decay_factor
         ),
     )
+    # test_mae = compute_mae(model, test_loader, n_eval_weeks, plot=False)
+    # print(f"test mae: {test_mae}")
+    # return {}, test_mae
 
     for epoch in range(num_epochs):
         running_loss = 0.0
