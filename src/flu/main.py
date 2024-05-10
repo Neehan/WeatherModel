@@ -10,6 +10,7 @@ torch.use_deterministic_algorithms(True)
 
 from .dataloader import train_test_split
 from .model import FluPredictor
+from .linear_model import LinearFluPredictor
 from .train import training_loop
 from .constants import *
 
@@ -95,6 +96,9 @@ if __name__ == "__main__":
         model = FluPredictor(
             pretrained_model, model_size_params, args.n_future_weeks
         ).to(DEVICE)
+        # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_future_weeks).to(
+        #     DEVICE
+        # )
         # load the datasets
         weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
         flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"

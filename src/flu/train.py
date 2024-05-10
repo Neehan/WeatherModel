@@ -8,12 +8,19 @@ import logging
 import math
 from .constants import *
 
+import matplotlib.pyplot as plt
 
-def compute_mae(model, data_loader):
+plt.style.use("ggplot")
+
+
+def compute_rmse(model, data_loader, plot=False):
     model.eval()
     device = DEVICE
-    # Compute the mae on the training dataset
-    mae_total = 0.0
+    # Compute the rmse on the training dataset
+    rmse_total = 0.0
+    outputs = []
+    targets = []
+
     for data in data_loader:
         (
             weather,
@@ -27,13 +34,35 @@ def compute_mae(model, data_loader):
 
         # Forward pass
         output = model(weather, mask, weather_index, coords, ili_past, tot_cases_past)
+        outputs += (
+            output.detach()
+            .cpu()[:, -1]
+            .reshape(
+                -1,
+            )
+            .tolist()
+        )
+        targets += (
+            ili_target.detach()
+            .cpu()[:, -1]
+            .reshape(
+                -1,
+            )
+            .tolist()
+        )
         # Compute the mean squared error
-        mae = F.l1_loss(output, ili_target)
+        rmse = F.mse_loss(output, ili_target)
 
         # Accumulate the MSE over all batches
-        mae_total += mae.item()
+        rmse_total += rmse.item()
 
-    return mae_total / len(data_loader)
+    if plot:
+        plt.plot(range(len(outputs)), outputs, label="outputs")
+        plt.plot(range(len(targets)), targets, label="targets")
+        plt.legend()
+        plt.show()
+
+    return math.sqrt(rmse_total / len(data_loader))
 
 
 # Warm-up and decay function
@@ -69,7 +98,7 @@ def training_loop(
     device = DEVICE
 
     criterion = nn.MSELoss()
-    best_test_mae = 999
+    best_test_rmse = 999
 
     # Define the optimizer
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
@@ -120,11 +149,14 @@ def training_loop(
         running_loss /= len(train_loader)
         # running_loss = math.sqrt(running_loss)
         losses["train"].append(running_loss)
-        test_mae = compute_mae(model, test_loader)
-        losses["test"].append(test_mae)
-        best_test_mae = min(test_mae, best_test_mae)
+        test_rmse = compute_rmse(
+            model,
+            test_loader,
+        )
+        losses["test"].append(test_rmse)
+        best_test_rmse = min(test_rmse, best_test_rmse)
         logging.info(
-            f"[{epoch+1} / {num_epochs} Test MAE best: {best_test_mae:.3f}, current: {test_mae:.3f}"
+            f"[{epoch+1} / {num_epochs} Test RMSE best: {best_test_rmse:.3f}, current: {test_rmse:.3f}"
         )
         logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
-    return losses, best_test_mae
+    return losses, best_test_rmse
