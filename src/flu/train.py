@@ -51,7 +51,7 @@ def compute_mae(model, data_loader, plot=False):
             .tolist()
         )
         # Compute the mean squared error
-        mae = F.mse_loss(output, ili_target)
+        mae = F.l1_loss(output, ili_target)
 
         # Accumulate the MSE over all batches
         mae_total += mae.item()
