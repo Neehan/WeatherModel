@@ -109,9 +109,7 @@ class TransformerModel(nn.Module):
 
 class YieldPredictor(nn.Module):
     def __init__(
-        self,
-        pretrained_weatherformer: Weatherformer = None,
-        **weatherformer_size_params
+        self, pretrained_weatherformer: Weatherformer, weatherformer_size_params
     ):
         super().__init__()
         self.soil_cnn = nn.Sequential(

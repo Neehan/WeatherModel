@@ -103,7 +103,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
         )
 
-        model = YieldPredictor(pretrained_model, **model_size_params).to(DEVICE)
+        model = YieldPredictor(pretrained_model, model_size_params).to(DEVICE)
         model, losses, best_val_loss = training_loop(
             model,
             train_loader,

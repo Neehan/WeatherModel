@@ -92,7 +92,9 @@ if __name__ == "__main__":
             None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
         )
 
-        model = FluPredictor(pretrained_model, **model_size_params).to(DEVICE)
+        model = FluPredictor(
+            pretrained_model, model_size_params, args.n_future_weeks
+        ).to(DEVICE)
         # load the datasets
         weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
         flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
