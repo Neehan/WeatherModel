@@ -131,13 +131,12 @@ def train_test_split(
     n_future_weeks=1,
     test_year=2016,
     batch_size=64,
-    year_cutoff=2020,
 ):
     dataset: list = load_data(
         weather_path, flu_cases_path, n_past_weeks, n_future_weeks
     )
     dataset_size = len(dataset)  # Total number of items in the dataset
-    test_start_idx = dataset_size - (year_cutoff - test_year) * 52
+    test_start_idx = dataset_size - (2023 - test_year) * 52
     test_end_idx = test_start_idx + 52
 
     # Create Subset objects for train and test sets

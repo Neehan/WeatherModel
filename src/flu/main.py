@@ -104,7 +104,6 @@ if __name__ == "__main__":
             args.n_future_weeks,
             batch_size=args.batch_size,
             test_year=test_year,
-            year_cutoff=args.year_cutoff,
         )
         losses, best_mae = training_loop(
             model,
