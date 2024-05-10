@@ -13,11 +13,11 @@ import matplotlib.pyplot as plt
 plt.style.use("ggplot")
 
 
-def compute_rmse(model, data_loader, plot=False):
+def compute_mae(model, data_loader, plot=False):
     model.eval()
     device = DEVICE
-    # Compute the rmse on the training dataset
-    rmse_total = 0.0
+    # Compute the mae on the training dataset
+    mae_total = 0.0
     outputs = []
     targets = []
 
@@ -51,10 +51,10 @@ def compute_rmse(model, data_loader, plot=False):
             .tolist()
         )
         # Compute the mean squared error
-        rmse = F.mse_loss(output, ili_target)
+        mae = F.mse_loss(output, ili_target)
 
         # Accumulate the MSE over all batches
-        rmse_total += rmse.item()
+        mae_total += mae.item()
 
     if plot:
         plt.plot(range(len(outputs)), outputs, label="outputs")
@@ -62,7 +62,7 @@ def compute_rmse(model, data_loader, plot=False):
         plt.legend()
         plt.show()
 
-    return math.sqrt(rmse_total / len(data_loader))
+    return mae_total / len(data_loader)
 
 
 # Warm-up and decay function
@@ -98,7 +98,7 @@ def training_loop(
     device = DEVICE
 
     criterion = nn.MSELoss()
-    best_test_rmse = 999
+    best_test_mae = 999
 
     # Define the optimizer
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
@@ -149,14 +149,15 @@ def training_loop(
         running_loss /= len(train_loader)
         # running_loss = math.sqrt(running_loss)
         losses["train"].append(running_loss)
-        test_rmse = compute_rmse(
+        test_mae = compute_mae(
             model,
             test_loader,
         )
-        losses["test"].append(test_rmse)
-        best_test_rmse = min(test_rmse, best_test_rmse)
-        logging.info(
-            f"[{epoch+1} / {num_epochs} Test RMSE best: {best_test_rmse:.3f}, current: {test_rmse:.3f}"
-        )
-        logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
-    return losses, best_test_rmse
+        losses["test"].append(test_mae)
+        best_test_mae = min(test_mae, best_test_mae)
+        if epoch % 5 == 4:
+            logging.info(
+                f"[{epoch+1} / {num_epochs} Test MAE best: {best_test_mae:.3f}, current: {test_mae:.3f}"
+            )
+            logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
+    return losses, best_test_mae
