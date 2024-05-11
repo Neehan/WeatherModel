@@ -137,7 +137,7 @@ if __name__ == "__main__":
         logging.info(
             f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean:.3f}, std: {current_maes_std:.3f}"
         )
-        best_mae_mean = min(best_mae_mean, current_maes_std)
+        best_mae_mean = min(best_mae_mean, current_maes_mean)
         best_mae_std = min(best_mae_std, current_maes_std)
 
     logging.info(f"best overall MAE mean: {best_mae_mean:.3f}, std: {best_mae_std:.3f}")
