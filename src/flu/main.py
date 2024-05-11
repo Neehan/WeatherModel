@@ -87,12 +87,12 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    best_mae_mean, best_mae_std = 999, 999
+    best_mae_mean, best_mae_std = 999.0, 999.0
 
     for n_past_weeks in range(105, 136, 5):
         n_test_years = 4
         total_best_mae = 0
-        logging.info(f"number of past weeks: {n_past_weeks}")
+        logging.info(f"\n\nnumber of past weeks: {n_past_weeks}")
         best_maes = []
 
         assert args.n_past_weeks > 52, "need at least one year of past data"
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         logging.info(
             f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean:.3f}, std: {current_maes_std:.3f}"
         )
-        best_mae_mean = np.min(best_mae_mean, current_maes_std)
-        best_mae_std = np.min(best_mae_std, current_maes_std)
+        best_mae_mean = min(best_mae_mean, current_maes_std)
+        best_mae_std = min(best_mae_std, current_maes_std)
 
     logging.info(f"best overall MAE mean: {best_mae_mean:.3f}, std: {best_mae_std:.3f}")
