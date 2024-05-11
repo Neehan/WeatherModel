@@ -20,9 +20,9 @@ torch.cuda.manual_seed(1234)
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--batch_size", help="batch size", default=32, type=int)
-parser.add_argument(
-    "--n_past_weeks", help="number of past weeks to look at", default=52 * 3, type=int
-)
+# parser.add_argument(
+#     "--n_past_weeks", help="number of past weeks to look at", default=52 * 3, type=int
+# )
 parser.add_argument(
     "--year_cutoff", help="cut off data until this year", default=2020, type=int
 )
@@ -93,9 +93,9 @@ if __name__ == "__main__":
         n_test_years = 4
         total_best_mae = 0
         logging.info(f"\n\nnumber of past weeks: {n_past_weeks}")
-        best_maes = []
+        maes = []
 
-        assert args.n_past_weeks > 52, "need at least one year of past data"
+        # assert args.n_past_weeks > 52, "need at least one year of past data"
         for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
             logging.info(f"Testing on year {test_year}")
             # load the pretrained model
@@ -131,13 +131,15 @@ if __name__ == "__main__":
                 num_warmup_epochs=args.n_warmup_epochs,
                 n_eval_weeks=args.n_eval_weeks,
             )
-            best_maes.append(best_mae * 1.73)
-        current_maes_mean = np.mean(best_maes)
-        current_maes_std = np.std(best_maes)
+            maes.append(best_mae)
+        current_maes_mean = np.mean(maes)
+        current_maes_std = np.std(maes)
         logging.info(
-            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean:.3f}, std: {current_maes_std:.3f}"
+            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean * 1.73:.3f}, std: {current_maes_std * 1.73:.3f}"
         )
         best_mae_mean = min(best_mae_mean, current_maes_mean)
         best_mae_std = min(best_mae_std, current_maes_std)
 
-    logging.info(f"best overall MAE mean: {best_mae_mean:.3f}, std: {best_mae_std:.3f}")
+    logging.info(
+        f"best overall MAE mean: {best_mae_mean * 1.73:.3f}, std: {best_mae_std * 1.73:.3f}"
+    )
