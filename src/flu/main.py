@@ -11,6 +11,7 @@ import numpy as np
 from .dataloader import train_test_split
 from .model import FluPredictor
 from .linear_model import LinearFluPredictor
+from .only_transformer import OnlyTransformerFluPredictor
 from .train import training_loop
 from .constants import *
 
@@ -26,6 +27,7 @@ parser.add_argument("--batch_size", help="batch size", default=32, type=int)
 parser.add_argument(
     "--year_cutoff", help="cut off data until this year", default=2020, type=int
 )
+
 
 parser.add_argument(
     "--n_predict_weeks", help="number of weeks to predict ahead", default=5, type=int
@@ -56,6 +58,8 @@ parser.add_argument(
     action="store_true",
     help="don't use the pretrained model",
 )
+parser.set_defaults(no_pretraining=False)
+
 
 parser.add_argument(
     "--model_size",
@@ -64,7 +68,12 @@ parser.add_argument(
     type=str,
 )
 
-parser.set_defaults(no_pretraining=False)
+parser.add_argument(
+    "--model_type",
+    help="weatherformer, linear, transformer",
+    default="weatherformer",
+    type=str,
+)
 
 
 if __name__ == "__main__":
@@ -99,16 +108,25 @@ if __name__ == "__main__":
         for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
             logging.info(f"Testing on year {test_year}")
             # load the pretrained model
-            pretrained_model = (
-                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
-            )
+            model_type = args.model_type.lower()
+            if model_type == "weatherformer":
+                pretrained_model = (
+                    None
+                    if args.no_pretraining
+                    else torch.load(DATA_DIR + load_model_path)
+                )
 
-            model = FluPredictor(
-                pretrained_model, model_size_params, args.n_predict_weeks
-            ).to(DEVICE)
-            # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_predict_weeks).to(
-            #     DEVICE
-            # )
+                model = FluPredictor(
+                    pretrained_model, model_size_params, args.n_predict_weeks
+                ).to(DEVICE)
+            elif model_type == "linear":
+                model = LinearFluPredictor(
+                    args.n_past_weeks * 33, args.n_predict_weeks
+                ).to(DEVICE)
+            elif model_type == "transformer":
+                model = OnlyTransformerFluPredictor(
+                    input_dim=6, n_predict_weeks=args.n_predict_weeks
+                ).to(DEVICE)
             # load the datasets
             weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
             flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"

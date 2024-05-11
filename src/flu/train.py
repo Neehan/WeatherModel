@@ -51,6 +51,8 @@ def compute_mae(model, data_loader, n_eval_weeks, plot=False):
             .tolist()
         )
         # Compute the mean squared error
+        # if ili_target.shape[0] < batch_size: # last batch
+        #     n_eval_weeks =
         mae = F.l1_loss(output[:, :n_eval_weeks], ili_target[:, :n_eval_weeks])
 
         # Accumulate the MSE over all batches
