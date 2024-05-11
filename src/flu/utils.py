@@ -24,7 +24,7 @@ def standardize_data(data_df, columns, sequence_len):
             param_mean = data_df[param_cols].values.mean()
             param_std = data_df[param_cols].values.std()
 
-            logging.info(f"{param} mean {param_mean:.2f}, std {param_std:.2f}")
+            logging.debug(f"{param} mean {param_mean:.2f}, std {param_std:.2f}")
 
         data_df[param_cols] = (data_df[param_cols] - param_mean) / param_std
     return data_df

@@ -143,8 +143,8 @@ def train_test_split(
     train_dataset = FluDataset(dataset[:test_start_idx])
     test_dataset = FluDataset(dataset[test_start_idx:test_end_idx])
 
-    logging.info(f"Training Dataset Size: {len(train_dataset)}")
-    logging.info(f"Test Dataset Size: {len(test_dataset)}")
+    logging.debug(f"Training Dataset Size: {len(train_dataset)}")
+    logging.debug(f"Test Dataset Size: {len(test_dataset)}")
 
     # Create the DataLoader for training and testing
     train_loader = DataLoader(
