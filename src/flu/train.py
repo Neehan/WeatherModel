@@ -113,17 +113,17 @@ def training_loop(
     # print(f"test mae: {test_mae}")
     # return {}, test_mae
 
-    for epoch in range(num_epochs):
+    for epoch in tqdm(
+        range(num_epochs),
+        file=TQDM_OUTPUT,
+        desc="Training",
+        dynamic_ncols=True,
+        mininterval=MIN_INTERVAL,
+    ):
         running_loss = 0.0
         model.train()
         for i, data in enumerate(
-            tqdm(
-                train_loader,
-                file=TQDM_OUTPUT,
-                desc="Training",
-                dynamic_ncols=True,
-                mininterval=MIN_INTERVAL,
-            )
+            train_loader,
         ):
             # Zero the gradients
             optimizer.zero_grad()

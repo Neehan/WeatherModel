@@ -93,7 +93,7 @@ class FluPredictor(nn.Module):
         pretrained_weatherformer: Weatherformer,
         weatherformer_size_params,
         n_predict_weeks=5,
-        hidden_dim=500,
+        hidden_dim=32,
         num_layers=3,
     ):
         super().__init__()

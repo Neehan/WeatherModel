@@ -6,7 +6,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import torch
 
 torch.use_deterministic_algorithms(True)
-
+import numpy as np
 
 from .dataloader import train_test_split
 from .model import FluPredictor
@@ -87,44 +87,57 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    n_test_years = 4
-    total_best_mae = 0
+    best_mae_mean, best_mae_std = 999, 999
 
-    assert args.n_past_weeks > 52, "need at least one year of past data"
-    for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
-        logging.info(f"Testing on year {test_year}")
-        # load the pretrained model
-        pretrained_model = (
-            None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
-        )
+    for n_past_weeks in range(105, 136, 5):
+        n_test_years = 4
+        total_best_mae = 0
+        logging.info(f"number of past weeks: {n_past_weeks}")
+        best_maes = []
 
-        model = FluPredictor(
-            pretrained_model, model_size_params, args.n_predict_weeks
-        ).to(DEVICE)
-        # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_predict_weeks).to(
-        #     DEVICE
-        # )
-        # load the datasets
-        weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
-        flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
+        assert args.n_past_weeks > 52, "need at least one year of past data"
+        for test_year in range(args.year_cutoff - n_test_years, args.year_cutoff):
+            logging.info(f"Testing on year {test_year}")
+            # load the pretrained model
+            pretrained_model = (
+                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+            )
 
-        train_loader, test_loader = train_test_split(
-            weather_path,
-            flu_cases_path,
-            args.n_past_weeks,
-            args.n_predict_weeks,
-            batch_size=args.batch_size,
-            test_year=test_year,
+            model = FluPredictor(
+                pretrained_model, model_size_params, args.n_predict_weeks
+            ).to(DEVICE)
+            # model = LinearFluPredictor(args.n_past_weeks * 33, args.n_predict_weeks).to(
+            #     DEVICE
+            # )
+            # load the datasets
+            weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
+            flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
+
+            train_loader, test_loader = train_test_split(
+                weather_path,
+                flu_cases_path,
+                n_past_weeks,
+                args.n_predict_weeks,
+                batch_size=args.batch_size,
+                test_year=test_year,
+            )
+            losses, best_mae = training_loop(
+                model,
+                train_loader,
+                test_loader,
+                num_epochs=args.n_epochs,
+                init_lr=args.init_lr,
+                lr_decay_factor=args.lr_decay_factor,
+                num_warmup_epochs=args.n_warmup_epochs,
+                n_eval_weeks=args.n_eval_weeks,
+            )
+            best_maes.append(best_mae * 1.73)
+        current_maes_mean = np.mean(best_maes)
+        current_maes_std = np.std(best_maes)
+        logging.info(
+            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean:.3f}, std: {current_maes_std:.3f}"
         )
-        losses, best_mae = training_loop(
-            model,
-            train_loader,
-            test_loader,
-            num_epochs=args.n_epochs,
-            init_lr=args.init_lr,
-            lr_decay_factor=args.lr_decay_factor,
-            num_warmup_epochs=args.n_warmup_epochs,
-            n_eval_weeks=args.n_eval_weeks,
-        )
-        total_best_mae += best_mae
-    logging.info(f"Average of best MAE: {total_best_mae / n_test_years * 1.73:.3f}")
+        best_mae_mean = np.min(best_mae_mean, current_maes_std)
+        best_mae_std = np.min(best_mae_std, current_maes_std)
+
+    logging.info(f"best overall MAE mean: {best_mae_mean:.3f}, std: {best_mae_std:.3f}")
