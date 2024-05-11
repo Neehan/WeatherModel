@@ -30,7 +30,7 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "--n_predict_weeks", help="number of weeks to predict ahead", default=10, type=int
+    "--n_predict_weeks", help="number of weeks to predict ahead", default=15, type=int
 )
 # parser.add_argument(
 #     "--n_eval_weeks", help="number of weeks to evaluate ahead", default=1, type=int
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     for arg, value in args_dict.items():
         logging.info(f"{arg}: {value}")
 
-    assert args.n_predict_weeks >= 10, "must predict at least 10 weeks"
+    assert args.n_predict_weeks >= 15, "must predict at least 15 weeks"
 
     model_size = args.model_size.lower()
     if model_size == "small":

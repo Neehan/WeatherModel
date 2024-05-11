@@ -100,7 +100,7 @@ def training_loop(
     device = DEVICE
 
     criterion = nn.MSELoss()
-    n_eval_weeks = [1, 5, 10]
+    n_eval_weeks = [5, 10, 15]
     best_test_maes = [999, 999, 999]
 
     # Define the optimizer
