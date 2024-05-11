@@ -122,13 +122,13 @@ class FluPredictor(nn.Module):
             # )
 
         self.trend_transformer = TransformerModel(
-            input_dim=hidden_dim + 2,  # flu features
-            output_dim=hidden_dim,
+            input_dim=hidden_dim + 4,  # flu features
+            output_dim=n_predict_weeks,
             num_layers=num_layers,
         )
 
         # Fully connected layer to output the predicted flu cases
-        self.fc = nn.Linear(hidden_dim, n_predict_weeks)
+        # self.fc = nn.Linear(hidden_dim, n_predict_weeks)
 
     def forward(
         self,
@@ -140,29 +140,34 @@ class FluPredictor(nn.Module):
         tot_cases_past,
     ):
         batch_size, seq_len, n_features = weather.size()
-        weather_feature_mask = torch.ones(
+        weather_feature_mask = torch.zeros(
             (self.weather_transformer.input_dim,),
             device=DEVICE,
             dtype=torch.bool,
         )
-        weather_indices = torch.tensor(
-            [
-                0,
-                4,
-                6,
-                7,
-                # 8,
-                # 24, 25
-            ],
-            device=DEVICE,
-            dtype=torch.int,
-        )
-        masked_weather = torch.zeros(weather.shape, device=DEVICE)
-        masked_weather[:, :, weather_indices] = weather[:, :, weather_indices]
-        weather_feature_mask[weather_indices] = False
+        # weather_feature_mask = torch.ones(
+        #     (self.weather_transformer.input_dim,),
+        #     device=DEVICE,
+        #     dtype=torch.bool,
+        # )
+        # weather_indices = torch.tensor(
+        #     [
+        #         0,
+        #         4,
+        #         6,
+        #         7,
+        #         # 8,
+        #         # 24, 25
+        #     ],
+        #     device=DEVICE,
+        #     dtype=torch.int,
+        # )
+        # masked_weather = torch.zeros(weather.shape, device=DEVICE)
+        # masked_weather[:, :, weather_indices] = weather[:, :, weather_indices]
+        # weather_feature_mask[weather_indices] = False
 
         weather = self.weather_transformer(
-            masked_weather,
+            weather,
             coords,
             weather_index,
             weather_feature_mask=weather_feature_mask,
@@ -175,12 +180,12 @@ class FluPredictor(nn.Module):
                 weather,
                 ili_past.unsqueeze(2),
                 tot_cases_past.unsqueeze(2),
-                # coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
+                coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
             ],
             dim=2,
         )
         output = self.trend_transformer(combined_input)
 
         # Predict current week's flu cases
-        predicted_flu_cases = self.fc(output)
-        return predicted_flu_cases
+        # predicted_flu_cases = self.fc(output)
+        return output

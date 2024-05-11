@@ -121,11 +121,11 @@ if __name__ == "__main__":
                 ).to(DEVICE)
             elif model_type == "linear":
                 model = LinearFluPredictor(
-                    args.n_past_weeks * 33, args.n_predict_weeks
+                    args.n_past_weeks * 35, args.n_predict_weeks
                 ).to(DEVICE)
             elif model_type == "transformer":
                 model = OnlyTransformerFluPredictor(
-                    input_dim=6, n_predict_weeks=args.n_predict_weeks
+                    input_dim=35, n_predict_weeks=args.n_predict_weeks
                 ).to(DEVICE)
             # load the datasets
             weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
@@ -152,12 +152,13 @@ if __name__ == "__main__":
             maes.append(best_mae)
         current_maes_mean = np.mean(maes)
         current_maes_std = np.std(maes)
+        target_std = 2.43
         logging.info(
-            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean * 1.73:.3f}, std: {current_maes_std * 1.73:.3f}"
+            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean * target_std:.3f}, std: {current_maes_std * target_std:.3f}"
         )
         best_mae_mean = min(best_mae_mean, current_maes_mean)
         best_mae_std = min(best_mae_std, current_maes_std)
 
     logging.info(
-        f"best overall MAE mean: {best_mae_mean * 1.73:.3f}, std: {best_mae_std * 1.73:.3f}"
+        f"best overall MAE mean: {best_mae_mean * target_std:.3f}, std: {best_mae_std * target_std:.3f}"
     )

@@ -41,7 +41,7 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_predict_weeks):
     )
 
     # keep only NYC cases
-    flu_df = flu_df.loc[flu_df.region == "nyc"].sort_values(by=["Year"])
+    # flu_df = flu_df.loc[flu_df.region == "nyc"].sort_values(by=["Year"])
 
     weather_df = pd.read_csv(weather_path)
     weather_columns = [

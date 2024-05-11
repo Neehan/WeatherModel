@@ -25,7 +25,7 @@ class LinearFluPredictor(nn.Module):
                 weather,
                 ili_past.unsqueeze(2),
                 tot_cases_past.unsqueeze(2),
-                # coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
+                coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
             ],
             dim=2,
         )

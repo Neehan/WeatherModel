@@ -91,20 +91,19 @@ class OnlyTransformerFluPredictor(nn.Module):
     def __init__(
         self,
         n_predict_weeks=5,
-        input_dim=6,
-        hidden_dim=32,
+        input_dim=35,
         num_layers=3,
     ):
         super().__init__()
 
         self.trend_transformer = TransformerModel(
             input_dim=input_dim,  # flu features
-            output_dim=hidden_dim,
+            output_dim=n_predict_weeks,
             num_layers=num_layers,
         )
 
         # Fully connected layer to output the predicted flu cases
-        self.fc = nn.Linear(hidden_dim, n_predict_weeks)
+        # self.fc = nn.Linear(hidden_dim, n_predict_weeks)
 
     def forward(
         self,
@@ -115,19 +114,19 @@ class OnlyTransformerFluPredictor(nn.Module):
         ili_past,
         tot_cases_past,
     ):
-        weather_indices = torch.tensor(
-            [
-                0,
-                4,
-                6,
-                7,
-                # 8,
-                # 24, 25
-            ],
-            device=DEVICE,
-            dtype=torch.int,
-        )
-        weather = weather[:, :, weather_indices]
+        # weather_indices = torch.tensor(
+        #     [
+        #         0,
+        #         4,
+        #         6,
+        #         7,
+        #         # 8,
+        #         # 24, 25
+        #     ],
+        #     device=DEVICE,
+        #     dtype=torch.int,
+        # )
+        # weather = weather[:, :, weather_indices]
 
         # Concatenate processed weather, last year's same week flu cases, and last week's flu cases
         combined_input = torch.cat(
@@ -135,11 +134,13 @@ class OnlyTransformerFluPredictor(nn.Module):
                 weather,
                 ili_past.unsqueeze(2),
                 tot_cases_past.unsqueeze(2),
+                coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
             ],
             dim=2,
         )
         output = self.trend_transformer(combined_input)
+        return output
 
         # Predict current week's flu cases
-        predicted_flu_cases = self.fc(output)
-        return predicted_flu_cases
+        # predicted_flu_cases = self.fc(output)
+        # return predicted_flu_cases
