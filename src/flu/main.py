@@ -30,11 +30,11 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "--n_predict_weeks", help="number of weeks to predict ahead", default=5, type=int
+    "--n_predict_weeks", help="number of weeks to predict ahead", default=10, type=int
 )
-parser.add_argument(
-    "--n_eval_weeks", help="number of weeks to evaluate ahead", default=1, type=int
-)  # basically you could predict 5 weeks during training, but only evaluate on 1 week advance
+# parser.add_argument(
+#     "--n_eval_weeks", help="number of weeks to evaluate ahead", default=1, type=int
+# )  # basically you could predict 5 weeks during training, but only evaluate on 1 week advance
 
 parser.add_argument(
     "--n_epochs", help="number of training epoches", default=25, type=int
@@ -85,6 +85,8 @@ if __name__ == "__main__":
     for arg, value in args_dict.items():
         logging.info(f"{arg}: {value}")
 
+    assert args.n_predict_weeks >= 10, "must predict at least 10 weeks"
+
     model_size = args.model_size.lower()
     if model_size == "small":
         model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
@@ -96,7 +98,7 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    best_mae_mean, best_mae_std = 999.0, 999.0
+    best_mae_means = np.array([999.0] * 3)
 
     for n_past_weeks in range(105, 136, 5):
         n_test_years = 4
@@ -121,11 +123,11 @@ if __name__ == "__main__":
                 ).to(DEVICE)
             elif model_type == "linear":
                 model = LinearFluPredictor(
-                    args.n_past_weeks * 35, args.n_predict_weeks
+                    n_past_weeks * (1 + 2), args.n_predict_weeks
                 ).to(DEVICE)
             elif model_type == "transformer":
                 model = OnlyTransformerFluPredictor(
-                    input_dim=35, n_predict_weeks=args.n_predict_weeks
+                    input_dim=1 + 2, n_predict_weeks=args.n_predict_weeks
                 ).to(DEVICE)
             # load the datasets
             weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
@@ -139,7 +141,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 test_year=test_year,
             )
-            losses, best_mae = training_loop(
+            losses, best_maes = training_loop(
                 model,
                 train_loader,
                 test_loader,
@@ -147,18 +149,24 @@ if __name__ == "__main__":
                 init_lr=args.init_lr,
                 lr_decay_factor=args.lr_decay_factor,
                 num_warmup_epochs=args.n_warmup_epochs,
-                n_eval_weeks=args.n_eval_weeks,
             )
-            maes.append(best_mae)
-        current_maes_mean = np.mean(maes)
-        current_maes_std = np.std(maes)
-        target_std = 2.43
-        logging.info(
-            f"n_past_weeks {n_past_weeks}, best MAE mean: {current_maes_mean * target_std:.3f}, std: {current_maes_std * target_std:.3f}"
+            maes.append(best_maes)
+        current_maes_means = np.mean(np.array(maes), axis=0)
+        # current_maes_std = np.std(np.array(maes), axis=0)
+        target_std = 1.73
+        # logging.info(
+        #     f"n_past_weeks: {n_past_weeks}; best MAE mean: {current_maes_means * target_std:.3f}"
+        # )
+        best_mae_means = np.array(
+            [
+                min(best_mae_mean, current_maes_mean)
+                for best_mae_mean, current_maes_mean in zip(
+                    best_mae_means, current_maes_means
+                )
+            ]
         )
-        best_mae_mean = min(best_mae_mean, current_maes_mean)
-        best_mae_std = min(best_mae_std, current_maes_std)
 
-    logging.info(
-        f"best overall MAE mean: {best_mae_mean * target_std:.3f}, std: {best_mae_std * target_std:.3f}"
-    )
+    logging_text = "best overall MAE mean:"
+    for i in range(3):
+        logging_text += f" {best_mae_means[i] * target_std:.3f};"
+    logging.info(logging_text)

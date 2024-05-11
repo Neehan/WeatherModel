@@ -88,7 +88,6 @@ def training_loop(
     init_lr=0.0009,
     num_warmup_epochs=2,
     lr_decay_factor=0.95,
-    n_eval_weeks=1,
 ):
 
     losses = {
@@ -101,7 +100,8 @@ def training_loop(
     device = DEVICE
 
     criterion = nn.MSELoss()
-    best_test_mae = 999
+    n_eval_weeks = [1, 5, 10]
+    best_test_maes = [999, 999, 999]
 
     # Define the optimizer
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
@@ -155,12 +155,13 @@ def training_loop(
         running_loss /= len(train_loader)
         # running_loss = math.sqrt(running_loss)
         losses["train"].append(running_loss)
-        test_mae = compute_mae(model, test_loader, n_eval_weeks)
-        losses["test"].append(test_mae)
-        best_test_mae = min(test_mae, best_test_mae)
-        if epoch % 5 == 4:
-            logging.info(
-                f"[{epoch+1} / {num_epochs} Test MAE best: {best_test_mae:.3f}, current: {test_mae:.3f}"
-            )
-            logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
-    return losses, best_test_mae
+        # losses["test"].append(test_mae)
+        logging_text = f"[{epoch+1} / {num_epochs}] Test MAE best:"
+        for i, n_eval_week in enumerate(n_eval_weeks):
+            test_mae = compute_mae(model, test_loader, n_eval_week)
+            best_test_maes[i] = min(test_mae, best_test_maes[i])
+            logging_text += f" {best_test_maes[i]:.3f};"
+        if epoch % 5 == 4 or epoch == num_epochs - 1:
+            logging.info(logging_text)
+        # logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")
+    return losses, best_test_maes

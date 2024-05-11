@@ -22,10 +22,10 @@ class LinearFluPredictor(nn.Module):
         # Concatenate processed weather, last year's same week flu cases, and last week's flu cases
         combined_input = torch.cat(
             [
-                weather,
+                weather[:, :, :1],
                 ili_past.unsqueeze(2),
                 tot_cases_past.unsqueeze(2),
-                coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
+                # coords.unsqueeze(1).expand(-1, weather.shape[1], -1),
             ],
             dim=2,
         )
