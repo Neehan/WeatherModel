@@ -139,4 +139,5 @@ class OnlyTransformerFluPredictor(nn.Module):
             dim=2,
         )
         output = self.trend_transformer(combined_input, mask=mask)
+        output += ili_past[:, -1:].expand(-1, output.shape[1])
         return output
