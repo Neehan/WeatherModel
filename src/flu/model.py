@@ -186,10 +186,5 @@ class FluPredictor(nn.Module):
         )
         output = self.trend_transformer(combined_input, mask=mask)
         output[:, :1] += ili_past[:, -1:]
-        output[:, 1:] += ili_past[
-            :, ili_past.shape[1] - 50 : ili_past.shape[1] - 50 + (output.shape[1] - 1)
-        ]
 
-        # Predict current week's flu cases
-        # predicted_flu_cases = self.fc(output)
         return output
