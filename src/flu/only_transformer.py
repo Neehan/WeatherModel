@@ -138,6 +138,6 @@ class OnlyTransformerFluPredictor(nn.Module):
             ],
             dim=2,
         )
-        output = self.trend_transformer(combined_input, mask=mask)
+        output = torch.cumsum(self.trend_transformer(combined_input, mask=mask), dim=1)
         output += ili_past[:, -1:].expand(-1, output.shape[1])
         return output
