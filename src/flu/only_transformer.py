@@ -92,7 +92,9 @@ class OnlyTransformerFluPredictor(nn.Module):
         self,
         n_predict_weeks=5,
         input_dim=1 + 2,
-        num_layers=3,
+        num_layers=2,
+        num_heads=2,
+        hidden_dim_factor=4,
     ):
         super().__init__()
 
@@ -100,6 +102,8 @@ class OnlyTransformerFluPredictor(nn.Module):
             input_dim=input_dim,  # flu features
             output_dim=n_predict_weeks,
             num_layers=num_layers,
+            num_heads=num_heads,
+            hidden_dim_factor=hidden_dim_factor,
         )
 
         # Fully connected layer to output the predicted flu cases
