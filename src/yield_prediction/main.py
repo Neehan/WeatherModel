@@ -15,6 +15,8 @@ torch.use_deterministic_algorithms(True)
 
 from .dataloader import read_soybean_dataset, get_train_test_loaders
 from .model import YieldPredictor
+from .cnn_transformer import CNNYieldPredictor
+from .wf_linear import WFLinearPredictor
 from .train import training_loop
 from .constants import *
 
@@ -56,6 +58,13 @@ parser.add_argument(
     type=str,
 )
 
+parser.add_argument(
+    "--model_type",
+    help="weatherformer, cnn, wflinear",
+    default="small",
+    type=str,
+)
+
 parser.set_defaults(no_pretraining=False)
 
 
@@ -83,11 +92,6 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
 
-    # load the pretrained model
-    pretrained_model = (
-        None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
-    )
-
     total_best_val_loss = 0
 
     for n in range(5):
@@ -102,9 +106,22 @@ if __name__ == "__main__":
             n_past_years=args.n_past_years,
             batch_size=args.batch_size,
         )
+        model_type = args.model_type
+        if model_type == "weatherformer" or model_type == "wflinear":
+            # load the pretrained model
+            pretrained_model = (
+                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+            )
+            if model_type == "weatherformer":
+                model = YieldPredictor(pretrained_model, model_size_params)
+            else:
+                model = WFLinearPredictor(pretrained_model, model_size_params)
+        elif model_type == "cnn":
+            model = CNNYieldPredictor()
 
-        model = YieldPredictor(pretrained_model, model_size_params).to(DEVICE)
-        model, losses, best_val_loss = training_loop(
+        model = model.to(DEVICE)
+
+        _, losses, best_val_loss = training_loop(
             model,
             train_loader,
             test_loader,

@@ -92,9 +92,9 @@ class OnlyTransformerFluPredictor(nn.Module):
         self,
         n_predict_weeks=5,
         input_dim=1 + 2,
-        num_layers=2,
-        num_heads=2,
-        hidden_dim_factor=4,
+        num_layers=3,
+        num_heads=8,
+        hidden_dim_factor=8,
     ):
         super().__init__()
 
