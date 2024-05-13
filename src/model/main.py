@@ -24,10 +24,16 @@ if __name__ == "__main__":
 
     parser.add_argument("--batch_size", help="batch size", default=64, type=int)
     parser.add_argument(
-        "--n_input_features", help="number of input features", default=26, type=int
+        "--n_input_features", help="number of input features", default=21, type=int
     )
     parser.add_argument(
         "--n_epochs", help="number of training epochs", default=75, type=int
+    )
+    parser.add_argument(
+        "--n_feature_swaps",
+        help="number of features to swap per batch",
+        default=1,
+        type=int,
     )
     parser.add_argument(
         "--init_lr", help="initial learning rate", default=0.0005, type=float
@@ -87,4 +93,5 @@ if __name__ == "__main__":
         init_lr=args.init_lr,
         num_warmup_epochs=args.n_warmup_epochs,
         decay_factor=args.decay_factor,
+        num_feature_swaps=args.n_feature_swaps,
     )

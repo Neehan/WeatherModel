@@ -9,15 +9,23 @@ from . import utils
 from .constants import *
 
 
-def swap_feature(weather_indices, num_input_features):
-    # Select one index randomly from the first input_dim indices
-    input_index = torch.randint(0, num_input_features, (1,))
-    # Select one index from the remaining indices
-    output_index = torch.randint(num_input_features, len(weather_indices), (1,))
-    # Swap them
-    weather_indices[input_index], weather_indices[output_index] = (
-        weather_indices[output_index],
-        weather_indices[input_index],
+def swap_features(weather_indices, num_input_features, k=1):
+    """
+    swap k indices between input and output
+    """
+    num_output_indices = len(weather_indices) - num_input_features
+    k = min(k, num_input_features, num_output_indices)
+
+    # Generate 'k' random indices from the first part of the array
+    input_indices = torch.randperm(num_input_features)[:k]
+
+    # Generate 'k' random indices from the second part of the array
+    output_indices = num_input_features + torch.randperm(num_output_indices)[:k]
+
+    # Perform the swaps
+    weather_indices[input_indices], weather_indices[output_indices] = (
+        weather_indices[output_indices].clone(),
+        weather_indices[input_indices].clone(),
     )
     return weather_indices
 
@@ -27,6 +35,7 @@ def train(
     num_input_features,
     loader,
     weather_indices,
+    num_feature_swaps,
     optimizer,
     scheduler,
     criterion,
@@ -43,8 +52,8 @@ def train(
         data, coords, index = data.to(device), coords.to(device), index.to(device)
         optimizer.zero_grad()
 
-        # swap one input and output feature of weather indices
-        swap_feature(weather_indices, num_input_features)
+        # swap some input and output feature of weather indices in place
+        swap_features(weather_indices, num_input_features, k=num_feature_swaps)
         target_indices = weather_indices[num_input_features:]
         target_features = data[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
@@ -73,19 +82,21 @@ def validate(
     num_input_features,
     loader,
     weather_indices,
+    num_feature_swaps,
     device,
 ):
     model.eval()
     total_loss = 0
     loader_len = 0
+    weather_indices = weather_indices.clone()  # don't modify the input weather indices
     for (
         data,
         coords,
         index,
     ) in loader:
         data, coords, index = data.to(device), coords.to(device), index.to(device)
-        # swap one input and output feature of weather indices
-        swap_feature(weather_indices, num_input_features)
+        # swap one input and output feature of weather indices in place
+        swap_features(weather_indices, num_input_features, k=num_feature_swaps)
         target_indices = weather_indices[num_input_features:]
         target_features = data[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
@@ -114,6 +125,7 @@ def training_loop(
     init_lr,
     num_warmup_epochs,
     decay_factor,
+    num_feature_swaps,
 ):
     total_params = sum(p.numel() for p in model.parameters())
     logging.info(f"Total number of parameters: {total_params/10**6:.2f}M")
@@ -150,6 +162,7 @@ def training_loop(
             num_input_features,
             train_loader,
             weather_indices,
+            num_feature_swaps,
             optimizer,
             scheduler,
             criterion,
@@ -161,6 +174,7 @@ def training_loop(
             num_input_features,
             test_loader,
             weather_indices,
+            num_feature_swaps,
             DEVICE,
         )
 
