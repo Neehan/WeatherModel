@@ -59,6 +59,8 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_predict_weeks):
     ]
     data_df = pd.merge(flu_df, weather_df, on=["region", "Year"])
 
+    data_df = data_df.bfill()
+
     # standardize weather
     data_df = utils.standardize_data(
         data_df, WEATHER_PARAMS + FLU_DATASET_PARAMS, SEQ_LEN
@@ -77,7 +79,8 @@ def load_data(weather_path, flu_cases_path, n_past_weeks, n_predict_weeks):
         num_regions, -1, num_features
     )  # num_regions x (num_years * seq len) x num input features
 
-    # shift by 40 cause first 40 weeks of the first year are empty
+    # shift by 39 cause first 40 weeks of the first year are empty
+    # 39 cause the flu dataset uses 1 based indexing
     data_array = data_array[:, 39:, :]
 
     coords = data_df[["lat", "lng"]].values.reshape(num_regions, -1, 2)
@@ -136,7 +139,7 @@ def train_test_split(
         weather_path, flu_cases_path, n_past_weeks, n_predict_weeks
     )
     dataset_size = len(dataset)  # Total number of items in the dataset
-    test_start_idx = dataset_size - (2023 - test_year) * 52
+    test_start_idx = dataset_size - (2022 - test_year) * 52
     test_end_idx = test_start_idx + 52
 
     # Create Subset objects for train and test sets

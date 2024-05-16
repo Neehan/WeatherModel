@@ -118,19 +118,6 @@ class OnlyTransformerFluPredictor(nn.Module):
         ili_past,
         tot_cases_past,
     ):
-        weather_indices = torch.tensor(
-            [
-                0,
-                # 4,
-                # 6,
-                # 7,
-                # 8,
-                # 24, 25
-            ],
-            device=DEVICE,
-            dtype=torch.int,
-        )
-        weather = weather[:, :, weather_indices]
 
         # Concatenate processed weather, last year's same week flu cases, and last week's flu cases
         combined_input = torch.cat(

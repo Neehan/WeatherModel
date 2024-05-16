@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
     best_mae_means = np.array([999.0] * 3)
 
-    for n_past_weeks in range(105, 136, 5):
+    for n_past_weeks in range(50, 136, 5):
         n_test_years = 4
         total_best_mae = 0
         logging.info(f"\n\nnumber of past weeks: {n_past_weeks}")
@@ -123,14 +123,14 @@ if __name__ == "__main__":
                 ).to(DEVICE)
             elif model_type == "linear":
                 model = LinearFluPredictor(
-                    n_past_weeks * (1 + 2), args.n_predict_weeks
+                    n_past_weeks * (2 + 2), args.n_predict_weeks
                 ).to(DEVICE)
             elif model_type == "transformer":
                 model = OnlyTransformerFluPredictor(
-                    input_dim=1 + 2, n_predict_weeks=args.n_predict_weeks
+                    input_dim=4 + 2, n_predict_weeks=args.n_predict_weeks
                 ).to(DEVICE)
             # load the datasets
-            weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"
+            weather_path = DATA_DIR + "flu_cases/noaa_weather_weekly.csv"
             flu_cases_path = DATA_DIR + "flu_cases/flu_cases.json"
 
             train_loader, test_loader = train_test_split(
