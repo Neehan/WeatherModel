@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--batch_size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n_past_years", help="number of past years to look at", default=6, type=int
+    "--n_past_years", help="number of past years to look at", default=4, type=int
 )
 parser.add_argument(
     "--n_epochs", help="number of training epoches", default=30, type=int
@@ -61,7 +61,7 @@ parser.add_argument(
 parser.add_argument(
     "--model_type",
     help="weatherformer, cnn, wflinear",
-    default="small",
+    default="weatherformer",
     type=str,
 )
 

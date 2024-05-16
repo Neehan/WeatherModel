@@ -13,6 +13,8 @@ import argparse
 
 from .train import training_loop
 from .model import Weatherformer
+from .bert_model import WeatherBERT
+from .bert_train import bert_training_loop
 from .constants import *
 
 np.random.seed(1234)
@@ -54,6 +56,20 @@ if __name__ == "__main__":
         type=str,
     )
 
+    parser.add_argument(
+        "--model_type",
+        help="model type is weatherformer or bert",
+        default="weatherformer",
+        type=str,
+    )
+
+    parser.add_argument(
+        "--mask_pcnt",
+        help="percent to mask",
+        default=0.15,
+        type=float,
+    )
+
     args = parser.parse_args()
     args_dict = vars(args)
     logging.info("Command-line arguments:")
@@ -68,12 +84,22 @@ if __name__ == "__main__":
     elif model_size == "large":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
 
-    model = Weatherformer(
-        input_dim=TOTAL_WEATHER_VARS,
-        output_dim=TOTAL_WEATHER_VARS,
-        device=DEVICE,
-        **model_size_params,
-    ).to(DEVICE)
+    model_type = args.model_type.lower()
+
+    if model_type == "weatherformer":
+        model = Weatherformer(
+            input_dim=TOTAL_WEATHER_VARS,
+            output_dim=TOTAL_WEATHER_VARS,
+            device=DEVICE,
+            **model_size_params,
+        ).to(DEVICE)
+    elif model_type == "bert":
+        model = WeatherBERT(
+            input_dim=TOTAL_WEATHER_VARS,
+            output_dim=TOTAL_WEATHER_VARS,
+            device=DEVICE,
+            **model_size_params,
+        ).to(DEVICE)
 
     logging.info(str(model))
 
@@ -84,14 +110,25 @@ if __name__ == "__main__":
         args.batch_size = args.batch_size * torch.cuda.device_count()
         model = nn.DataParallel(model)
 
-    model, losses = training_loop(
-        model,
-        args.batch_size,
-        num_input_features=args.n_input_features,
-        num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
-        num_epochs=args.n_epochs,
-        init_lr=args.init_lr,
-        num_warmup_epochs=args.n_warmup_epochs,
-        decay_factor=args.decay_factor,
-        num_feature_swaps=args.n_feature_swaps,
-    )
+    if model_type == "weatherformer":
+        model, losses = training_loop(
+            model,
+            args.batch_size,
+            num_input_features=args.n_input_features,
+            num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
+            num_epochs=args.n_epochs,
+            init_lr=args.init_lr,
+            num_warmup_epochs=args.n_warmup_epochs,
+            decay_factor=args.decay_factor,
+            num_feature_swaps=args.n_feature_swaps,
+        )
+    elif model_type == "bert":
+        model, losses = bert_training_loop(
+            model,
+            args.batch_size,
+            args.n_epochs,
+            args.init_lr,
+            args.n_warmup_epochs,
+            args.decay_factor,
+            args.mask_pcnt,
+        )
