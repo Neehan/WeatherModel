@@ -155,7 +155,7 @@ class FluPredictor(nn.Module):
             device=DEVICE,
             dtype=torch.int,
         )
-        masked_weather = torch.zeros(weather.shape, device=DEVICE)
+        masked_weather = torch.zeros((batch_size, seq_len, 31), device=DEVICE)
         masked_weather[:, :, weather_indices] = weather
         weather_feature_mask[weather_indices] = False
 
