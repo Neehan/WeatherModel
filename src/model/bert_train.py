@@ -67,8 +67,6 @@ def bert_train(
         total_loss += loss.item()
         loader_len += 1
 
-        print(loss.item())
-
         # Backward pass
         loss.backward()
         optimizer.step()
@@ -81,13 +79,11 @@ def bert_validate(
     model,
     loader,
     mask_pcnt,
-    weather_indices,
     device,
 ):
     model.eval()
     total_loss = 0
     loader_len = 0
-    weather_indices = weather_indices.clone()  # don't modify the input weather indices
     for (
         data,
         coords,
