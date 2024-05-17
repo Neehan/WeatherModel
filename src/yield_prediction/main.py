@@ -17,6 +17,7 @@ from .dataloader import read_soybean_dataset, get_train_test_loaders
 from .model import YieldPredictor
 from .cnn_transformer import CNNYieldPredictor
 from .wf_linear import WFLinearPredictor
+from .bert_model import BERTYieldPredictor
 from .train import training_loop
 from .constants import *
 
@@ -60,7 +61,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--model_type",
-    help="weatherformer, cnn, wflinear",
+    help="weatherformer, cnn, wflinear, bert",
     default="weatherformer",
     type=str,
 )
@@ -118,6 +119,11 @@ if __name__ == "__main__":
                 model = WFLinearPredictor(pretrained_model, model_size_params)
         elif model_type == "cnn":
             model = CNNYieldPredictor()
+        elif model_type == "bert":
+            pretrained_model = (
+                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+            )
+            model = BERTYieldPredictor(pretrained_model, model_size_params)
 
         model = model.to(DEVICE)
 

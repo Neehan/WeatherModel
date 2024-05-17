@@ -105,7 +105,8 @@ class WeatherBERT(nn.Module):
 
         batch_size, seq_len, n_features = weather.size()
         if weather_feature_mask is not None:
-            weather = weather * weather_feature_mask
+            # invert cause mask = true means we want it to be masked
+            weather = weather * (~weather_feature_mask)
 
         weather = self.in_proj(weather)
         weather = self.positional_encoding(weather)

@@ -10,6 +10,7 @@ import numpy as np
 
 from .dataloader import train_test_split
 from .model import FluPredictor
+from .bert_model import BERTFluPredictor
 from .linear_model import LinearFluPredictor
 from .only_transformer import OnlyTransformerFluPredictor
 from .train import training_loop
@@ -70,7 +71,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--model_type",
-    help="weatherformer, linear, transformer",
+    help="weatherformer, linear, transformer, bert",
     default="weatherformer",
     type=str,
 )
@@ -128,6 +129,15 @@ if __name__ == "__main__":
             elif model_type == "transformer":
                 model = OnlyTransformerFluPredictor(
                     input_dim=1 + 2, n_predict_weeks=args.n_predict_weeks
+                ).to(DEVICE)
+            elif model_type == "bert":
+                pretrained_model = (
+                    None
+                    if args.no_pretraining
+                    else torch.load(DATA_DIR + load_model_path)
+                )
+                model = BERTFluPredictor(
+                    pretrained_model, model_size_params, args.n_predict_weeks
                 ).to(DEVICE)
             # load the datasets
             weather_path = DATA_DIR + "flu_cases/weather_weekly.csv"

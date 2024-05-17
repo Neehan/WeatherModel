@@ -52,6 +52,7 @@ def bert_train(
         optimizer.zero_grad()
 
         batch_size, seq_len, n_features = data.size()
+        # true means will be masked
         weather_feature_mask = create_mlm_mask(batch_size, seq_len, mask_pcnt, device)
         # expand the mask
         weather_feature_mask = weather_feature_mask.unsqueeze(2).expand(
