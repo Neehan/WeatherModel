@@ -1,6 +1,6 @@
 from ..model.bert_model import WeatherBERT
 from .constants import *
-from .model import PositionalEncoding, TransformerModel
+from .model import TransformerModel
 
 import torch
 import torch.nn as nn

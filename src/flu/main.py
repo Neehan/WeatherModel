@@ -134,7 +134,9 @@ if __name__ == "__main__":
                 pretrained_model = (
                     None
                     if args.no_pretraining
-                    else torch.load(DATA_DIR + load_model_path)
+                    else torch.load(
+                        DATA_DIR + load_model_path.replace("weatherformer", "bert")
+                    )
                 )
                 model = BERTFluPredictor(
                     pretrained_model, model_size_params, args.n_predict_weeks

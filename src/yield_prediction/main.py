@@ -121,7 +121,11 @@ if __name__ == "__main__":
             model = CNNYieldPredictor()
         elif model_type == "bert":
             pretrained_model = (
-                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+                None
+                if args.no_pretraining
+                else torch.load(
+                    DATA_DIR + load_model_path.replace("weatherformer", "bert")
+                )
             )
             model = BERTYieldPredictor(pretrained_model, model_size_params)
 
