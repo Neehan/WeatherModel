@@ -122,7 +122,9 @@ class Weatherformer(nn.Module):
         batch_size, seq_len, n_features = weather.shape
 
         # temporal index is index in time and temporal granularity ()
-        temporal_granularity = temporal_index[:, 1].int()
+        temporal_granularity = torch.ones(
+            (batch_size,), dtype=torch.int, device=temporal_index.device
+        )  # temporal_index[:, 1].int()
         temp_embedding = self.input_scaler(temporal_granularity)
         # mask the masked dimensions and scale the rest
         weather = weather * temp_embedding.view(batch_size, 1, n_features)
