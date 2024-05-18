@@ -57,7 +57,7 @@ class BERTYieldPredictor(nn.Module):
             # nn.ReLu()
         )
 
-        fc_dims = 120 + 40 + 14 + 1 + 1
+        fc_dims = 120 + 40 + 14 + 1 + 1 + 2
         self.trend_transformer = TransformerModel(
             input_dim=fc_dims,
             output_dim=32,
@@ -119,6 +119,7 @@ class BERTYieldPredictor(nn.Module):
                 practices,
                 year.reshape(batch_size, n_years, 1),
                 y_past.unsqueeze(2),
+                coord.view(batch_size, n_years, 2),
             ),
             dim=2,
         )
