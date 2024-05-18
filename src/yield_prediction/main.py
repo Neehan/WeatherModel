@@ -28,13 +28,13 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--batch_size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n_past_years", help="number of past years to look at", default=4, type=int
+    "--n_past_years", help="number of past years to look at", default=6, type=int
 )
 parser.add_argument(
-    "--n_epochs", help="number of training epoches", default=30, type=int
+    "--n_epochs", help="number of training epoches", default=40, type=int
 )
 parser.add_argument(
-    "--init_lr", help="initial learning rate for Adam", default=0.0006, type=float
+    "--init_lr", help="initial learning rate for Adam", default=0.0005, type=float
 )
 parser.add_argument(
     "--lr_decay_factor",
