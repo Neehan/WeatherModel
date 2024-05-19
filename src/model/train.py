@@ -30,30 +30,6 @@ def swap_features(weather_indices, num_input_features, k=1):
     return weather_indices
 
 
-def create_mlm_mask(batch_size, n_features, n_masked_features, device):
-    # Calculate the total number of elements in the tensor
-    total_elements = batch_size * n_features
-
-    # Calculate the number of elements to mask
-    num_mask = batch_size * n_masked_features
-
-    # Generate random indices for masking within the entire tensor
-    mask_indices = torch.randperm(total_elements)[:num_mask]
-
-    # Convert flat indices to multi-dimensional indices
-    mask_indices = (mask_indices // n_features, mask_indices % n_features)
-
-    # Create the initial mask tensor filled with zeros
-    mask_tensor = torch.zeros(
-        batch_size, n_features, dtype=torch.float32, device=device
-    )
-
-    # Set the randomly selected indices to 1
-    mask_tensor[mask_indices] = True
-
-    return mask_tensor.bool()
-
-
 def train(
     model,
     num_input_features,
@@ -77,37 +53,19 @@ def train(
         optimizer.zero_grad()
 
         # swap some input and output feature of weather indices in place
-        # swap_features(weather_indices, num_input_features, k=num_feature_swaps)
-        # target_indices = weather_indices[num_input_features:]
-        # target_features = data[:, :, target_indices]
-        # target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
-        # target_mask[target_indices] = True
-        # target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
+        swap_features(weather_indices, num_input_features, k=num_feature_swaps)
+        target_indices = weather_indices[num_input_features:]
+        target_features = data[:, :, target_indices]
+        target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
+        target_mask[target_indices] = True
+        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
 
-        # output = model(data, coords, index, weather_feature_mask=target_mask)[
-        #     :, :, target_indices
-        # ]
-
-        # loss = criterion(target_features, output)
-
-        batch_size, seq_len, n_features = data.size()
-        # true means will be masked
-        weather_feature_mask = create_mlm_mask(
-            batch_size, n_features, num_input_features, device
-        )
-        # expand the mask
-        weather_feature_mask = weather_feature_mask.unsqueeze(1).expand(
-            -1,
-            seq_len,
-            -1,
-        )
-        target_features = data[weather_feature_mask]
-
-        output = model(data, coords, index, weather_feature_mask=weather_feature_mask)[
-            weather_feature_mask
+        output = model(data, coords, index, weather_feature_mask=target_mask)[
+            :, :, target_indices
         ]
 
         loss = criterion(target_features, output)
+
         total_loss += loss.item()
         loader_len += 1
 
@@ -138,35 +96,17 @@ def validate(
     ) in loader:
         data, coords, index = data.to(device), coords.to(device), index.to(device)
         # swap one input and output feature of weather indices in place
-        # swap_features(weather_indices, num_input_features, k=num_feature_swaps)
-        # target_indices = weather_indices[num_input_features:]
-        # target_features = data[:, :, target_indices]
-        # target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
-        # target_mask[target_indices] = True
-        # target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
-
-        # with torch.no_grad():
-        #     output = model(data, coords, index, weather_feature_mask=target_mask)[
-        #         :, :, target_indices
-        #     ]
-
-        batch_size, seq_len, n_features = data.size()
-        # true means will be masked
-        weather_feature_mask = create_mlm_mask(
-            batch_size, n_features, num_input_features, device
-        )
-        # expand the mask
-        weather_feature_mask = weather_feature_mask.unsqueeze(1).expand(
-            -1,
-            seq_len,
-            -1,
-        )
-        target_features = data[weather_feature_mask]
+        swap_features(weather_indices, num_input_features, k=num_feature_swaps)
+        target_indices = weather_indices[num_input_features:]
+        target_features = data[:, :, target_indices]
+        target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
+        target_mask[target_indices] = True
+        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
 
         with torch.no_grad():
-            output = model(
-                data, coords, index, weather_feature_mask=weather_feature_mask
-            )[weather_feature_mask]
+            output = model(data, coords, index, weather_feature_mask=target_mask)[
+                :, :, target_indices
+            ]
 
         loss = F.mse_loss(target_features, output)
 
@@ -242,9 +182,9 @@ def training_loop(
         losses["val"].append(val_loss)
 
         daily_scaler_mean = model.module.input_scaler.weight[1].mean().item()
-        weekly_scaler_mean = model.module.input_scaler.weight[1].mean().item()
+        weekly_scaler_mean = model.module.input_scaler.weight[7].mean().item()
         logging.info(
-            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means: daily {daily_scaler_mean:.3f}"  # , weekly: {weekly_scaler_mean:.3f}"
+            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means: daily {daily_scaler_mean:.3f}, weekly: {weekly_scaler_mean:.3f}"
         )
         if epoch % 2 == 1 or epoch == num_epochs - 1:
             torch.save(

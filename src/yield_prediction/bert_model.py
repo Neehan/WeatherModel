@@ -5,6 +5,7 @@ from .model import TransformerModel
 import torch
 import torch.nn as nn
 import copy
+import math
 
 
 class BERTYieldPredictor(nn.Module):
@@ -119,7 +120,7 @@ class BERTYieldPredictor(nn.Module):
                 practices,
                 year.reshape(batch_size, n_years, 1),
                 y_past.unsqueeze(2),
-                coord.view(batch_size, n_years, 2),
+                coord.view(batch_size, n_years, 2) / 180 * math.pi,
             ),
             dim=2,
         )
