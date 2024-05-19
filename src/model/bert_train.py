@@ -53,11 +53,17 @@ def bert_train(
 
         batch_size, seq_len, n_features = data.size()
         # true means will be masked
-        weather_feature_mask = create_mlm_mask(batch_size, seq_len, mask_pcnt, device)
-        # expand the mask
-        weather_feature_mask = weather_feature_mask.unsqueeze(2).expand(
-            -1, -1, n_features
+        # weather_feature_mask = create_mlm_mask(batch_size, seq_len, mask_pcnt, device)
+        # # expand the mask
+        # weather_feature_mask = weather_feature_mask.unsqueeze(2).expand(
+        #     -1, -1, n_features
+        # )
+        weather_feature_mask = create_mlm_mask(
+            batch_size, n_features, mask_pcnt, device
         )
+        # expand the mask
+        weather_feature_mask = weather_feature_mask.unsqueeze(1).expand(-1, seq_len, -1)
+
         target_tokens = data[weather_feature_mask]
 
         output = model(data, coords, index, weather_feature_mask=weather_feature_mask)[
@@ -92,11 +98,16 @@ def bert_validate(
     ) in loader:
         data, coords, index = data.to(device), coords.to(device), index.to(device)
         batch_size, seq_len, n_features = data.size()
-        weather_feature_mask = create_mlm_mask(batch_size, seq_len, mask_pcnt, device)
-        # expand the mask
-        weather_feature_mask = weather_feature_mask.unsqueeze(2).expand(
-            -1, -1, n_features
+        # weather_feature_mask = create_mlm_mask(batch_size, seq_len, mask_pcnt, device)
+        # # expand the mask
+        # weather_feature_mask = weather_feature_mask.unsqueeze(2).expand(
+        #     -1, -1, n_features
+        # )
+        weather_feature_mask = create_mlm_mask(
+            batch_size, n_features, mask_pcnt, device
         )
+        # expand the mask
+        weather_feature_mask = weather_feature_mask.unsqueeze(1).expand(-1, seq_len, -1)
         target_tokens = data[weather_feature_mask]
 
         with torch.no_grad():
