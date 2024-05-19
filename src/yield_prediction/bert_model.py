@@ -50,6 +50,9 @@ class BERTYieldPredictor(nn.Module):
             self.weather_transformer.positional_encoding = copy.deepcopy(
                 pretrained_weatherformer.positional_encoding
             )
+            self.weather_transformer.input_scaler = copy.deepcopy(
+                pretrained_weatherformer.input_scaler
+            )
 
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
@@ -58,7 +61,7 @@ class BERTYieldPredictor(nn.Module):
             # nn.ReLu()
         )
 
-        fc_dims = 120 + 40 + 14 + 1 + 1 + 2
+        fc_dims = 120 + 40 + 14 + 1 + 1
         self.trend_transformer = TransformerModel(
             input_dim=fc_dims,
             output_dim=32,
@@ -120,7 +123,6 @@ class BERTYieldPredictor(nn.Module):
                 practices,
                 year.reshape(batch_size, n_years, 1),
                 y_past.unsqueeze(2),
-                coord.view(batch_size, n_years, 2) / 180 * math.pi,
             ),
             dim=2,
         )

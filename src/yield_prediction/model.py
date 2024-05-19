@@ -12,7 +12,7 @@ class PositionalEncoding(nn.Module):
         super().__init__()
 
         assert (
-            dim_model % 2 == 0
+            dim_model % 4 == 0
         ), "dim_model should be divisible by 4 for separate encoding"
         # Modified version from: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
         # max_len determines how far the position can have an effect on a token (window)
@@ -26,26 +26,40 @@ class PositionalEncoding(nn.Module):
             torch.arange(0, max_len, dtype=torch.float).view(-1, 1).to(DEVICE)
         )  # 0, 1, 2, 3, 4, 5
         self.div_term = torch.exp(
-            torch.arange(0, dim_model, 2).float() * (-math.log(10000.0)) / dim_model
+            torch.arange(0, dim_model, 4).float() * (-math.log(10000.0)) / dim_model
         ).to(
             DEVICE
         )  # 10000^(2i/dim_model)
 
         # PE(pos, 4i) = sin(pos/10000^(4i/dim_model))
-        pos_encoding[:, 0::2] = torch.sin(positions_list * self.div_term)
+        pos_encoding[:, 0::4] = torch.sin(positions_list * self.div_term)
         # PE(pos, 4i + 1) = cos(pos/1000^(4i/dim_model))
-        pos_encoding[:, 1::2] = torch.cos(positions_list * self.div_term)
+        pos_encoding[:, 1::4] = torch.cos(positions_list * self.div_term)
         self.register_buffer("pos_encoding", pos_encoding)
 
     def forward(
         self,
         token_embedding: torch.tensor,
+        coords: torch.tensor,
     ) -> torch.tensor:
 
         batch_size, seq_len, d_model = token_embedding.shape
+        latitude, longitude = coords[:, :1], coords[:, 1:]
+        # Normalize latitude and longitude
+        lat_norm = (latitude / 180.0) * math.pi
+        lon_norm = (longitude / 180.0) * math.pi
+
+        # Create geo encoding
+        geo_pe = torch.zeros(batch_size, seq_len, d_model, device=DEVICE)
+
+        geo_pe[:, :, 2::4] = torch.sin(lat_norm * self.div_term).unsqueeze(1)
+        geo_pe[:, :, 3::4] = torch.cos(lon_norm * self.div_term).unsqueeze(1)
 
         # Add positional encoding to input
-        token_embedding = token_embedding + self.pos_encoding[:seq_len, :].unsqueeze(0)
+        token_embedding = (
+            token_embedding + self.pos_encoding[:seq_len, :].unsqueeze(0) + geo_pe
+        )
+
         return token_embedding
 
 
@@ -77,7 +91,7 @@ class TransformerModel(nn.Module):
 
     def forward(self, input_tensor, coord, mask=None, return_sequence=False):
         embedded_tensor = self.embedding(input_tensor)
-        encoded_tensor = self.positional_encoding(embedded_tensor)
+        encoded_tensor = self.positional_encoding(embedded_tensor, coord)
         encoded_tensor = self.transformer_encoder(
             encoded_tensor, src_key_padding_mask=mask
         )
@@ -141,6 +155,8 @@ class YieldPredictor(nn.Module):
             self.weather_transformer.input_scaler = copy.deepcopy(
                 pretrained_weatherformer.input_scaler
             )
+            self.weather_transformer.max_len = pretrained_weatherformer.max_len
+
             # self.weather_transformer.temporal_pos_encoding = copy.deepcopy(
             #     pretrained_weatherformer.temporal_pos_encoding
             # )
@@ -152,7 +168,7 @@ class YieldPredictor(nn.Module):
             # nn.ReLu()
         )
 
-        fc_dims = 120 + 40 + 14 + 1 + 1 + 2
+        fc_dims = 120 + 40 + 14 + 1 + 1
         self.trend_transformer = TransformerModel(
             input_dim=fc_dims,
             output_dim=32,
@@ -214,7 +230,6 @@ class YieldPredictor(nn.Module):
                 practices,
                 year.reshape(batch_size, n_years, 1),
                 y_past.unsqueeze(2),
-                coord.view(batch_size, n_years, 2) / 180 * math.pi,
             ),
             dim=2,
         )

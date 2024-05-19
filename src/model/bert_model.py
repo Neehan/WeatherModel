@@ -4,56 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .constants import *
 from typing import Optional
-
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len, device):
-        assert (
-            d_model % 2 == 0
-        ), "d_model should be divisible by 4 for separate encoding"
-
-        # we did seq_len + 1 for max len cause there's a summary vector
-        super(PositionalEncoding, self).__init__()
-
-        # Create a position array (time encoding)
-        self.position_list = (
-            torch.arange(0, max_len, dtype=torch.float).unsqueeze(1).to(device)
-        )
-
-        # max is 10k**(-1/2), cause we have the bias
-        self.div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-        ).to(device)
-
-    def forward(self, token_embedding):
-        """
-        Forward method for adding positional encoding.
-
-        Args:
-        token_embedding: Tensor, shape [batch_size, seq_len, d_model]
-        latitude: Tensor, shape [batch_size, 1]
-        longitude: Tensor, shape [batch_size, 1]
-
-        Returns:
-        Tensor with positional encoding added, same shape as x.
-        """
-        device = token_embedding.device
-        div_term = self.div_term.to(device)
-        position_list = self.position_list.to(device)
-
-        batch_size, seq_len, d_model = token_embedding.shape
-
-        # Create geo encoding
-        custom_pe = torch.zeros(batch_size, seq_len, d_model, device=device)
-
-        time_frequency = (position_list[:seq_len, :] * div_term).unsqueeze(0)
-        # encode time in 2k and 2k + 1
-        custom_pe[:, :, 0::2] = torch.sin(time_frequency)
-        custom_pe[:, :, 1::2] = torch.cos(time_frequency)
-
-        # Add positional encoding to input
-        token_embedding += custom_pe
-        return token_embedding
+from .model import WFPositionalEncoding
 
 
 class WeatherBERT(nn.Module):
@@ -72,13 +23,21 @@ class WeatherBERT(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.max_len = max_len
-        self.mask_value = nn.Parameter(torch.tensor([0.0], device=device))
 
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
 
+        self.input_scaler = nn.Embedding(
+            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
+        )
+        torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
+
+        # self.temporal_pos_encoding = nn.Embedding(
+        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        # )
+
         self.in_proj = nn.Linear(input_dim, hidden_dim)
-        self.positional_encoding = PositionalEncoding(
+        self.positional_encoding = WFPositionalEncoding(
             hidden_dim, max_len=max_len, device=device
         )
         encoder_layer = nn.TransformerEncoderLayer(
@@ -99,17 +58,29 @@ class WeatherBERT(nn.Module):
         weather,
         coords,
         temporal_index,
-        weather_feature_mask=None,  # batch_size x seq_len,
+        weather_feature_mask=None,  # batch_size x seq_len x n_features,
         src_key_padding_mask=None,  # batch_size x seq_len
     ):
 
-        batch_size, seq_len, n_features = weather.size()
+        batch_size, seq_len, n_features = weather.shape
+
+        # temporal index is index in time and temporal granularity ()
+        temporal_granularity = temporal_index[:, 1].int()
+        temp_embedding = self.input_scaler(temporal_granularity)
+
+        # mask the masked dimensions and scale the rest
+        weather = weather * temp_embedding.view(batch_size, 1, n_features)
         if weather_feature_mask is not None:
-            # invert cause mask = true means we want it to be masked
             weather = weather * (~weather_feature_mask)
 
+            # scalers for for masked dimensions = true becomes zero
+            # temp_embedding = (~weather_feature_mask).unsqueeze(0) * temp_embedding
+
         weather = self.in_proj(weather)
-        weather = self.positional_encoding(weather)
+        # add temporal positional encoding
+        # weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
+
+        weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
