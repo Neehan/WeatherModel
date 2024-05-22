@@ -160,7 +160,7 @@ def training_loop(
         for i, n_eval_week in enumerate(n_eval_weeks):
             test_mae = compute_mae(model, test_loader, n_eval_week)
             best_test_maes[i] = min(test_mae, best_test_maes[i])
-            logging_text += f" {best_test_maes[i]:.3f};"
+            logging_text += f" {best_test_maes[i] * 1.73:.3f};"
         if epoch % 5 == 4 or epoch == num_epochs - 1:
             logging.info(logging_text)
         # logging.info(f"[{epoch+1} / {num_epochs}] Loss: {running_loss:3f}")

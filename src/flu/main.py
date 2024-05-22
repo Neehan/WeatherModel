@@ -166,9 +166,12 @@ if __name__ == "__main__":
         current_maes_means = np.mean(np.array(maes), axis=0)
         # current_maes_std = np.std(np.array(maes), axis=0)
         target_std = 1.73
-        # logging.info(
-        #     f"n_past_weeks: {n_past_weeks}; best MAE mean: {current_maes_means * target_std:.3f}"
-        # )
+
+        logging_text = f"avg best mae means: "
+        for i in range(3):
+            logging_text += f" {current_maes_means[i] * target_std:.3f};"
+        logging.info(logging_text)
+
         best_mae_means = np.array(
             [
                 min(best_mae_mean, current_maes_mean)
