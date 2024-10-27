@@ -13,7 +13,6 @@ from .model import FluPredictor
 from .bert_model import BERTFluPredictor
 from .linear_model import LinearFluPredictor
 from .only_transformer import OnlyTransformerFluPredictor
-from .rnn import LSTMFluPredictor
 from .train import training_loop
 from .constants import *
 
@@ -72,7 +71,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--model_type",
-    help="weatherformer, linear, transformer, bert, rnn",
+    help="weatherformer, linear, transformer, bert",
     default="weatherformer",
     type=str,
 )
@@ -129,10 +128,6 @@ if __name__ == "__main__":
                 ).to(DEVICE)
             elif model_type == "transformer":
                 model = OnlyTransformerFluPredictor(
-                    input_dim=1 + 2, n_predict_weeks=args.n_predict_weeks
-                ).to(DEVICE)
-            elif model_type == "rnn":
-                model = LSTMFluPredictor(
                     input_dim=1 + 2, n_predict_weeks=args.n_predict_weeks
                 ).to(DEVICE)
             elif model_type == "bert":

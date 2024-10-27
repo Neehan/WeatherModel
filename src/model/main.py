@@ -12,7 +12,7 @@ import numpy as np
 import argparse
 
 from .train import training_loop
-from .model import Weatherformer
+from .weatherformer_v2 import Weatherformer
 from .bert_model import WeatherBERT
 from .bert_train import bert_training_loop
 from .constants import *
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     elif model_size == "medium":
         model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
     elif model_size == "large":
-        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
+        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 48}
 
     model_type = args.model_type.lower()
 

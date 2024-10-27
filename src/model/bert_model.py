@@ -27,14 +27,14 @@ class WeatherBERT(nn.Module):
         hidden_dim = hidden_dim_factor * num_heads
         feedforward_dim = hidden_dim * 4
 
-        self.input_scaler = nn.Embedding(
-            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
-        )
-        torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
-
-        # self.temporal_pos_encoding = nn.Embedding(
-        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        # self.input_scaler = nn.Embedding(
+        #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         # )
+        # torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
+
+        self.temporal_pos_encoding = nn.Embedding(
+            num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
+        )
 
         self.in_proj = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = WFPositionalEncoding(
