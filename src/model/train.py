@@ -46,22 +46,22 @@ def train(
     total_loss = 0
     loader_len = 0
     for (
-        data,
+        weather,
         coords,
         index,
     ) in loader:
-        data, coords, index = data.to(device), coords.to(device), index.to(device)
+        weather, coords, index = weather.to(device), coords.to(device), index.to(device)
         optimizer.zero_grad()
 
         # swap some input and output feature of weather indices in place
         swap_features(weather_indices, num_input_features, k=num_feature_swaps)
         target_indices = weather_indices[num_input_features:]
-        target_features = data[:, :, target_indices]
+        target_features = weather[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
         target_mask[target_indices] = True
-        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
+        target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
-        output = model(data, coords, index, weather_feature_mask=target_mask)[
+        output = model((weather, coords, index), weather_feature_mask=target_mask)[
             :, :, target_indices
         ]
 
@@ -95,21 +95,21 @@ def validate(
     loader_len = 0
     weather_indices = weather_indices.clone()  # don't modify the input weather indices
     for (
-        data,
+        weather,
         coords,
         index,
     ) in loader:
-        data, coords, index = data.to(device), coords.to(device), index.to(device)
+        weather, coords, index = weather.to(device), coords.to(device), index.to(device)
         # swap one input and output feature of weather indices in place
         swap_features(weather_indices, num_input_features, k=num_feature_swaps)
         target_indices = weather_indices[num_input_features:]
-        target_features = data[:, :, target_indices]
+        target_features = weather[:, :, target_indices]
         target_mask = torch.zeros(TOTAL_WEATHER_VARS, dtype=torch.bool, device=DEVICE)
         target_mask[target_indices] = True
-        target_mask = target_mask.view(1, -1).expand(data.shape[0], -1)
+        target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
         with torch.no_grad():
-            output = model(data, coords, index, weather_feature_mask=target_mask)[
+            output = model((weather, coords, index), weather_feature_mask=target_mask)[
                 :, :, target_indices
             ]
 

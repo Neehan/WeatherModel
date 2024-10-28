@@ -112,13 +112,12 @@ class Weatherformer(nn.Module):
 
     def forward(
         self,
-        weather,
-        coords,
-        temporal_index,
+        data,
         weather_feature_mask=None,  # n_features,
         src_key_padding_mask=None,  # batch_size x seq_len
     ):
 
+        weather, coords, temporal_index = data
         batch_size, seq_len, n_features = weather.shape
 
         # temporal index is index in time and temporal granularity ()
