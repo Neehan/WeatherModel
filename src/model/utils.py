@@ -43,39 +43,59 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
     )
 
 
-def streaming_dataloader(file_paths_list, batch_size=32, shuffle=True, split="train"):
-    """
-    A generator function that streams data from multiple sources,
-    each having multiple TensorDataset files stored on disk.
+def streaming_dataloader(
+    file_paths,
+    batch_size,
+    shuffle=False,
+    split="train",
+    lr_finder=False,
+    num_input_features=None,
+    num_output_features=None,
+):
+    dataset = StreamingDataset(
+        file_paths,
+        split=split,
+        lr_finder=lr_finder,
+        num_input_features=num_input_features,
+        num_output_features=num_output_features,
+    )
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
-    Args:
-    file_paths_dict (dict): A dictionary where keys are source identifiers and values are lists of file paths.
-    batch_size (int): The size of each batch.
-    shuffle (bool): Whether to shuffle the dataset after combining chunks from each source.
 
-    Yields:
-    Tensor: Yields one batch of data at a time as specified by the DataLoader.
-    """
-    # Assume each source list in the dictionary has the same number of chunks
-    num_chunks = len(file_paths_list)
-
-    for chunk_index in tqdm(
-        range(num_chunks),
-        desc="Training" if split.lower() == "train" else "Validating",
-        file=TQDM_OUTPUT,
-        dynamic_ncols=True,
-        mininterval=5 * 60,
+class StreamingDataset(torch.utils.data.IterableDataset):
+    def __init__(
+        self,
+        file_paths,
+        split="train",
+        lr_finder=False,
+        num_input_features=None,
+        num_output_features=None,
     ):
+        self.file_paths = file_paths
+        self.split = split
+        self.lr_finder = lr_finder
+        self.num_input_features = num_input_features
+        self.num_output_features = num_output_features
 
-        file_path = file_paths_list[chunk_index]
-        dataset = torch.load(
-            file_path, weights_only=False
-        )  # Ensure that this returns a TensorDataset
+    def __iter__(self):
+        for file_path in self.file_paths:
+            data = torch.load(file_path)
+            for item in data[self.split]:
+                # finding the optimal lr, so output in a specific way
+                if self.lr_finder:
+                    # Create mask of ones and zeros
+                    mask = torch.zeros(
+                        self.num_input_features + self.num_output_features
+                    )
+                    mask[: self.num_input_features] = 1
 
-        dataloader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True
-        )
+                    # Expand mask to match item shape
+                    expanded_mask = mask.expand(item.shape[:-1] + (-1,))
 
-        # Yield batches from the combined DataLoader
-        for data in dataloader:
-            yield data
+                    # Create masked copy
+                    masked_item = item * expanded_mask
+
+                    # Yield both original and masked versions
+                    yield masked_item, item
+                else:
+                    yield item

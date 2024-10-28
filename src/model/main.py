@@ -15,6 +15,7 @@ from src.model.train import training_loop
 from src.model.weatherformer_v2 import Weatherformer
 from src.model.bert_model import WeatherBERT
 from src.model.bert_train import bert_training_loop
+from src.model.find_optimal_lr import find_optimal_lr
 from src.model.constants import *
 
 np.random.seed(1234)
@@ -76,6 +77,12 @@ if __name__ == "__main__":
         action="store_true",
     )
 
+    parser.add_argument(
+        "--find_optimal_lr",
+        help="find optimal learning rate",
+        action="store_true",
+    )
+
     args = parser.parse_args()
     args_dict = vars(args)
     logging.info("Command-line arguments:")
@@ -116,6 +123,14 @@ if __name__ == "__main__":
         args.batch_size = args.batch_size * torch.cuda.device_count()
         model = nn.DataParallel(model)
 
+    if args.find_optimal_lr:
+        # Call the find_optimal_lr function before training
+        optimal_lr = find_optimal_lr(
+            model, args.batch_size, num_input_features=args.n_input_features
+        )
+        # Use the optimal learning rate for training
+        args.init_lr = optimal_lr
+
     if model_type == "weatherformer":
         model, losses = training_loop(
             model,
@@ -127,7 +142,7 @@ if __name__ == "__main__":
             num_warmup_epochs=args.n_warmup_epochs,
             decay_factor=args.decay_factor,
             num_feature_swaps=args.n_feature_swaps,
-            enable_gradient_clipping=args.clip_gradients,  # Pass the argument value
+            enable_gradient_clipping=args.clip_gradients,
         )
     elif model_type == "bert":
         model, losses = bert_training_loop(
@@ -138,5 +153,5 @@ if __name__ == "__main__":
             args.n_warmup_epochs,
             args.decay_factor,
             args.mask_pcnt,
-            enable_gradient_clipping=args.clip_gradients,  # Pass the argument value
+            enable_gradient_clipping=args.clip_gradients,
         )
