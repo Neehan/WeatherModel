@@ -54,7 +54,9 @@ def streaming_dataloader(file_paths_list, batch_size=32, shuffle=True, split="tr
     ):
 
         file_path = file_paths_list[chunk_index]
-        dataset = torch.load(file_path)  # Ensure that this returns a TensorDataset
+        dataset = torch.load(
+            file_path, weights_only=False
+        )  # Ensure that this returns a TensorDataset
 
         dataloader = DataLoader(
             dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=True
