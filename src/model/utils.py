@@ -83,7 +83,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.num_output_features = num_output_features
 
     def __iter__(self):
-        for file_path in tqdm(self.file_paths, "Iterating: "):
+        for file_path in tqdm(self.file_paths, "Iterating: ", file=TQDM_OUTPUT):
             data = torch.load(file_path, weights_only=False)
             for item in data:
                 if self.lr_finder:
