@@ -1,5 +1,6 @@
-from ..model.model import Weatherformer
-from .constants import *
+from src.model.weatherformer_v2 import Weatherformer
+from src.flu.constants import *
+
 
 import torch
 import torch.nn as nn

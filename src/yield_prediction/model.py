@@ -1,5 +1,5 @@
-from ..model.model import Weatherformer
-from .constants import *
+from src.model.weatherformer_v2 import Weatherformer
+from src.yield_prediction.constants import *
 
 import torch
 import torch.nn as nn
