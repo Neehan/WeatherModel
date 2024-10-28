@@ -18,4 +18,4 @@ conda create -n weather python=3.10 -y
 conda activate weather
 
 # Install PyTorch, transformers and datasets in the new environment
-conda install pytorch transformers datasets python-dotenv matplotlib pandas -c pytorch -y
+conda install pytorch transformers datasets torch-lr-finder python-dotenv matplotlib pandas -c pytorch -y
