@@ -141,12 +141,6 @@ def training_loop(
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
-
-    # Find the optimal learning rate
-    train_loader = utils.streaming_dataloader(batch_size, shuffle=True, split="train")
-    # Update the optimizer with the optimal learning rate
-    optimizer = optim.Adam(model.parameters(), lr=init_lr)
-
     scheduler = utils.get_scheduler(optimizer, num_warmup_epochs, decay_factor)
 
     losses = {
@@ -156,11 +150,17 @@ def training_loop(
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
-            batch_size, shuffle=True, split="train"
+            batch_size,
+            shuffle=True,
+            split="train",
+            lr_finder=False,
         )
 
         test_loader = utils.streaming_dataloader(
-            batch_size, shuffle=True, split="validation"
+            batch_size,
+            shuffle=True,
+            split="validation",
+            lr_finder=False,
         )
 
         train_loss = train(

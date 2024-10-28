@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
+from torch_lr_finder import LRFinder
+
 
 from src.model import utils
 from src.model.constants import *
@@ -31,9 +33,11 @@ def find_optimal_lr(
         num_input_features=num_input_features,
         num_output_features=num_output_features,
     )
-    optimal_lr = utils.find_optimal_lr(
-        model, criterion, optimizer, train_loader, DEVICE
-    )
+    lr_finder = LRFinder(model, optimizer, criterion, device=DEVICE)
+    lr_finder.range_test(train_loader, end_lr=100, num_iter=100)
+    ax, optimal_lr = lr_finder.plot(suggest_lr=True)
+    # Reset the model and optimizer to their initial state
+    lr_finder.reset()
     logging.info(f"optimal learning rate: {optimal_lr:.6f}")
 
     return optimal_lr

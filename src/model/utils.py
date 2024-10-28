@@ -3,7 +3,6 @@ import torch.optim as optim
 from src.model.constants import *
 import json
 from tqdm import tqdm
-from torch_lr_finder import LRFinder
 
 
 def save_losses(losses, total_params, plot=True):
@@ -12,19 +11,6 @@ def save_losses(losses, total_params, plot=True):
     ) as f:
         json.dump(losses, f)
     f.close()
-
-
-def find_optimal_lr(model, criterion, optimizer, train_loader, device):
-    lr_finder = LRFinder(model, optimizer, criterion, device=device)
-    lr_finder.range_test(train_loader, end_lr=100, num_iter=100)
-
-    # Get the optimal learning rate
-    optimal_lr = lr_finder.suggested_lr
-
-    # Reset the model and optimizer to their initial state
-    lr_finder.reset()
-
-    return optimal_lr
 
 
 def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
