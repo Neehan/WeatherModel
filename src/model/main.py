@@ -126,7 +126,11 @@ if __name__ == "__main__":
     if args.find_optimal_lr:
         # Call the find_optimal_lr function before training
         optimal_lr = find_optimal_lr(
-            model, args.batch_size, num_input_features=args.n_input_features
+            model,
+            args.batch_size,
+            num_input_features=args.n_input_features,
+            num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
+            init_lr=args.init_lr,
         )
         # Use the optimal learning rate for training
         args.init_lr = optimal_lr
