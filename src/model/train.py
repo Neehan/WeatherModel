@@ -146,7 +146,7 @@ def training_loop(
 
     train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
     train_loader_paths = [
-        data_loader_dir + f"_{frequency}_{i}.pt"
+        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
         for i in train_indices
         for frequency in ["daily", "weekly", "monthly"]
     ]
