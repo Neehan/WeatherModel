@@ -47,6 +47,7 @@ def streaming_dataloader(
     file_paths,
     batch_size,
     split="train",
+    shuffle=False,
     lr_finder=False,
     num_input_features=None,
     num_output_features=None,
