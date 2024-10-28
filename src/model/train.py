@@ -166,14 +166,8 @@ def training_loop(
     train_loader = utils.streaming_dataloader(
         train_loader_paths, batch_size, shuffle=True, split="train"
     )
-    if TEST_ENV:
-        optimal_lr = utils.find_optimal_lr(
-            model, criterion, optimizer, train_loader, DEVICE
-        )
-    logging.info(f"optimal learning rate: {optimal_lr:.6f}")
-
     # Update the optimizer with the optimal learning rate
-    optimizer = optim.Adam(model.parameters(), lr=optimal_lr)
+    optimizer = optim.Adam(model.parameters(), lr=init_lr)
 
     scheduler = utils.get_scheduler(optimizer, num_warmup_epochs, decay_factor)
 

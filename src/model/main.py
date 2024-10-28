@@ -132,6 +132,8 @@ if __name__ == "__main__":
             num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
             init_lr=args.init_lr,
         )
+        logging.info(f"optimal learning rate: {optimal_lr:.6f}")
+
         # Use the optimal learning rate for training
         args.init_lr = optimal_lr
 
