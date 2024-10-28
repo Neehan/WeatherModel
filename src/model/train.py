@@ -150,7 +150,11 @@ def training_loop(
         for i in train_indices
         for frequency in ["daily", "weekly", "monthly"]
     ]
-    test_loader_paths = [data_loader_dir + f"_combined_{i}.pt" for i in TEST_PART_IDS]
+    test_loader_paths = [
+        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
+        for i in TEST_PART_IDS
+        for frequency in ["daily", "weekly", "monthly"]
+    ]
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
