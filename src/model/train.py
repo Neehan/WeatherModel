@@ -142,30 +142,8 @@ def training_loop(
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
 
-    data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
-
-    if TEST_ENV:
-        train_indices = DRY_RUN_TRAIN_PART_IDS
-        test_indices = TEST_PART_IDS[:1]
-    else:
-        train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
-        test_indices = TEST_PART_IDS
-
-    train_loader_paths = [
-        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
-        for i in train_indices
-        for frequency in ["monthly", "weekly", "daily"]
-    ]
-    test_loader_paths = [
-        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
-        for i in test_indices
-        for frequency in ["monthly", "weekly", "daily"]
-    ]
-
     # Find the optimal learning rate
-    train_loader = utils.streaming_dataloader(
-        train_loader_paths, batch_size, shuffle=True, split="train"
-    )
+    train_loader = utils.streaming_dataloader(batch_size, shuffle=True, split="train")
     # Update the optimizer with the optimal learning rate
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
 
@@ -178,11 +156,11 @@ def training_loop(
 
     for epoch in range(num_epochs):
         train_loader = utils.streaming_dataloader(
-            train_loader_paths, batch_size, shuffle=True, split="train"
+            batch_size, shuffle=True, split="train"
         )
 
         test_loader = utils.streaming_dataloader(
-            test_loader_paths, batch_size, shuffle=True, split="validation"
+            batch_size, shuffle=True, split="validation"
         )
 
         train_loss = train(

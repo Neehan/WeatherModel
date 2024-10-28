@@ -22,18 +22,8 @@ def find_optimal_lr(
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
 
-    data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
-
-    train_indices = DRY_RUN_TRAIN_PART_IDS
-    train_loader_paths = [
-        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
-        for i in train_indices
-        for frequency in ["monthly", "weekly", "daily"]
-    ]
-
     # Find the optimal learning rate
     train_loader = utils.streaming_dataloader(
-        train_loader_paths,
         batch_size,
         shuffle=True,
         split="train",

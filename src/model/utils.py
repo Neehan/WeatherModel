@@ -44,7 +44,6 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
 
 
 def streaming_dataloader(
-    file_paths,
     batch_size,
     split="train",
     shuffle=False,
@@ -52,9 +51,30 @@ def streaming_dataloader(
     num_input_features=None,
     num_output_features=None,
 ):
+    data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
+
+    if TEST_ENV or lr_finder:
+        train_indices = DRY_RUN_TRAIN_PART_IDS
+        test_indices = TEST_PART_IDS[:1]
+    else:
+        train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
+        test_indices = TEST_PART_IDS
+
+    train_loader_paths = [
+        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
+        for i in train_indices
+        for frequency in ["monthly", "weekly", "daily"]
+    ]
+    test_loader_paths = [
+        data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
+        for i in test_indices
+        for frequency in ["monthly", "weekly", "daily"]
+    ]
+
+    file_paths = train_loader_paths if split.lower() == "train" else test_loader_paths
+
     dataset = StreamingDataset(
         file_paths,
-        split=split,
         lr_finder=lr_finder,
         num_input_features=num_input_features,
         num_output_features=num_output_features,
@@ -66,13 +86,12 @@ class StreamingDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         file_paths,
-        split="train",
         lr_finder=False,
         num_input_features=None,
         num_output_features=None,
     ):
+
         self.file_paths = file_paths
-        self.split = split
         self.lr_finder = lr_finder
         self.num_input_features = num_input_features
         self.num_output_features = num_output_features
@@ -80,7 +99,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         for file_path in self.file_paths:
             data = torch.load(file_path, weights_only=False)
-            for item in data[self.split]:
+            for item in data:
                 if self.lr_finder:
                     # Create mask of ones and zeros
                     mask = torch.zeros(item.shape[-1])
