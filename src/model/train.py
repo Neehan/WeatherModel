@@ -145,7 +145,11 @@ def training_loop(
     data_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
 
     train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
-    train_loader_paths = [data_loader_dir + f"_combined_{i}.pt" for i in train_indices]
+    train_loader_paths = [
+        data_loader_dir + f"_{frequency}_{i}.pt"
+        for i in train_indices
+        for frequency in ["daily", "weekly", "monthly"]
+    ]
     test_loader_paths = [data_loader_dir + f"_combined_{i}.pt" for i in TEST_PART_IDS]
 
     for epoch in range(num_epochs):
