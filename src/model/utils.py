@@ -101,21 +101,24 @@ class StreamingDataset(torch.utils.data.IterableDataset):
             data = torch.load(file_path, weights_only=False)
             for item in data:
                 if self.lr_finder:
+                    # create input and target
+                    weather, coords, index = item
+
                     # Create mask of ones and zeros
-                    mask = torch.zeros(item.shape[-1])
+                    mask = torch.zeros(weather.shape[-1])
                     # Randomly select self.num_input_features indices to set to 1
                     random_indices = torch.randperm(len(mask))[
                         : self.num_input_features
                     ]
                     mask[random_indices] = 1
 
-                    # Expand mask to match item shape
-                    expanded_mask = mask.expand(item.shape)
+                    # Expand mask to match weather shape
+                    expanded_mask = mask.expand(weather.shape)
 
                     # Create masked copy
-                    masked_item = item * expanded_mask
+                    masked_weather = weather * expanded_mask
 
-                    # Yield both original and masked versions
-                    yield masked_item, item
+                    # Yield both masked version as input and weather as target
+                    yield (masked_weather, coords, index), weather
                 else:
                     yield item

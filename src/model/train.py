@@ -194,7 +194,7 @@ def training_loop(
         losses["val"].append(val_loss)
 
         logging.info(
-            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}"
+            f"Epoch {epoch+1}/{num_epochs}: Losses train: {train_loss:.3f} val: {val_loss:.3f}"
         )
         if epoch % 2 == 1 or epoch == num_epochs - 1:
             torch.save(
