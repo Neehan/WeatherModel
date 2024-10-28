@@ -46,7 +46,6 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
 def streaming_dataloader(
     file_paths,
     batch_size,
-    shuffle=False,
     split="train",
     lr_finder=False,
     num_input_features=None,
@@ -59,7 +58,7 @@ def streaming_dataloader(
         num_input_features=num_input_features,
         num_output_features=num_output_features,
     )
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size)
 
 
 class StreamingDataset(torch.utils.data.IterableDataset):
