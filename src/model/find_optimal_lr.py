@@ -22,7 +22,7 @@ def find_optimal_lr(
     logging.info(f"Total number of parameters: {total_params/10**6:.2f}M")
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=init_lr)
+    optimizer = optim.Adam(model.parameters(), lr=init_lr, weight_decay=1e-2)
 
     # Find the optimal learning rate
     train_loader = utils.streaming_dataloader(
@@ -38,6 +38,5 @@ def find_optimal_lr(
     ax, optimal_lr = lr_finder.plot(suggest_lr=True)
     # Reset the model and optimizer to their initial state
     lr_finder.reset()
-    logging.info(f"optimal learning rate: {optimal_lr:.6f}")
 
     return optimal_lr

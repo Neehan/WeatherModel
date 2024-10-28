@@ -27,58 +27,58 @@ if __name__ == "__main__":
 
     parser.add_argument("--batch_size", help="batch size", default=64, type=int)
     parser.add_argument(
-        "--n_input_features", help="number of input features", default=21, type=int
+        "--n-input-features", help="number of input features", default=21, type=int
     )
     parser.add_argument(
-        "--n_epochs", help="number of training epochs", default=75, type=int
+        "--n-epochs", help="number of training epochs", default=75, type=int
     )
     parser.add_argument(
-        "--n_feature_swaps",
+        "--n-feature-swaps",
         help="number of features to swap per batch",
         default=1,
         type=int,
     )
     parser.add_argument(
-        "--init_lr", help="initial learning rate", default=0.0005, type=float
+        "--init-lr", help="initial learning rate", default=1e-6, type=float
     )
     parser.add_argument(
-        "--n_warmup_epochs", help="number of warm-up epochs", default=10, type=float
+        "--n-warmup-epochs", help="number of warm-up epochs", default=10, type=float
     )
     parser.add_argument(
-        "--decay_factor",
+        "--decay-factor",
         help="exponential learning rate decay factor after warmup",
         default=0.99,
         type=float,
     )
     parser.add_argument(
-        "--model_size",
+        "--model-size",
         help="model size small (2M), medium (8M), and large (56M)",
         default="small",
         type=str,
     )
 
     parser.add_argument(
-        "--model_type",
+        "--model",
         help="model type is weatherformer or bert",
         default="weatherformer",
         type=str,
     )
 
     parser.add_argument(
-        "--mask_pcnt",
+        "--mask-pcnt",
         help="percent to mask",
         default=0.15,
         type=float,
     )
 
     parser.add_argument(
-        "--clip_gradients",
+        "--clip-gradients",
         help="enable gradient clipping",
         action="store_true",
     )
 
     parser.add_argument(
-        "--find_optimal_lr",
+        "--find-optimal-lr",
         help="find optimal learning rate",
         action="store_true",
     )
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     elif model_size == "large":
         model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 48}
 
-    model_type = args.model_type.lower()
+    model_type = args.model.lower()
 
     if model_type == "weatherformer":
         model = Weatherformer(
@@ -132,8 +132,6 @@ if __name__ == "__main__":
             num_output_features=TOTAL_WEATHER_VARS - args.n_input_features,
             init_lr=args.init_lr,
         )
-        logging.info(f"optimal learning rate: {optimal_lr:.6f}")
-
         # Use the optimal learning rate for training
         args.init_lr = optimal_lr
 
