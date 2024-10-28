@@ -79,18 +79,19 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         for file_path in self.file_paths:
-            data = torch.load(file_path)
+            data = torch.load(file_path, weights_only=False)
             for item in data[self.split]:
-                # finding the optimal lr, so output in a specific way
                 if self.lr_finder:
                     # Create mask of ones and zeros
-                    mask = torch.zeros(
-                        self.num_input_features + self.num_output_features
-                    )
-                    mask[: self.num_input_features] = 1
+                    mask = torch.zeros(item.shape[-1])
+                    # Randomly select self.num_input_features indices to set to 1
+                    random_indices = torch.randperm(len(mask))[
+                        : self.num_input_features
+                    ]
+                    mask[random_indices] = 1
 
                     # Expand mask to match item shape
-                    expanded_mask = mask.expand(item.shape[:-1] + (-1,))
+                    expanded_mask = mask.expand(item.shape)
 
                     # Create masked copy
                     masked_item = item * expanded_mask
