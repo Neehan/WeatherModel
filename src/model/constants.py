@@ -17,6 +17,8 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Read the STDOUT environment variable
 STDOUT = os.environ.get("STDOUT", "False").lower() in ("true", "1", "t")
+# Read the TEST_ENV environment variable
+TEST_ENV = os.environ.get("TEST_ENV", "False").lower() in ("true", "1", "t")
 
 
 if STDOUT:
@@ -44,3 +46,4 @@ MAX_GRANULARITY_DAYS = 31
 CONTEXT_LENGTH = 365
 NUM_DATASET_PARTS = 119
 TEST_PART_IDS = [7, 106, 56, 59, 93, 30]
+DRY_RUN_TRAIN_PART_IDS = [0, 34, 59]

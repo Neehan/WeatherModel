@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
 
-from . import utils
-from .constants import *
+from src.model import utils
+from src.model.constants import *
 
 
 def swap_features(weather_indices, num_input_features, k=1):
@@ -40,6 +40,7 @@ def train(
     scheduler,
     criterion,
     device,
+    enable_gradient_clipping: bool,
 ):
     model.train()
     total_loss = 0
@@ -71,6 +72,10 @@ def train(
 
         # Backward pass
         loss.backward()
+
+        if enable_gradient_clipping:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
         optimizer.step()
     scheduler.step()
 
@@ -126,6 +131,7 @@ def training_loop(
     num_warmup_epochs,
     decay_factor,
     num_feature_swaps,
+    enable_gradient_clipping: bool,
 ):
     total_params = sum(p.numel() for p in model.parameters())
     logging.info(f"Total number of parameters: {total_params/10**6:.2f}M")
@@ -133,9 +139,23 @@ def training_loop(
     feature_dim = num_input_features + num_output_features
     weather_indices = torch.arange(feature_dim)
 
-    optimizer = optim.Adam(model.parameters(), lr=init_lr)
-    scheduler = utils.get_scheduler(optimizer, num_warmup_epochs, decay_factor)
     criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=init_lr)
+
+    # Find the optimal learning rate
+    train_loader = utils.streaming_dataloader(
+        train_loader_paths, batch_size, shuffle=True, split="train"
+    )
+    if TEST_ENV:
+        optimal_lr = utils.find_optimal_lr(
+            model, criterion, optimizer, train_loader, DEVICE
+        )
+    logging.info(f"optimal learning rate: {optimal_lr:.6f}")
+
+    # Update the optimizer with the optimal learning rate
+    optimizer = optim.Adam(model.parameters(), lr=optimal_lr)
+
+    scheduler = utils.get_scheduler(optimizer, num_warmup_epochs, decay_factor)
 
     losses = {
         "train": [],
@@ -144,16 +164,22 @@ def training_loop(
 
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
-    train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
+    if TEST_ENV:
+        train_indices = DRY_RUN_TRAIN_PART_IDS
+        test_indices = TEST_PART_IDS[:1]
+    else:
+        train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
+        test_indices = TEST_PART_IDS
+
     train_loader_paths = [
         data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
         for i in train_indices
-        for frequency in ["daily", "weekly", "monthly"]
+        for frequency in ["monthly", "weekly", "daily"]
     ]
     test_loader_paths = [
         data_loader_dir + f"weather_dataset_{frequency}_{i}.pt"
-        for i in TEST_PART_IDS
-        for frequency in ["daily", "weekly", "monthly"]
+        for i in test_indices
+        for frequency in ["monthly", "weekly", "daily"]
     ]
 
     for epoch in range(num_epochs):
@@ -175,10 +201,16 @@ def training_loop(
             scheduler,
             criterion,
             DEVICE,
+            enable_gradient_clipping,  # Pass the flag to the train function
         )
 
+        if torch.cuda.device_count() > 1:
+            model_module = model.model_module
+        else:
+            model_module = model
+
         val_loss = validate(
-            model.module,  # do the validation on single gpu else error message (no idea why)
+            model_module,  # do the validation on single gpu else error message (no idea why)
             num_input_features,
             test_loader,
             weather_indices,
@@ -189,21 +221,19 @@ def training_loop(
         losses["train"].append(train_loss)
         losses["val"].append(val_loss)
 
-        daily_scaler_mean = model.module.input_scaler.weight[1].mean().item()
-        weekly_scaler_mean = model.module.input_scaler.weight[7].mean().item()
         logging.info(
-            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}, scaler means: daily {daily_scaler_mean:.3f}, weekly: {weekly_scaler_mean:.3f}"
+            f"Epoch {epoch+1}: Losses train: {train_loss:.3f} val: {val_loss:.3f}"
         )
         if epoch % 2 == 1 or epoch == num_epochs - 1:
             torch.save(
-                model.module,
+                model_module,
                 DATA_DIR
                 + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_epoch_{epoch}.pth",
             )
             torch.save(
-                model.module,
+                model_module,
                 DATA_DIR
                 + f"trained_models/weatherformer_{total_params / 10**6:.1f}m_latest.pth",
             )
-            utils.save_losses(losses, total_params)
+            utils.save_losses(losses, total_params, plot=True)
     return model, losses

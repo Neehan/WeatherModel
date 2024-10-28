@@ -11,11 +11,11 @@ import torch.nn as nn
 import numpy as np
 import argparse
 
-from .train import training_loop
-from .weatherformer_v2 import Weatherformer
-from .bert_model import WeatherBERT
-from .bert_train import bert_training_loop
-from .constants import *
+from src.model.train import training_loop
+from src.model.weatherformer_v2 import Weatherformer
+from src.model.bert_model import WeatherBERT
+from src.model.bert_train import bert_training_loop
+from src.model.constants import *
 
 np.random.seed(1234)
 torch.manual_seed(1234)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         "--init_lr", help="initial learning rate", default=0.0005, type=float
     )
     parser.add_argument(
-        "--n_warmup_epochs", help="number of warm-up epochs", default=5, type=float
+        "--n_warmup_epochs", help="number of warm-up epochs", default=10, type=float
     )
     parser.add_argument(
         "--decay_factor",
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model_size",
-        help="model size small (2M), medium (8M), and large (25M)",
+        help="model size small (2M), medium (8M), and large (56M)",
         default="small",
         type=str,
     )
@@ -68,6 +68,12 @@ if __name__ == "__main__":
         help="percent to mask",
         default=0.15,
         type=float,
+    )
+
+    parser.add_argument(
+        "--clip_gradients",
+        help="enable gradient clipping",
+        action="store_true",
     )
 
     args = parser.parse_args()
@@ -121,6 +127,7 @@ if __name__ == "__main__":
             num_warmup_epochs=args.n_warmup_epochs,
             decay_factor=args.decay_factor,
             num_feature_swaps=args.n_feature_swaps,
+            enable_gradient_clipping=args.clip_gradients,  # Pass the argument value
         )
     elif model_type == "bert":
         model, losses = bert_training_loop(
@@ -131,4 +138,5 @@ if __name__ == "__main__":
             args.n_warmup_epochs,
             args.decay_factor,
             args.mask_pcnt,
+            enable_gradient_clipping=args.clip_gradients,  # Pass the argument value
         )
