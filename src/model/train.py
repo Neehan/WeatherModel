@@ -142,7 +142,7 @@ def training_loop(
         "val": [],
     }
 
-    data_loader_dir = DATA_DIR + "nasa_power/processed/weather_dataset"
+    data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
     train_indices = set(range(NUM_DATASET_PARTS)).difference(TEST_PART_IDS)
     train_loader_paths = [
