@@ -207,9 +207,7 @@ class YieldPredictor(nn.Module):
         temporal_index = torch.cat([year, temporal_gran], dim=1)
 
         weather = self.weather_transformer(
-            padded_weather,
-            coord,
-            temporal_index,
+            (padded_weather, coord, temporal_index),
             weather_feature_mask=weather_feature_mask,
         )
 

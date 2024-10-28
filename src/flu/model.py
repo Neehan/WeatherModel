@@ -165,9 +165,7 @@ class FluPredictor(nn.Module):
         weather_feature_mask[weather_indices] = False
 
         weather = self.weather_transformer(
-            masked_weather,
-            coords,
-            weather_index,
+            (masked_weather, coords, weather_index),
             weather_feature_mask=weather_feature_mask,
             src_key_padding_mask=mask,
         )
