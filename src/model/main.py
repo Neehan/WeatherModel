@@ -25,7 +25,7 @@ torch.manual_seed(1234)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--batch_size", help="batch size", default=64, type=int)
+    parser.add_argument("--batch-size", help="batch size", default=64, type=int)
     parser.add_argument(
         "--n-input-features", help="number of input features", default=21, type=int
     )

@@ -38,5 +38,6 @@ def find_optimal_lr(
     ax, optimal_lr = lr_finder.plot(suggest_lr=True)
     # Reset the model and optimizer to their initial state
     lr_finder.reset()
+    logging.info(f"optimal learning rate: {optimal_lr:.6f}")
 
     return optimal_lr
