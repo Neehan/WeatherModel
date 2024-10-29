@@ -177,7 +177,7 @@ class YieldPredictor(nn.Module):
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 
     def forward(self, input_data):
-        weather, soil, practices, year, coord, y_past, mask = input_data
+        weather, practices, soil, year, coord, y_past, mask = input_data
 
         batch_size, n_years, n_features, seq_len = weather.size()
         weather = weather.view(batch_size * n_years, -1, n_features)
