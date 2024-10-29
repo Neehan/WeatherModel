@@ -31,7 +31,7 @@ def find_optimal_lr(
         num_output_features=num_output_features,
     )
     lr_finder = LRFinder(model, optimizer, criterion, device=DEVICE)
-    lr_finder.range_test(train_loader, end_lr=100, num_iter=100)
+    lr_finder.range_test(train_loader, end_lr=0.001, num_iter=100)
     ax, optimal_lr = lr_finder.plot(suggest_lr=True)
     # Reset the model and optimizer to their initial state
     lr_finder.reset()
