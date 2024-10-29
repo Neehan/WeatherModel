@@ -26,7 +26,7 @@ torch.cuda.manual_seed(1234)
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--batch_size", help="batch size", default=64, type=int)
+parser.add_argument("--batch_size", help="batch size", default=128, type=int)
 parser.add_argument(
     "--n_past_years", help="number of past years to look at", default=6, type=int
 )
@@ -43,7 +43,7 @@ parser.add_argument(
     type=float,
 )
 parser.add_argument(
-    "--n_warmup_epochs", help="number of warmup epoches", default=4, type=float
+    "--n_warmup_epochs", help="number of warmup epoches", default=5, type=float
 )
 parser.add_argument(
     "--no-pretraining",
@@ -53,14 +53,22 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--pretrained_model_path",
+    help="path to pretrained model weights",
+    default=None,
+    type=str,
+)
+
+
+parser.add_argument(
     "--model_size",
-    help="model size small (2M), medium (8M), and large (25M)",
+    help="model size small (2M), medium (8M), and large (56M)",
     default="small",
     type=str,
 )
 
 parser.add_argument(
-    "--model_type",
+    "--model",
     help="weatherformer, cnn, wflinear, bert",
     default="weatherformer",
     type=str,
@@ -83,6 +91,7 @@ if __name__ == "__main__":
     soybean_states = set(soybean_df["State"].values)
 
     model_size = args.model_size.lower()
+
     if model_size == "small":
         model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
         load_model_path = "trained_models/weatherformer_1.9m_latest.pth"
@@ -90,8 +99,11 @@ if __name__ == "__main__":
         model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
         load_model_path = "trained_models/weatherformer_8.2m_latest.pth"
     elif model_size == "large":
-        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 32}
+        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 48}
         load_model_path = "trained_models/weatherformer_25.3m_latest.pth"
+
+    if load_model_path is not None:
+        load_model_path = args.pretrained_model_path
 
     total_best_val_loss = 0
 
@@ -107,7 +119,7 @@ if __name__ == "__main__":
             n_past_years=args.n_past_years,
             batch_size=args.batch_size,
         )
-        model_type = args.model_type
+        model_type = args.model
         if model_type == "weatherformer" or model_type == "wflinear":
             # load the pretrained model
             pretrained_model = (
