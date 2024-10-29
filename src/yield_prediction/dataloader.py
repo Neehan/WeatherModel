@@ -99,7 +99,7 @@ class CropDataset(Dataset):
             # the current year's yield the target variable, so replace it with last year's yield
             y_past[-1] = y_past[-2]
 
-            self.data.append((weather, practices, soil, year, coord, y, y_past, mask))
+            self.data.append(((weather, practices, soil, year, coord, y_past, mask), y))
 
     def __len__(self):
         return 1000 if TEST_ENV else len(self.index)

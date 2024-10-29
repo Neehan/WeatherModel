@@ -12,14 +12,17 @@ np.random.seed(1234)
 
 torch.use_deterministic_algorithms(True)
 
+from torch_lr_finder import LRFinder
 
-from .dataloader import read_soybean_dataset, get_train_test_loaders
-from .model import YieldPredictor
-from .cnn_transformer import CNNYieldPredictor
-from .wf_linear import WFLinearPredictor
-from .bert_model import BERTYieldPredictor
-from .train import training_loop
-from .constants import *
+from src.yield_prediction.dataloader import read_soybean_dataset, get_train_test_loaders
+from src.yield_prediction.model import YieldPredictor
+from src.yield_prediction.cnn_transformer import CNNYieldPredictor
+from src.yield_prediction.wf_linear import WFLinearPredictor
+from src.yield_prediction.bert_model import BERTYieldPredictor
+from src.yield_prediction.train import training_loop
+from src.yield_prediction.constants import *
+import torch.optim as optim
+import torch.nn as nn
 
 torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
@@ -39,7 +42,7 @@ parser.add_argument(
 parser.add_argument(
     "--lr_decay_factor",
     help="learning rate exponential decay factor",
-    default=0.95,
+    default=0.98,
     type=float,
 )
 parser.add_argument(
@@ -73,6 +76,14 @@ parser.add_argument(
     default="weatherformer",
     type=str,
 )
+
+parser.add_argument(
+    "--find_optimal_lr",
+    dest="find_optimal_lr",
+    action="store_true",
+    help="find optimal learning rate using LR finder",
+)
+
 
 parser.set_defaults(no_pretraining=False)
 
@@ -123,7 +134,9 @@ if __name__ == "__main__":
         if model_type == "weatherformer" or model_type == "wflinear":
             # load the pretrained model
             pretrained_model = (
-                None if args.no_pretraining else torch.load(DATA_DIR + load_model_path)
+                None
+                if args.no_pretraining
+                else torch.load(DATA_DIR + load_model_path, weights_only=False)
             )
             if model_type == "weatherformer":
                 model = YieldPredictor(pretrained_model, model_size_params)
@@ -136,12 +149,27 @@ if __name__ == "__main__":
                 None
                 if args.no_pretraining
                 else torch.load(
-                    DATA_DIR + load_model_path.replace("weatherformer", "bert")
+                    DATA_DIR + load_model_path.replace("weatherformer", "bert"),
+                    weights_only=False,
                 )
             )
             model = BERTYieldPredictor(pretrained_model, model_size_params)
 
         model = model.to(DEVICE)
+
+        if args.find_optimal_lr:
+
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(
+                model.parameters(), lr=args.init_lr, weight_decay=1e-2
+            )
+            lr_finder = LRFinder(model, optimizer, criterion, device=DEVICE)
+            lr_finder.range_test(train_loader, end_lr=100, num_iter=100)
+            ax, optimal_lr = lr_finder.plot(suggest_lr=True)
+            # Reset the model and optimizer to their initial state
+            lr_finder.reset()
+            logging.info(f"optimal learning rate: {optimal_lr:.6f}")
+            args.init_lr = optimal_lr
 
         _, losses, best_val_loss = training_loop(
             model,
@@ -154,4 +182,6 @@ if __name__ == "__main__":
         )
         total_best_val_loss += best_val_loss
 
-    print(f"Average of best val. loss: {total_best_val_loss/5*11.03:3f} Bu/Acre.")
+    logging.info(
+        f"Average of best val. loss: {total_best_val_loss/5*11.03:3f} Bu/Acre."
+    )

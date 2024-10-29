@@ -1,7 +1,4 @@
 from tqdm import tqdm
-import numpy as np
-import torch
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
 from torch_lr_finder import LRFinder

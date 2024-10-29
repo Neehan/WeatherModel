@@ -14,18 +14,13 @@ def compute_rmse(model, data_loader):
     device = DEVICE
     # Compute the RMSE on the training dataset
     mse_total = 0.0
-    for weather, practices, soil, year, coord, y, y_past, mask in data_loader:
-        weather = weather.to(device)
-        soil = soil.to(device)
-        year = year.to(device)
-        practices = practices.to(device)
-        coord = coord.to(device)
+    for input_data, y in data_loader:
+        input_data = [x.to(device) for x in input_data]
         y = y.to(device)
-        y_past = y_past.to(device)
-        mask = mask.to(device)
 
         # Forward pass
-        outputs = model(weather, soil, practices, year, coord, y_past, mask)
+        outputs = model(input_data)
+
         # Compute the mean squared error
         mse = F.mse_loss(outputs, y.to(device))
 
@@ -84,16 +79,7 @@ def training_loop(
     for epoch in range(num_epochs):
         running_loss = 0.0
         model.train()
-        for i, (
-            weather,
-            practices,
-            soil,
-            year,
-            coord,
-            y,
-            y_past,
-            mask,
-        ) in enumerate(
+        for i, (input_data, y) in enumerate(
             tqdm(
                 train_loader,
                 file=TQDM_OUTPUT,
@@ -104,17 +90,11 @@ def training_loop(
         ):
             # Zero the gradients
             optimizer.zero_grad()
-            weather = weather.to(device)
-            soil = soil.to(device)
-            year = year.to(device)
-            practices = practices.to(device)
-            coord = coord.to(device)
+            input_data = [x.to(device) for x in input_data]
             y = y.to(device)
-            y_past = y_past.to(device)
-            mask = mask.to(device)
 
             # Forward pass
-            outputs = model(weather, soil, practices, year, coord, y_past, mask)
+            outputs = model(input_data)
             loss = criterion(outputs, y)
 
             # Backward pass and optimize
