@@ -94,8 +94,10 @@ def training_loop(
             y = y.to(device)
 
             # Forward pass
-            outputs = model(input_data)
-            loss = criterion(outputs, y)
+            outputs, weather_embeds = model(input_data, return_weather_embed=True)
+            loss = criterion(outputs, y) + 0.0001 * criterion(
+                weather_embeds, torch.zeros_like(weather_embeds)
+            )
 
             # Backward pass and optimize
             loss.backward()

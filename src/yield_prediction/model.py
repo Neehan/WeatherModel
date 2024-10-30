@@ -176,7 +176,7 @@ class YieldPredictor(nn.Module):
         )
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 
-    def forward(self, input_data):
+    def forward(self, input_data, return_weather_embed=False):
         weather, practices, soil, year, coord, y_past, mask = input_data
 
         batch_size, n_years, n_features, seq_len = weather.size()
@@ -213,7 +213,10 @@ class YieldPredictor(nn.Module):
         )
 
         weather = weather.view(batch_size * n_years, -1)
-        weather = self.weather_fc(weather)
+        # Add Gaussian noise to weather features for regularization
+        noise = torch.randn_like(weather) * math.sqrt(0.00001)
+        weather_embedding = weather + noise
+        weather = self.weather_fc(weather_embedding)
         weather = weather.view(batch_size, n_years, -1)
 
         soil = soil.reshape(batch_size * n_years * soil.shape[2], 1, -1)
@@ -236,4 +239,7 @@ class YieldPredictor(nn.Module):
             combined, coord.view(batch_size, -1, 2)[:, -1, :], mask
         )
         out = self.fc1(combined)
-        return out
+        if return_weather_embed:
+            return out, weather_embedding
+        else:
+            return out
