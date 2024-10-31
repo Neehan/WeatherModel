@@ -95,9 +95,16 @@ def training_loop(
 
             # Forward pass
             outputs, weather_embeds = model(input_data, return_weather_embed=True)
-            loss = criterion(outputs, y) + 0.0001 * criterion(
-                weather_embeds, torch.zeros_like(weather_embeds)
-            )
+            yield_loss = criterion(outputs, y)
+            kl_div = (
+                criterion(weather_embeds, torch.zeros_like(weather_embeds))
+                + weather_embeds.shape[-1]
+                * (torch.exp(model.log_var) - model.log_var - 1)
+            ) / 2
+
+            logging.info(f"yield mse: {yield_loss.item():.4f}")
+            logging.info(f"kl div: {kl_div.item():.4f}")
+            loss = yield_loss + 0.0001 * kl_div
 
             # Backward pass and optimize
             loss.backward()
