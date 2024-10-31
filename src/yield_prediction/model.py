@@ -139,8 +139,8 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        # self.log_var = nn.Parameter(torch.ones(1) * (-3.0))
-        self.log_var = torch.ones(1) * (-4.0)
+        # self.log_var = nn.Parameter(torch.ones(1) * (-4.0))
+        self.log_var = torch.ones(1, device=DEVICE) * (-4.0)
 
         self.weather_transformer = Weatherformer(
             31, 48, max_len=SEQ_LEN, **weatherformer_size_params
