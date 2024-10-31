@@ -98,8 +98,7 @@ def training_loop(
             yield_loss = criterion(outputs, y)
             kl_div = (
                 criterion(weather_embeds, torch.zeros_like(weather_embeds))
-                + weather_embeds.shape[-1]
-                * (torch.exp(model.log_var) - model.log_var - 1)
+                + weather_embeds.shape[-1] * (torch.exp(model.log_var) - model.log_var)
             ) / 2
 
             # logging.info(f"yield mse: {yield_loss.item():.4f}")

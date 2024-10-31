@@ -220,7 +220,7 @@ class YieldPredictor(nn.Module):
 
         # Add Gaussian noise to weather features for regularization
         noise = torch.randn_like(weather) * torch.exp(0.5 * self.log_var)
-        weather_embedding = weather + noise
+        weather = weather + noise
 
         soil = soil.reshape(batch_size * n_years * soil.shape[2], 1, -1)
         soil_out = self.soil_cnn(soil)
@@ -243,6 +243,6 @@ class YieldPredictor(nn.Module):
         )
         out = self.fc1(combined)
         if return_weather_embed:
-            return out, weather_embedding
+            return out, weather
         else:
             return out
