@@ -104,7 +104,7 @@ def training_loop(
 
             # logging.info(f"yield mse: {yield_loss.item():.4f}")
             # logging.info(f"kl div: {kl_div.item():.4f}")
-            loss = yield_loss + 1e-6 * kl_div
+            loss = yield_loss + 1e-2 * kl_div
 
             # Backward pass and optimize
             loss.backward()
