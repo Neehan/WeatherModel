@@ -166,7 +166,7 @@ class YieldPredictor(nn.Module):
 
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
-        self.weather_transformer.log_var = torch.ones(1, device=DEVICE) * (-4.0)
+        self.weather_transformer.log_var = nn.Parameter(torch.ones(1) * (-4.0))
 
         self.weather_fc = nn.Sequential(
             nn.Linear(48 * SEQ_LEN, 120),
