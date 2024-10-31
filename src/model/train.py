@@ -1,5 +1,6 @@
 from tqdm import tqdm
 import numpy as np
+import math
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -65,7 +66,10 @@ def train(
             :, :, target_indices
         ]
 
-        loss = criterion(target_features, output)
+        z_var = torch.exp(model.log_var)  # variance of the latent variable z
+        loss = criterion(target_features, output) + z_var * torch.log(
+            2 * math.pi * z_var
+        )
 
         total_loss += loss.item()
         loader_len += 1

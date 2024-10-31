@@ -139,7 +139,7 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        self.log_var = nn.Parameter(torch.ones(1) * (-4.0))
+        # self.log_var = nn.Parameter(torch.ones(1) * (-4.0))
         # self.log_var = torch.ones(1, device=DEVICE) * (-4.0)
 
         self.weather_transformer = Weatherformer(
@@ -220,7 +220,9 @@ class YieldPredictor(nn.Module):
         weather = weather.view(batch_size, n_years, -1)
 
         # Add Gaussian noise to weather features for regularization
-        noise = torch.randn_like(weather) * torch.exp(0.5 * self.log_var)
+        noise = torch.randn_like(weather) * torch.exp(
+            0.5 * self.weather_transformer.log_var
+        )
         weather = weather + noise
 
         soil = soil.reshape(batch_size * n_years * soil.shape[2], 1, -1)

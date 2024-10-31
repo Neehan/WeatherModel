@@ -87,6 +87,8 @@ class Weatherformer(nn.Module):
         self.input_scaler = nn.Embedding(
             num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         )
+        self.log_var = nn.Parameter(torch.ones(1) * (-4.0))
+
         # torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
         # self.temporal_pos_encoding = nn.Embedding(

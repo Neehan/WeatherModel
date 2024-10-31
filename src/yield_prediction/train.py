@@ -99,12 +99,15 @@ def training_loop(
             kl_div = (
                 criterion(weather_embeds, torch.zeros_like(weather_embeds))
                 # + torch.numel(weather_embeds)
-                + (torch.exp(model.log_var) - model.log_var)
+                + (
+                    torch.exp(model.weather_transformer.log_var)
+                    - model.weather_transformer.log_var
+                )
             ) / 2
 
             # logging.info(f"yield mse: {yield_loss.item():.4f}")
             # logging.info(f"kl div: {kl_div.item():.4f}")
-            loss = yield_loss + 1e-2 * kl_div
+            loss = yield_loss + 0.05 * kl_div
 
             # Backward pass and optimize
             loss.backward()
