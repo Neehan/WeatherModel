@@ -214,8 +214,8 @@ class YieldPredictor(nn.Module):
             weather_feature_mask=weather_feature_mask,
         )
 
-        weather = weather.view(batch_size * n_years, -1)
-        weather = self.weather_fc(weather)
+        weather_emb = weather.view(batch_size * n_years, -1)
+        weather = self.weather_fc(weather_emb)
         weather = weather.view(batch_size, n_years, -1)
 
         # Add Gaussian noise to weather features for regularization
@@ -243,6 +243,6 @@ class YieldPredictor(nn.Module):
         )
         out = self.fc1(combined)
         if return_weather_embed:
-            return out, weather
+            return out, weather_emb
         else:
             return out
