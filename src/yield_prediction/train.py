@@ -104,8 +104,8 @@ def training_loop(
                 + (torch.exp(weather_log_var) - weather_log_var).mean()
             )
 
-            logging.info(f"yield mse: {yield_loss.item():.4f}")
-            logging.info(f"kl div: {kl_div.item():.4f}")
+            # logging.info(f"yield mse: {yield_loss.item():.4f}")
+            # logging.info(f"kl div: {kl_div.item():.4f}")
             loss = yield_loss + 0.1 * kl_div
 
             # Backward pass and optimize
