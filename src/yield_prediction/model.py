@@ -217,10 +217,9 @@ class YieldPredictor(nn.Module):
             weather_feature_mask=weather_feature_mask,
             return_log_var=True,
         )
-        weather_var = torch.exp(weather_log_var)
 
         # Add Gaussian noise to weather features for regularization
-        noise = torch.randn_like(weather_mu) * torch.exp(0.5 * weather_var)
+        noise = torch.randn_like(weather_mu) * torch.exp(0.5 * weather_log_var)
         weather = weather_mu + noise
 
         weather = weather.view(batch_size * n_years, -1)
