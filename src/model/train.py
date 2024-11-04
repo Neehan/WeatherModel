@@ -68,7 +68,10 @@ def train(
             return_log_var=True,
         )
 
-        z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
+        z_mu, z_log_var = (
+            z_mu[:, :, target_indices],
+            z_log_var[:, :, target_indices],
+        )  # batch_size x seq_len x num_target_indices
         z_std = torch.exp(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x num_target_indices
@@ -125,7 +128,10 @@ def validate(
                 return_log_var=True,
             )
 
-        z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
+        z_mu, z_log_var = (
+            z_mu[:, :, target_indices],
+            z_log_var[:, :, target_indices],
+        )  # batch_size x seq_len x num_target_indices
         z_std = torch.exp(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x 1
