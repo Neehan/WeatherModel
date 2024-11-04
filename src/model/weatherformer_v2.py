@@ -150,7 +150,7 @@ class Weatherformer(nn.Module):
         )
         z_mu = self.out_proj(weather)
         if return_log_var:
-            z_log_var = weather.log_var(weather)
+            z_log_var = self.log_var(weather)
             return z_mu, z_log_var
         else:
             return z_mu
