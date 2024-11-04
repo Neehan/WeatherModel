@@ -166,7 +166,7 @@ class YieldPredictor(nn.Module):
 
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
-        self.weather_transformer.log_var = nn.Parameter(torch.ones(1) * (-4.0))
+        # self.weather_transformer.log_var = nn.Parameter(torch.ones(1) * (-4.0))
 
         self.weather_fc = nn.Sequential(
             nn.Linear(48 * SEQ_LEN, 120),
@@ -212,20 +212,20 @@ class YieldPredictor(nn.Module):
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
         temporal_index = torch.cat([year, temporal_gran], dim=1)
 
-        weather = self.weather_transformer(
+        weather_mu, weather_log_var = self.weather_transformer(
             (padded_weather, coord, temporal_index),
             weather_feature_mask=weather_feature_mask,
+            return_log_var=True,
         )
-
-        weather_emb = weather.view(batch_size * n_years, -1)
-        weather = self.weather_fc(weather_emb)
-        weather = weather.view(batch_size, n_years, -1)
+        weather_var = torch.exp(weather_log_var)
 
         # Add Gaussian noise to weather features for regularization
-        noise = torch.randn_like(weather) * torch.exp(
-            0.5 * self.weather_transformer.log_var
-        )
-        weather = weather + noise
+        noise = torch.randn_like(weather_mu) * torch.exp(0.5 * weather_var)
+        weather = weather_mu + noise
+
+        weather = weather.view(batch_size * n_years, -1)
+        weather = self.weather_fc(weather)
+        weather = weather.view(batch_size, n_years, -1)
 
         soil = soil.reshape(batch_size * n_years * soil.shape[2], 1, -1)
         soil_out = self.soil_cnn(soil)
@@ -248,6 +248,6 @@ class YieldPredictor(nn.Module):
         )
         out = self.fc1(combined)
         if return_weather_embed:
-            return out, weather_emb
+            return out, weather_mu, weather_log_var
         else:
             return out

@@ -110,9 +110,9 @@ class Weatherformer(nn.Module):
         )
 
         self.log_var = nn.Sequential(
-            nn.Linear(hidden_dim, 2 * hidden_dim),
+            nn.Linear(hidden_dim, 4 * hidden_dim),
             nn.GELU(),
-            nn.Linear(2 * hidden_dim, 1),
+            nn.Linear(4 * hidden_dim, 1),
         )
 
         self.out_proj = nn.Linear(hidden_dim, output_dim)
@@ -122,6 +122,7 @@ class Weatherformer(nn.Module):
         data,
         weather_feature_mask=None,  # n_features,
         src_key_padding_mask=None,  # batch_size x seq_len
+        return_log_var=False,
     ):
 
         weather, coords, temporal_index = data
@@ -147,6 +148,9 @@ class Weatherformer(nn.Module):
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
-        weather = self.out_proj(weather)
-
-        return weather
+        z_mu = self.out_proj(weather), z_log_var
+        if return_log_var:
+            z_log_var = weather.log_var(weather)
+            return z_mu, z_log_var
+        else:
+            return z_mu

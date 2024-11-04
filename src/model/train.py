@@ -62,15 +62,18 @@ def train(
         target_mask[target_indices] = True
         target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
-        output = model((weather, coords, index), weather_feature_mask=target_mask)[
-            :, :, target_indices
-        ]
+        z_mu, z_log_var = model(
+            (weather, coords, index),
+            weather_feature_mask=target_mask,
+            return_log_var=True,
+        )
 
-        z_var = torch.exp(model.log_var)  # variance of the latent variable z
-        z_dim = output.shape[1] * output.shape[2]
-        loss = 1 / (2 * z_var) * criterion(
-            target_features, output
-        ) + z_dim / 2 * torch.log(2 * z_var)
+        z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
+
+        z_var = torch.exp(
+            z_log_var
+        )  # variance of the latent variable z shape batch_size x seq_len x 1
+        loss = criterion(target_features, z_mu / z_var) + torch.log(z_var).mean()
 
         total_loss += loss.item()
         loader_len += 1

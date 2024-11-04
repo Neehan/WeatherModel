@@ -94,19 +94,18 @@ def training_loop(
             y = y.to(device)
 
             # Forward pass
-            outputs, weather_embeds = model(input_data, return_weather_embed=True)
+            outputs, weather_mu, weather_log_var = model(
+                input_data, return_weather_embed=True
+            )
             yield_loss = criterion(outputs, y)
             kl_div = (
-                criterion(weather_embeds, torch.zeros_like(weather_embeds))
+                criterion(weather_mu, torch.zeros_like(weather_mu))
                 # + torch.numel(weather_embeds)
-                + (
-                    torch.exp(model.weather_transformer.log_var)
-                    - model.weather_transformer.log_var
-                )
+                + (torch.exp(weather_log_var) - weather_log_var)
             ) / 2
 
-            # logging.info(f"yield mse: {yield_loss.item():.4f}")
-            # logging.info(f"kl div: {kl_div.item():.4f}")
+            logging.info(f"yield mse: {yield_loss.item():.4f}")
+            logging.info(f"kl div: {kl_div.item():.4f}")
             loss = yield_loss + 0.05 * kl_div
 
             # Backward pass and optimize
