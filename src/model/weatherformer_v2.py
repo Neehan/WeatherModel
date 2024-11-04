@@ -110,7 +110,7 @@ class Weatherformer(nn.Module):
         )
 
         self.out_proj1 = nn.Linear(hidden_dim // 2, output_dim)
-        self.out_proj2 = nn.Linear(hidden_dim // 2, 1)
+        self.out_proj2 = nn.Linear(hidden_dim // 2, output_dim)
 
     def forward(
         self,
