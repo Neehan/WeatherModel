@@ -67,9 +67,10 @@ def train(
         ]
 
         z_var = torch.exp(model.log_var)  # variance of the latent variable z
-        loss = criterion(target_features, output) + z_var * torch.log(
-            2 * math.pi * z_var
-        )
+        z_dim = output.shape[1] * output.shape[2]
+        loss = 1 / (2 * z_var) * criterion(
+            target_features, output
+        ) + z_dim / 2 * torch.log(2 * z_var)
 
         total_loss += loss.item()
         loader_len += 1
