@@ -76,8 +76,7 @@ def train(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x num_target_indices
 
-        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.sum()
-        loss /= z_mu.numel()  # take mean
+        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.mean()
 
         total_loss += loss.item()
         loader_len += 1
@@ -135,11 +134,7 @@ def validate(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x 1
 
-        loss = (
-            F.mse_loss(target_features / z_std, z_mu / z_std, reduction="sum")
-            + z_log_var.sum()
-        )
-        loss /= z_mu.numel()  # take mean
+        loss = F.mse_loss(target_features / z_std, z_mu / z_std) + z_log_var.mean()
 
         total_loss += loss.item()
         loader_len += 1
@@ -165,7 +160,7 @@ def training_loop(
     feature_dim = num_input_features + num_output_features
     weather_indices = torch.arange(feature_dim)
 
-    criterion = nn.MSELoss(reduction="sum")
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
     scheduler = utils.get_scheduler(optimizer, num_warmup_epochs, decay_factor)
 
