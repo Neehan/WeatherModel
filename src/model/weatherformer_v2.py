@@ -109,13 +109,8 @@ class Weatherformer(nn.Module):
             encoder_layer, num_layers=num_layers
         )
 
-        self.log_var = nn.Sequential(
-            nn.Linear(hidden_dim, 4 * hidden_dim),
-            nn.GELU(),
-            nn.Linear(4 * hidden_dim, 1),
-        )
-
-        self.out_proj = nn.Linear(hidden_dim, output_dim)
+        self.out_proj1 = nn.Linear(hidden_dim // 2, output_dim)
+        self.out_proj2 = nn.Linear(hidden_dim // 2, 1)
 
     def forward(
         self,
@@ -148,9 +143,9 @@ class Weatherformer(nn.Module):
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
-        z_mu = self.out_proj(weather)
+        z_mu = self.out_proj1(weather[:, :, : weather.shape[2] // 2])
         if return_log_var:
-            z_log_var = self.log_var(weather)
+            z_log_var = self.out_proj2(weather[:, :, weather.shape[2] // 2 :])
             return z_mu, z_log_var
         else:
             return z_mu
