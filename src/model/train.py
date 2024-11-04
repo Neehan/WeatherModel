@@ -68,11 +68,16 @@ def train(
             return_log_var=True,
         )
 
-        z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
-        z_std = torch.exp(
-            z_log_var / 2
-        )  # variance of the latent variable z shape batch_size x seq_len x 1
-        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.mean()
+        # Reconstruction loss: element-wise squared error divided by variance
+        reconstruction_loss = ((target_features - z_mu) ** 2) / torch.exp(z_log_var)
+
+        # Log variance loss
+        log_variance_loss = z_log_var  # Already represents log(σ²)
+
+        # Combine both terms and reduce across all dimensions
+        loss = (
+            reconstruction_loss + log_variance_loss
+        ).mean()  # Averages over batch_size, seq_len, and seq_dim
         total_loss += loss.item()
         loader_len += 1
 
