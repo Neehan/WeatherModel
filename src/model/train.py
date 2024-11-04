@@ -76,7 +76,13 @@ def train(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x num_target_indices
 
-        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.mean()
+        reconstruction_loss = criterion(target_features / z_std, z_mu / z_std)
+        variance = z_log_var.mean()
+
+        logging.info(f"reconstruction loss: {reconstruction_loss.item():.4f}")
+        logging.info(f"variance: {variance.item():.4f}")
+
+        loss = reconstruction_loss + variance
 
         total_loss += loss.item()
         loader_len += 1
