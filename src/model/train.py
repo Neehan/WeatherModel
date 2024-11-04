@@ -139,7 +139,9 @@ def validate(
         loss = (
             F.mse_loss(target_features / z_std, z_mu / z_std, reduction="sum")
             + z_log_var.sum()
-        ).mean()
+        )
+        print(loss.shape)
+        loss = loss.mean()
 
         total_loss += loss.item()
         loader_len += 1
