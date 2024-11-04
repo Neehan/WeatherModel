@@ -69,12 +69,10 @@ def train(
         )
 
         z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
-
-        z_var = torch.exp(
-            z_log_var
+        z_std = torch.exp(
+            z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x 1
-        loss = criterion(target_features, z_mu / z_var) + torch.log(z_var).mean()
-
+        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.mean()
         total_loss += loss.item()
         loader_len += 1
 
@@ -87,7 +85,7 @@ def train(
         optimizer.step()
     scheduler.step()
 
-    return np.sqrt(total_loss / loader_len)
+    return total_loss / loader_len
 
 
 def validate(
@@ -124,16 +122,16 @@ def validate(
             )
 
         z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
-
-        z_var = torch.exp(
-            z_log_var
+        z_std = torch.exp(
+            z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x 1
-        loss = F.mse_loss(target_features, z_mu / z_var) + torch.log(z_var).mean()
+
+        loss = F.mse_loss(target_features / z_std, z_mu / z_std) + z_log_var.mean()
 
         total_loss += loss.item()
         loader_len += 1
 
-    return np.sqrt(total_loss / loader_len)
+    return total_loss / loader_len
 
 
 def training_loop(
