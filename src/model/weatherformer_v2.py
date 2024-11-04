@@ -148,7 +148,7 @@ class Weatherformer(nn.Module):
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
-        z_mu = self.out_proj(weather), z_log_var
+        z_mu = self.out_proj(weather)
         if return_log_var:
             z_log_var = weather.log_var(weather)
             return z_mu, z_log_var
