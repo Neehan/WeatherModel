@@ -76,9 +76,8 @@ def train(
             z_log_var / 2
         )  # variance of the latent variable z shape batch_size x seq_len x num_target_indices
 
-        loss = (
-            criterion(target_features / z_std, z_mu / z_std) + z_log_var.sum()
-        ).mean()
+        loss = criterion(target_features / z_std, z_mu / z_std) + z_log_var.sum()
+        loss /= z_mu.numel()  # take mean
 
         total_loss += loss.item()
         loader_len += 1
@@ -140,8 +139,7 @@ def validate(
             F.mse_loss(target_features / z_std, z_mu / z_std, reduction="sum")
             + z_log_var.sum()
         )
-        print(loss.shape)
-        loss = loss.mean()
+        loss /= z_mu.numel()  # take mean
 
         total_loss += loss.item()
         loader_len += 1
