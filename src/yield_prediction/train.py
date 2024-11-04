@@ -64,7 +64,7 @@ def training_loop(
     logging.info(f"Total number of parameters: {total_params}")
     device = DEVICE
 
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss(reduction="sum")
     best_test_rmse = 999
 
     # Define the optimizer
@@ -97,12 +97,12 @@ def training_loop(
             outputs, weather_mu, weather_log_var = model(
                 input_data, return_weather_embed=True
             )
-            yield_loss = criterion(outputs, y)
+            yield_loss = criterion(outputs, y).mean()
             kl_div = (
                 criterion(weather_mu, torch.zeros_like(weather_mu))
-                # + torch.numel(weather_embeds)
-                + (torch.exp(weather_log_var) - weather_log_var).mean()
-            )
+                + torch.exp(weather_log_var)
+                - weather_log_var
+            ).mean()
 
             # logging.info(f"yield mse: {yield_loss.item():.4f}")
             # logging.info(f"kl div: {kl_div.item():.4f}")
