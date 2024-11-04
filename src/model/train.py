@@ -117,11 +117,18 @@ def validate(
         target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
         with torch.no_grad():
-            output = model((weather, coords, index), weather_feature_mask=target_mask)[
-                :, :, target_indices
-            ]
+            z_mu, z_log_var = model(
+                (weather, coords, index),
+                weather_feature_mask=target_mask,
+                return_log_var=True,
+            )
 
-        loss = F.mse_loss(target_features, output)
+        z_mu = z_mu[:, :, target_indices]  # batch_size x seq_len x num_target_indices
+
+        z_var = torch.exp(
+            z_log_var
+        )  # variance of the latent variable z shape batch_size x seq_len x 1
+        loss = F.mse_loss(target_features, z_mu / z_var) + torch.log(z_var).mean()
 
         total_loss += loss.item()
         loader_len += 1
