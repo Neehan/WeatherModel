@@ -70,10 +70,10 @@ def train(
 
         z_mu, z_log_var = (
             z_mu[:, :, target_indices],
-            z_log_var[:, :, target_indices],
+            z_log_var[:, :, target_indices].clamp(min=-10),
         )  # batch_size x seq_len x num_target_indices
 
-        loss = ((target_features - z_mu) ** 2) / torch.exp(z_log_var) + z_log_var
+        loss = ((target_features - z_mu) ** 2) * torch.exp(-z_log_var) + z_log_var
 
         # Take the mean over all elements (batch_size, seq_len, num_target_indices)
         loss = loss.mean()
@@ -128,9 +128,9 @@ def validate(
 
         z_mu, z_log_var = (
             z_mu[:, :, target_indices],
-            z_log_var[:, :, target_indices],
+            z_log_var[:, :, target_indices].clamp(min=-10),
         )  # batch_size x seq_len x num_target_indices
-        loss = ((target_features - z_mu) ** 2) / torch.exp(z_log_var) + z_log_var
+        loss = ((target_features - z_mu) ** 2) * torch.exp(-z_log_var) + z_log_var
 
         # Take the mean over all elements (batch_size, seq_len, num_target_indices)
         loss = loss.mean()
