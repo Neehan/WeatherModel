@@ -72,17 +72,11 @@ def train(
             z_mu[:, :, target_indices],
             z_log_var[:, :, target_indices],
         )  # batch_size x seq_len x num_target_indices
-        z_std = torch.exp(
-            z_log_var / 2
-        )  # variance of the latent variable z shape batch_size x seq_len x num_target_indices
 
-        reconstruction_loss = criterion(target_features / z_std, z_mu / z_std)
-        variance = z_log_var.mean()
+        loss = ((target_features - z_mu) ** 2) / torch.exp(z_log_var) + z_log_var
 
-        # logging.info(f"reconstruction loss: {reconstruction_loss.item():.4f}")
-        # logging.info(f"variance: {variance.item():.4f}")
-
-        loss = reconstruction_loss + variance
+        # Take the mean over all elements (batch_size, seq_len, num_target_indices)
+        loss = loss.mean()
 
         total_loss += loss.item()
         loader_len += 1
@@ -136,11 +130,10 @@ def validate(
             z_mu[:, :, target_indices],
             z_log_var[:, :, target_indices],
         )  # batch_size x seq_len x num_target_indices
-        z_std = torch.exp(
-            z_log_var / 2
-        )  # variance of the latent variable z shape batch_size x seq_len x 1
+        loss = ((target_features - z_mu) ** 2) / torch.exp(z_log_var) + z_log_var
 
-        loss = F.mse_loss(target_features / z_std, z_mu / z_std) + z_log_var.mean()
+        # Take the mean over all elements (batch_size, seq_len, num_target_indices)
+        loss = loss.mean()
 
         total_loss += loss.item()
         loader_len += 1
