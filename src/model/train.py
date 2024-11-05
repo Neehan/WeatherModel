@@ -79,8 +79,8 @@ def train(
         reconstruction_loss = criterion(target_features / z_std, z_mu / z_std)
         variance = z_log_var.mean()
 
-        logging.info(f"reconstruction loss: {reconstruction_loss.item():.4f}")
-        logging.info(f"variance: {variance.item():.4f}")
+        # logging.info(f"reconstruction loss: {reconstruction_loss.item():.4f}")
+        # logging.info(f"variance: {variance.item():.4f}")
 
         loss = reconstruction_loss + variance
 
