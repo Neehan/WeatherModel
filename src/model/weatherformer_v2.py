@@ -87,7 +87,6 @@ class Weatherformer(nn.Module):
         self.input_scaler = nn.Embedding(
             num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         )
-
         # torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
         # self.temporal_pos_encoding = nn.Embedding(
@@ -109,15 +108,13 @@ class Weatherformer(nn.Module):
             encoder_layer, num_layers=num_layers
         )
 
-        self.out_proj1 = nn.Linear(hidden_dim // 2, output_dim)
-        self.out_proj2 = nn.Linear(hidden_dim // 2, output_dim)
+        self.out_proj = nn.Linear(hidden_dim, output_dim)
 
     def forward(
         self,
         data,
         weather_feature_mask=None,  # n_features,
         src_key_padding_mask=None,  # batch_size x seq_len
-        return_log_var=False,
     ):
 
         weather, coords, temporal_index = data
@@ -143,9 +140,6 @@ class Weatherformer(nn.Module):
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask
         )
-        z_mu = self.out_proj1(weather[:, :, : weather.shape[2] // 2])
-        if return_log_var:
-            z_log_var = self.out_proj2(weather[:, :, weather.shape[2] // 2 :])
-            return z_mu, z_log_var
-        else:
-            return z_mu
+        weather = self.out_proj(weather)
+
+        return weather

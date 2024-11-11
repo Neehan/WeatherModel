@@ -1,6 +1,5 @@
 from tqdm import tqdm
 import numpy as np
-import math
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -62,21 +61,11 @@ def train(
         target_mask[target_indices] = True
         target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
-        z_mu, z_log_var = model(
-            (weather, coords, index),
-            weather_feature_mask=target_mask,
-            return_log_var=True,
-        )
+        output = model((weather, coords, index), weather_feature_mask=target_mask)[
+            :, :, target_indices
+        ]
 
-        z_mu, z_log_var = (
-            z_mu[:, :, target_indices],
-            z_log_var[:, :, target_indices].clamp(min=-10),
-        )  # batch_size x seq_len x num_target_indices
-
-        loss = ((target_features - z_mu) ** 2) * torch.exp(-z_log_var) + z_log_var
-
-        # Take the mean over all elements (batch_size, seq_len, num_target_indices)
-        loss = loss.mean()
+        loss = criterion(target_features, output)
 
         total_loss += loss.item()
         loader_len += 1
@@ -90,7 +79,7 @@ def train(
         optimizer.step()
     scheduler.step()
 
-    return total_loss / loader_len
+    return np.sqrt(total_loss / loader_len)
 
 
 def validate(
@@ -120,25 +109,16 @@ def validate(
         target_mask = target_mask.view(1, -1).expand(weather.shape[0], -1)
 
         with torch.no_grad():
-            z_mu, z_log_var = model(
-                (weather, coords, index),
-                weather_feature_mask=target_mask,
-                return_log_var=True,
-            )
+            output = model((weather, coords, index), weather_feature_mask=target_mask)[
+                :, :, target_indices
+            ]
 
-        z_mu, z_log_var = (
-            z_mu[:, :, target_indices],
-            z_log_var[:, :, target_indices].clamp(min=-10),
-        )  # batch_size x seq_len x num_target_indices
-        loss = ((target_features - z_mu) ** 2) * torch.exp(-z_log_var) + z_log_var
-
-        # Take the mean over all elements (batch_size, seq_len, num_target_indices)
-        loss = loss.mean()
+        loss = F.mse_loss(target_features, output)
 
         total_loss += loss.item()
         loader_len += 1
 
-    return total_loss / loader_len
+    return np.sqrt(total_loss / loader_len)
 
 
 def training_loop(

@@ -139,9 +139,6 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        # self.log_var = nn.Parameter(torch.ones(1) * (-4.0))
-        # self.log_var = torch.ones(1, device=DEVICE) * (-4.0)
-
         self.weather_transformer = Weatherformer(
             31, 48, max_len=SEQ_LEN, **weatherformer_size_params
         )
@@ -166,8 +163,6 @@ class YieldPredictor(nn.Module):
 
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
-        # self.weather_transformer.log_var = nn.Parameter(torch.ones(1) * (-4.0))
-
         self.weather_fc = nn.Sequential(
             nn.Linear(48 * SEQ_LEN, 120),
             # nn.ReLu()
@@ -181,7 +176,7 @@ class YieldPredictor(nn.Module):
         )
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 
-    def forward(self, input_data, return_weather_embed=False):
+    def forward(self, input_data):
         weather, practices, soil, year, coord, y_past, mask = input_data
 
         batch_size, n_years, n_features, seq_len = weather.size()
@@ -212,15 +207,10 @@ class YieldPredictor(nn.Module):
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
         temporal_index = torch.cat([year, temporal_gran], dim=1)
 
-        weather_mu, weather_log_var = self.weather_transformer(
+        weather = self.weather_transformer(
             (padded_weather, coord, temporal_index),
             weather_feature_mask=weather_feature_mask,
-            return_log_var=True,
         )
-
-        # Add Gaussian noise to weather features for regularization
-        noise = torch.randn_like(weather_mu) * torch.exp(0.5 * weather_log_var)
-        weather = weather_mu + noise
 
         weather = weather.view(batch_size * n_years, -1)
         weather = self.weather_fc(weather)
@@ -246,7 +236,4 @@ class YieldPredictor(nn.Module):
             combined, coord.view(batch_size, -1, 2)[:, -1, :], mask
         )
         out = self.fc1(combined)
-        if return_weather_embed:
-            return out, weather_mu, weather_log_var
-        else:
-            return out
+        return out
