@@ -1,5 +1,5 @@
-from ..model.model import Weatherformer
-from .constants import *
+from src.model.weatherformer_v2 import Weatherformer
+from src.yield_prediction.constants import *
 
 import torch
 import torch.nn as nn
@@ -38,7 +38,9 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pos_encoding", pos_encoding)
 
     def forward(
-        self, token_embedding: torch.tensor, coords: torch.tensor
+        self,
+        token_embedding: torch.tensor,
+        coords: torch.tensor,
     ) -> torch.tensor:
 
         batch_size, seq_len, d_model = token_embedding.shape
@@ -57,6 +59,7 @@ class PositionalEncoding(nn.Module):
         token_embedding = (
             token_embedding + self.pos_encoding[:seq_len, :].unsqueeze(0) + geo_pe
         )
+
         return token_embedding
 
 
@@ -108,7 +111,9 @@ class TransformerModel(nn.Module):
 
 
 class YieldPredictor(nn.Module):
-    def __init__(self, pretrained_weatherformer: Weatherformer = None):
+    def __init__(
+        self, pretrained_weatherformer: Weatherformer, weatherformer_size_params
+    ):
         super().__init__()
         self.soil_cnn = nn.Sequential(
             nn.Conv1d(
@@ -134,7 +139,9 @@ class YieldPredictor(nn.Module):
             nn.Linear(11 * 12, 40),
         )
 
-        self.weather_transformer = Weatherformer(31, 48, max_len=SEQ_LEN)
+        self.weather_transformer = Weatherformer(
+            31, 48, max_len=SEQ_LEN, **weatherformer_size_params
+        )
         if pretrained_weatherformer is not None:
             self.weather_transformer.in_proj = copy.deepcopy(
                 pretrained_weatherformer.in_proj
@@ -150,6 +157,12 @@ class YieldPredictor(nn.Module):
             )
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
+            # self.weather_transformer.temporal_pos_encoding = copy.deepcopy(
+            #     pretrained_weatherformer.temporal_pos_encoding
+            # )
+
+            self.weather_transformer.max_len = pretrained_weatherformer.max_len
+
         self.weather_fc = nn.Sequential(
             nn.Linear(48 * SEQ_LEN, 120),
             # nn.ReLu()
@@ -163,7 +176,8 @@ class YieldPredictor(nn.Module):
         )
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 
-    def forward(self, weather, soil, practices, year, coord, y_past, mask):
+    def forward(self, input_data):
+        weather, practices, soil, year, coord, y_past, mask = input_data
 
         batch_size, n_years, n_features, seq_len = weather.size()
         weather = weather.view(batch_size * n_years, -1, n_features)
@@ -194,9 +208,7 @@ class YieldPredictor(nn.Module):
         temporal_index = torch.cat([year, temporal_gran], dim=1)
 
         weather = self.weather_transformer(
-            padded_weather,
-            coord,
-            temporal_index,
+            (padded_weather, coord, temporal_index),
             weather_feature_mask=weather_feature_mask,
         )
 

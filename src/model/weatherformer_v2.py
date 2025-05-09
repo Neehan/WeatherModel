@@ -87,7 +87,7 @@ class Weatherformer(nn.Module):
         self.input_scaler = nn.Embedding(
             num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=input_dim, padding_idx=0
         )
-        torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
+        # torch.nn.init.constant_(self.input_scaler.weight.data, 1.0)
 
         # self.temporal_pos_encoding = nn.Embedding(
         #     num_embeddings=MAX_GRANULARITY_DAYS, embedding_dim=hidden_dim, padding_idx=0
@@ -112,21 +112,20 @@ class Weatherformer(nn.Module):
 
     def forward(
         self,
-        weather,
-        coords,
-        temporal_index,
+        data,
         weather_feature_mask=None,  # n_features,
         src_key_padding_mask=None,  # batch_size x seq_len
     ):
 
+        weather, coords, temporal_index = data
         batch_size, seq_len, n_features = weather.shape
 
         # temporal index is index in time and temporal granularity ()
         temporal_granularity = temporal_index[:, 1].int()
         temp_embedding = self.input_scaler(temporal_granularity)
 
-        # mask the masked dimensions and scale the rest
-        weather = weather * temp_embedding.view(batch_size, 1, n_features)
+        # add timescale embedding (basically weekly, monthly etc)
+        weather += temp_embedding.view(batch_size, 1, n_features)
         if weather_feature_mask is not None:
             # if the shape is batch_size x weather indices, keep the first copy
             if len(weather_feature_mask.shape) > 1:
@@ -137,9 +136,6 @@ class Weatherformer(nn.Module):
             # temp_embedding = (~weather_feature_mask).unsqueeze(0) * temp_embedding
 
         weather = self.in_proj(weather)
-        # add temporal positional encoding
-        # weather += self.temporal_pos_encoding(temporal_granularity).unsqueeze(1)
-
         weather = self.positional_encoding(weather, coords)
         weather = self.transformer_encoder(
             weather, src_key_padding_mask=src_key_padding_mask

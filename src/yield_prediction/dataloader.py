@@ -8,7 +8,7 @@ from .constants import *
 
 
 class CropDataset(Dataset):
-    def __init__(self, data, test_dataset=False, n_past_years=5):
+    def __init__(self, data, test_states, test_dataset=False, n_past_years=5):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
         soil_measurements = [
@@ -33,11 +33,11 @@ class CropDataset(Dataset):
         if test_dataset:  # test on missouri and kansas
             # test only final year
             self.index = data[
-                (data["State"] == "missouri") | (data["State"] == "kansas")
+                (data["State"] == test_states[0]) | (data["State"] == test_states[1])
             ][["year", "loc_ID"]].reset_index(drop=True)
         else:
             self.index = data[
-                (data["State"] != "missouri") & (data["State"] != "kansas")
+                (data["State"] != test_states[0]) & (data["State"] != test_states[1])
             ][["year", "loc_ID"]].reset_index(drop=True)
 
         self.data = []
@@ -99,7 +99,7 @@ class CropDataset(Dataset):
             # the current year's yield the target variable, so replace it with last year's yield
             y_past[-1] = y_past[-2]
 
-            self.data.append((weather, practices, soil, year, coord, y, y_past, mask))
+            self.data.append(((weather, practices, soil, year, coord, y_past, mask), y))
 
     def __len__(self):
         return 1000 if TEST_ENV else len(self.index)
@@ -113,6 +113,7 @@ class CropDataset(Dataset):
 
 def split_train_test_by_year(
     soybean_df: pd.DataFrame,
+    test_states,
     standardize: bool = True,
     n_past_years: int = 5,
 ):
@@ -136,10 +137,10 @@ def split_train_test_by_year(
     data = data.fillna(0)
 
     train_dataset = CropDataset(
-        data.copy(), test_dataset=False, n_past_years=n_past_years
+        data.copy(), test_states, test_dataset=False, n_past_years=n_past_years
     )
     test_dataset = CropDataset(
-        data.copy(), test_dataset=True, n_past_years=n_past_years
+        data.copy(), test_states, test_dataset=True, n_past_years=n_past_years
     )
 
     # Return the train and test datasets
@@ -156,9 +157,11 @@ def read_soybean_dataset(data_dir: str):
     return soybean_df
 
 
-def get_train_test_loaders(crop_df: pd.DataFrame, n_past_years: int, batch_size: int):
+def get_train_test_loaders(
+    crop_df: pd.DataFrame, test_states, n_past_years: int, batch_size: int
+):
     train_dataset, test_dataset = split_train_test_by_year(
-        crop_df, True, n_past_years=n_past_years
+        crop_df, test_states, True, n_past_years=n_past_years
     )
 
     train_loader = train_dataset.get_data_loader(batch_size=batch_size)

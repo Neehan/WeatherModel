@@ -1,4 +1,5 @@
 import requests
+import pandas as pd
 from datetime import datetime, timedelta
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -7,8 +8,7 @@ import time
 import os
 from grids import GRID
 
-PART1 = True
-REGION = "SOUTHAMERICA"  # "USA", "MEXICO" or "CANADA"
+REGION = "CENTRALAMERICA"  # "USA", "CENTRALAMERICA", "CANADA" or "SOUTHAMERICA"
 
 
 WEATHER_PARAMS = {
@@ -26,7 +26,7 @@ WEATHER_PARAMS = {
     "Snow Depth (cm)": "SNODP",
     "Dew/Frost Point at 2 Meters (C)": "T2MDEW",
     "Cloud Amount (%)": "CLOUD_AMT",
-    # additional 14
+    # part 2
     "Evaporation Land (kg/m^2/s * 10^6)": "EVLAND",
     "Wet Bulb Temperature at 2 Meters (C)": "T2MWET",
     "Land Snowcover Fraction (0 to 1)": "FRSNO",
@@ -43,13 +43,6 @@ WEATHER_PARAMS = {
     "Aerosol Optical Depth 55": "AOD_55",
 }
 
-if PART1:
-    WEATHER_PARAMS = dict(list(WEATHER_PARAMS.items())[:14])
-else:
-    WEATHER_PARAMS = dict(list(WEATHER_PARAMS.items())[14:])
-
-
-WEATHER_PARAMS = ",".join(WEATHER_PARAMS.values())
 SAVE_DIR = "data/nasa_power"
 
 
@@ -96,7 +89,7 @@ def save_data_chunk(state_name, result, counter):
         file.close()
 
 
-def consolidate_data(state_name, total_chunks):
+def consolidate_data(state_name, total_chunks, part1):
     all_data = []
 
     # Read and consolidate all the data chunks
@@ -105,14 +98,21 @@ def consolidate_data(state_name, total_chunks):
         with open(file_name, "r") as file:
             all_data.append(json.load(file))
     # Save consolidated data for the state
-    suffix = "" if PART1 else "_pt2"
+    suffix = "" if part1 else "_pt2"
     with open(f"{SAVE_DIR}/{state_name}_data{suffix}.json", "w") as file:
         json.dump(all_data, file)
 
 
-def fetch_weather_for_state(
-    state_name, latitude_min, latitude_max, longitude_min, longitude_max
+def fetch_weather_for_region(
+    state_name, latitude_min, latitude_max, longitude_min, longitude_max, part1
 ):
+
+    if part1:
+        weather_params = dict(list(WEATHER_PARAMS.items())[:14])
+    else:
+        weather_params = dict(list(WEATHER_PARAMS.items())[14:])
+
+    weather_params = ",".join(weather_params.values())
 
     start_date = datetime.strptime("19840101", "%Y%m%d")
     end_date = datetime.strptime("20221231", "%Y%m%d")
@@ -128,7 +128,7 @@ def fetch_weather_for_state(
                 "latitude-max": latitude_max,
                 "longitude-min": longitude_min,
                 "longitude-max": longitude_max,
-                "parameters": WEATHER_PARAMS,
+                "parameters": weather_params,
                 "community": "AG",
                 "start": start.strftime("%Y%m%d"),
                 "end": end.strftime("%Y%m%d"),
@@ -142,7 +142,7 @@ def fetch_weather_for_state(
                 save_data_chunk(state_name, result, chunk_counter)
                 chunk_counter += 1
 
-    consolidate_data(state_name, chunk_counter)
+    consolidate_data(state_name, chunk_counter, part1)
 
     # Now that data is consolidated, remove individual chunks
     for counter in range(chunk_counter):
@@ -150,43 +150,42 @@ def fetch_weather_for_state(
         os.remove(file_name)
 
 
-def get_coordinates(coord_map, region_name, is_usa):
-    if is_usa:  # this is USA
-        longs, lats = zip(*coord_map[region_name])
-        latitude_min, latitude_max = min(lats), max(lats)
-        latitude_min = min(latitude_min, latitude_max - 2)
-        latitude_min = max(latitude_min, latitude_max - 8)
+def get_coordinates(coord_map, region_name):
 
-        longitude_min, longitude_max = min(longs), max(longs)
-        longitude_min = min(longitude_min, longitude_max - 2)
-        longitude_min = max(longitude_min, longitude_max - 8)
-    else:
-        region_id = int(region_name.split("_")[1])
-        (latitude_max, longitude_min), (latitude_min, longitude_max) = coord_map[
-            region_id
-        ]
-    # print(latitude_min, latitude_max, longitude_min, longitude_max)
+    region_id = int(region_name.split("_")[1])
+    (latitude_max, longitude_min), (latitude_min, longitude_max) = coord_map[region_id]
     return latitude_min, latitude_max, longitude_min, longitude_max
 
 
 if __name__ == "__main__":
-    if REGION == "USA":
-        with open("data/state_coords.json", "r") as f:
-            region_coords = json.load(f)
-            f.close()
-        region_names = GRID["USA"]
-    else:
-        region_coords = GRID[REGION]
-        region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
+    region_coords = GRID[REGION]
+    region_names = [f"{REGION.lower()}_{i}" for i in range(len(region_coords))]
 
-    for region_name in region_names:
-        print(f"fetching weather for {region_name}.")
+    for i, region_name in enumerate(region_names):
         latitude_min, latitude_max, longitude_min, longitude_max = get_coordinates(
-            region_coords, region_name, is_usa=(REGION == "USA")
+            region_coords, region_name
         )
         print(f"latitude  range: {latitude_min:.2f}, {latitude_max:.2f}")
         print(f"longitude range: {longitude_min:.2f}, {longitude_max:.2f}")
 
-        fetch_weather_for_state(
-            region_name, latitude_min, latitude_max, longitude_min, longitude_max
+        print(f"fetching weather for {region_name} Part 1.")
+
+        fetch_weather_for_region(
+            region_name,
+            latitude_min,
+            latitude_max,
+            longitude_min,
+            longitude_max,
+            part1=True,
+        )
+
+        print(f"fetching weather for {region_name} Part 2.")
+
+        fetch_weather_for_region(
+            region_name,
+            latitude_min,
+            latitude_max,
+            longitude_min,
+            longitude_max,
+            part1=False,
         )

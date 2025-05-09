@@ -4,169 +4,74 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import TensorDataset
 import json
+from grids import GRID
+from constants import *
 
-MAX_LENGTH = 180
+MAX_LENGTH = 365
 
-# FREQUENCY = "daily"
-# FREQUENCY_DAYS = 1
-# SEQUENCE_LEN = 365
-
-# FREQUENCY = "weekly"
-# FREQUENCY_DAYS = 7
-# SEQUENCE_LEN = 52
-
-FREQUENCY = "monthly"
-FREQUENCY_DAYS = 30
-SEQUENCE_LEN = 12
-
-FILE_SUFFIX = FREQUENCY
-NUM_YEARS = 39
-
-WEATHER_PARAMS = {
-    "Temperature at 2 Meters (C)": "T2M",
-    "Temperature at 2 Meters Maximum (C)": "T2M_MAX",
-    "Temperature at 2 Meters Minimum (C)": "T2M_MIN",
-    "Wind Direction at 2 Meters (Degrees)": "WD2M",
-    "Wind Speed at 2 Meters (m/s)": "WS2M",
-    "Surface Pressure (kPa)": "PS",
-    "Specific Humidity at 2 Meters (g/Kg)": "QV2M",
-    "Precipitation Corrected (mm/day)": "PRECTOTCORR",
-    "All Sky Surface Shortwave Downward Irradiance (MJ/m^2/day)": "ALLSKY_SFC_SW_DWN",
-    "Evapotranspiration Energy Flux (MJ/m^2/day)": "EVPTRNS",
-    "Profile Soil (the layer from the surface down to the bedrock) Moisture (0 to 1)": "GWETPROF",
-    "Snow Depth (cm)": "SNODP",
-    "Dew/Frost Point at 2 Meters (C)": "T2MDEW",
-    "Cloud Amount (%)": "CLOUD_AMT",
-    # additional 14
-    "Evaporation Land (kg/m^2/s * 10^6)": "EVLAND",
-    "Wet Bulb Temperature at 2 Meters (C)": "T2MWET",
-    "Land Snowcover Fraction (0 to 1)": "FRSNO",
-    "All Sky Surface Longwave Downward Irradiance (MJ/m^2/day)": "ALLSKY_SFC_LW_DWN",
-    "All Sky Surface PAR Total (MJ/m^2/day)": "ALLSKY_SFC_PAR_TOT",
-    "All Sky Surface Albedo (0 to 1)": "ALLSKY_SRF_ALB",
-    "Precipitable Water (cm)": "PW",
-    "Surface Roughness (m)": "Z0M",
-    "Surface Air Density (kg/m^3) ": "RHOA",
-    "Relative Humidity at 2 Meters (%)": "RH2M",
-    "Cooling Degree Days Above 18.3 C": "CDD18_3",
-    "Heating Degree Days Below 18.3 C": "HDD18_3",
-    "Total Column Ozone (Dobson units)": "TO3",
-    "Aerosol Optical Depth 55": "AOD_55",
+TIME_PARAMS = {
+    # weekly must be first cause we save their stds
+    "weekly": {
+        "frequency": 7,
+        "sequence_length": 52,
+    },
+    "daily": {
+        "frequency": 1,
+        "sequence_length": 365,
+    },
+    "monthly": {
+        "frequency": 30,
+        "sequence_length": 12,
+    },
 }
-
-WEATHER_PARAMS = list(WEATHER_PARAMS.values()) + ["ET0", "VAP", "VPD"]
 
 np.random.seed(1234)
 torch.manual_seed(1234)
 torch.use_deterministic_algorithms(True)
 
 DATA_DIR = "data/nasa_power"
-CORN_BELT = [
-    # Corn Belt
-    "Illinois",
-    "Indiana",
-    "Iowa",
-    "Kansas",
-    "Kentucky",
-    "Michigan",
-    "Minnesota",
-    "Missouri",
-    "Nebraska",
-    "North Dakota",
-    "Ohio",
-    "South Dakota",
-    "Wisconsin",
-    # neighbors corn belt
-    "West Virginia",
-    "Virginia",
-    "North Carolina",
-    "Tennessee",
-    "Arkansas",
-    "Oklahoma",
-    "Colorado",
-    "Wyoming",
-    "Montana",
-    "Pennsylvania",
-    # rest of continental US
-    "Alabama",
-    "Arizona",
-    "California",
-    "Connecticut",
-    "Delaware",
-    "Florida",
-    "Georgia",
-    "Idaho",
-    "Louisiana",
-    "Maine",
-    "Maryland",
-    "Massachusetts",
-    "Mississippi",
-    "Nevada",
-    "New Hampshire",
-    "New Jersey",
-    "New Mexico",
-    "New York",
-    "Oregon",
-    "Rhode Island",
-    "South Carolina",
-    "Texas",
-    "Utah",
-    "Vermont",
-    "Washington",
+REGIONS = [
+    f"{region.lower()}_{i}"
+    for region, coords in GRID.items()
+    for i, _ in enumerate(coords)
+    if region == "CENTRALAMERICA"
 ]
 
 
-def read_and_concatenate_csv(file_paths):
-    """
-    Read multiple CSV files and concatenate them into a single DataFrame.
-    """
-    weather_dfs = [pd.read_csv(file, index_col=False) for file in tqdm(file_paths)]
-    return pd.concat(weather_dfs, ignore_index=True).drop_duplicates(
-        subset=["Year", "lat", "lng"]
-    )
-
-
-def preprocess_data(weather_df):
+def preprocess_data(weather_df, sequence_len):
     """
     Preprocess the DataFrame: drop duplicates and standardize columns.
     """
     print("Standardizing the columns.")
-    if FREQUENCY == "weekly":
-        param_means = dict()
-        param_stds = dict()
-    else:
-        with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
-            scalers = json.load(f)
-            param_means, param_stds = scalers["param_means"], scalers["param_stds"]
-            f.close()
+
+    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "r") as f:
+        scalers = json.load(f)
+        param_means, param_stds = scalers["param_means"], scalers["param_stds"]
+        f.close()
 
     for param in tqdm(WEATHER_PARAMS):
-        weather_cols = [f"{param}_{i}" for i in range(1, SEQUENCE_LEN + 1)]
-        if FREQUENCY == "weekly":
-            param_mean = weather_df[weather_cols].values.mean()
-            param_std = weather_df[weather_cols].values.std()
-            param_means[param] = param_mean
-            param_stds[param] = param_std
-        else:
-            param_mean = param_means[param]
-            param_std = param_stds[param]
+        weather_cols = [f"{param}_{i}" for i in range(1, sequence_len + 1)]
+        param_mean = param_means[param]
+        param_std = param_stds[param]
 
         weather_df[weather_cols] = (weather_df[weather_cols] - param_mean) / param_std
-
-    with open(DATA_DIR + f"/processed/weather_param_scalers.json", "w") as f:
-        json.dump({"param_means": param_means, "param_stds": param_stds}, f)
-        f.close()
 
     print("Sorting by location and year")
     weather_df = weather_df.sort_values(by=["lat", "lng", "Year"])
     return weather_df
 
 
-def create_dataset(weather_df):
-    seq_len = SEQUENCE_LEN
-    weather_measurements = weather_df[
-        [f"{param}_{i}" for i in range(1, seq_len + 1) for param in WEATHER_PARAMS]
-    ].values.reshape(-1, NUM_YEARS * seq_len, len(WEATHER_PARAMS))
+def create_dataset(weather_df, seq_len, frequency_days):
+    weather_params = [
+        f"{param}_{i}" for i in range(1, seq_len + 1) for param in WEATHER_PARAMS
+    ]
+    weather_measurements = np.transpose(
+        weather_df[weather_params].values.reshape(
+            (-1, NUM_YEARS, len(WEATHER_PARAMS), seq_len)
+        ),
+        # locs x years x seq len x num weather vars
+        (0, 1, 3, 2),
+    ).reshape(-1, NUM_YEARS * seq_len, len(WEATHER_PARAMS))
 
     # now reshape to have MAX_LENGTH
     num_segments = NUM_YEARS * seq_len // MAX_LENGTH
@@ -191,7 +96,7 @@ def create_dataset(weather_df):
     # we need an index
     index = np.repeat(np.arange(num_segments)[None, :, None], num_regions, axis=0)
     # daily, weekly, monthly etc
-    data_frequency = FREQUENCY_DAYS * np.ones((num_regions, num_segments, 1))
+    data_frequency = frequency_days * np.ones((num_regions, num_segments, 1))
     index = np.stack([index, data_frequency], axis=2).reshape(-1, 2)
 
     # Converting to tensors
@@ -199,49 +104,50 @@ def create_dataset(weather_df):
     coords_tensor = torch.tensor(coords, dtype=torch.float32)
     index_tensor = torch.tensor(index, dtype=torch.float32)
 
-    # print("weather tensor shape: ", weather_tensor.shape)
-    # print("coords tensor shape: ", coords_tensor.shape)
-    # print("index tensor shape: ", index_tensor.shape)
-
     return TensorDataset(weather_tensor, coords_tensor, index_tensor)
 
 
-def save_dataset(train_dataset, part_id, file_path):
+def save_dataset(train_dataset, filename, file_path):
     """
     Save the DataLoaders for future use.
     """
     torch.save(
         train_dataset,
-        file_path + f"/processed/weather_dataset_{FILE_SUFFIX}_{part_id}.pth",
+        file_path + filename,
     )
 
 
 if __name__ == "__main__":
-    # input_paths = [
-    #     f"{DATA_DIR}/{state}_regional_{FILE_SUFFIX}.csv" for state in CORN_BELT
-    # ]
 
-    print("reading weather datasets")
-    weather_df = pd.read_csv(
-        DATA_DIR + f"/united_states_weather_{FILE_SUFFIX}.csv", index_col=[0]
-    )
-    # weather_df = read_and_concatenate_csv(input_paths)
+    for frequency in TIME_PARAMS.keys():
+        frequency_days = TIME_PARAMS[frequency]["frequency"]
+        sequence_len = TIME_PARAMS[frequency]["sequence_length"]
+        file_suffix = frequency
 
-    # print("saving the merged dataset")
-    # weather_df.to_csv(DATA_DIR + f"/united_states_weather_{FILE_SUFFIX}.csv")
+        print(f"processing {frequency} weather data")
 
-    print("preprocessing.")
-    weather_df = preprocess_data(weather_df)
+        file_id = 109  # up to 33 is us and south am data
 
-    assert (
-        len(weather_df) % NUM_YEARS == 0
-    ), "dataset length is not divisible by number of years"
-    dataset_length = len(weather_df)
+        for region_id in REGIONS:
+            region_name = region_id.split("_")[0].upper()
 
-    print("creating dataset.")
-    for start_index in tqdm(range(0, dataset_length, 500 * NUM_YEARS)):
-        part_id = start_index // (500 * NUM_YEARS)
-        end_index = min(dataset_length, start_index + 500 * NUM_YEARS)
-        train_dataset = create_dataset(weather_df.iloc[start_index:end_index])
-        save_dataset(train_dataset, part_id, DATA_DIR)
-    # train_dataset, val_dataset = torch.utils.data.random_split(dataset, [0.95, 0.05])
+            print(f"reading weather dataset for {region_id.upper()}")
+
+            weather_df = pd.read_csv(
+                f"{DATA_DIR}/csvs/{region_id}_regional_{file_suffix}.csv",
+                index_col=False,
+            )
+
+            print("preprocessing.")
+            weather_df = preprocess_data(weather_df, sequence_len)
+
+            assert (
+                len(weather_df) % NUM_YEARS == 0
+            ), "dataset length is not divisible by number of years"
+            dataset_length = len(weather_df)
+
+            print("creating dataset.")
+            train_dataset = create_dataset(weather_df, sequence_len, frequency_days)
+            filename = f"/processed/weather_dataset_{file_suffix}_{file_id}.pt"
+            save_dataset(train_dataset, filename, DATA_DIR)
+            file_id = file_id + 1
