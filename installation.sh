@@ -15,7 +15,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda create -n weather python=3.10 -y
 
 # Activate the new environment
-conda activate weather
+conda activate weather && conda install -c pytorch pytorch -y && pip install -r requirements.txt
 
-# Install PyTorch, transformers and datasets in the new environment
-conda install pytorch transformers datasets torch-lr-finder python-dotenv matplotlib pandas -c pytorch -y
+mkdir -p data/nasa_power/pytorch
+python data_downloader.py

@@ -122,7 +122,7 @@ def preprocess_weather_data(region_name, frequency):
     last_cols = [col for col in weather_df.columns if col.endswith(last_suffix)]
     weather_df.drop(columns=last_cols, inplace=True)
     weather_df = weather_df.bfill()
-    weather_df = weather_df.fillna(method="pad", axis=1)
+    weather_df = weather_df.fillna(method="pad", axis=1)  # type: ignore
     weather_df["region"] = region_name
 
     weather_df.reset_index(inplace=True, drop=True)
