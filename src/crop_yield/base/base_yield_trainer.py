@@ -6,6 +6,7 @@ import time
 from typing import Tuple, Optional
 from src.models.base_model import BaseModel
 from src.pretraining.base.base_trainer import BaseTrainer
+from src.pretraining.base.find_optimal_lr import find_optimal_lr
 from src.utils.constants import DATA_DIR
 import os
 
@@ -109,7 +110,11 @@ class BaseYieldTrainer(BaseTrainer):
         return rmse
 
     def train(
-        self, train_loader, test_loader, num_epochs: int = 20
+        self,
+        train_loader,
+        test_loader,
+        num_epochs: int = 20,
+        use_optimal_lr: bool = True,
     ) -> Tuple[nn.Module, float]:
         """
         Main training loop.
@@ -122,6 +127,18 @@ class BaseYieldTrainer(BaseTrainer):
         Returns:
             Tuple of (trained_model, best_test_rmse)
         """
+        # Find optimal learning rate if enabled
+        if use_optimal_lr:
+            self.logger.info("Finding optimal learning rate...")
+            optimal_lr = find_optimal_lr(self, train_loader)
+
+            # Update optimizer with optimal learning rate
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = optimal_lr
+            self.logger.info(
+                f"Updated learning rate to optimal value: {optimal_lr:.6f}"
+            )
+
         best_test_rmse = float("inf")
 
         for epoch in range(num_epochs):

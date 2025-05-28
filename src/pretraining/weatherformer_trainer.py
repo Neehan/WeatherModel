@@ -28,14 +28,12 @@ class WeatherFormerTrainer(BaseTrainer):
         batch_size,
         num_input_features,
         num_output_features,
-        num_feature_swaps,
         beta,
         **kwargs,
     ):
         super().__init__(model, batch_size, **kwargs)
         self.num_input_features = num_input_features
         self.num_output_features = num_output_features
-        self.num_feature_swaps = num_feature_swaps
         self.beta = beta  # Hyperparameter controlling reconstruction vs regularization trade-off
 
         # Initialize feature indices for swapping
@@ -44,56 +42,6 @@ class WeatherFormerTrainer(BaseTrainer):
 
     def get_model_name(self) -> str:
         return "weatherformer"
-
-    def create_feature_mask(
-        self, batch_size: int, seq_len: int, n_features: int
-    ) -> torch.Tensor:
-        """
-        Create feature mask using the swap features strategy.
-        This masks entire features across the sequence length dimension.
-        """
-        # Swap features to create new masking pattern
-        self._swap_features(
-            self.weather_indices, self.num_input_features, k=self.num_feature_swaps
-        )
-
-        # Target indices are the "output" features that we'll predict
-        target_indices = self.weather_indices[self.num_input_features :]
-
-        # Create mask tensor - True where features should be masked
-        target_mask = torch.zeros(
-            TOTAL_WEATHER_VARS, dtype=torch.bool, device=self.device
-        )
-        target_mask[target_indices] = True
-
-        # Expand mask to match batch and sequence dimensions
-        # Shape: (batch_size, seq_len, n_features)
-        weather_feature_mask = target_mask.view(1, 1, -1).expand(
-            batch_size, seq_len, -1
-        )
-
-        return weather_feature_mask
-
-    def _swap_features(self, weather_indices, num_input_features, k=1):
-        """
-        Swap k indices between input and output features.
-        This creates the masking pattern for WeatherFormer training.
-        """
-        num_output_indices = len(weather_indices) - num_input_features
-        k = min(k, num_input_features, num_output_indices)
-
-        # Generate 'k' random indices from the first part of the array (input features)
-        input_indices = torch.randperm(num_input_features)[:k]
-
-        # Generate 'k' random indices from the second part of the array (output features)
-        output_indices = num_input_features + torch.randperm(num_output_indices)[:k]
-
-        # Perform the swaps
-        weather_indices[input_indices], weather_indices[output_indices] = (
-            weather_indices[output_indices].clone(),
-            weather_indices[input_indices].clone(),
-        )
-        return weather_indices
 
     def compute_elbo_loss(
         self,
@@ -141,20 +89,16 @@ class WeatherFormerTrainer(BaseTrainer):
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute WeatherFormer training loss using VAE-style loss function."""
-        # Get target indices for the current swap configuration
-        target_indices = self.weather_indices[self.num_input_features :]
-
-        # Extract target features (ground truth)
-        target_features = weather[:, :, target_indices]
 
         # Get model predictions (mu, sigma)
         mu, sigma = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Extract predictions for target indices only
-        predicted_mu = mu[:, :, target_indices]
-        predicted_sigma = sigma[:, :, target_indices]
+        # Extract target features and predictions for masked positions only
+        target_features = weather[feature_mask]
+        predicted_mu = mu[feature_mask]
+        predicted_sigma = sigma[feature_mask]
 
         # Compute VAE loss
         loss = self.compute_elbo_loss(target_features, predicted_mu, predicted_sigma)
@@ -170,26 +114,16 @@ class WeatherFormerTrainer(BaseTrainer):
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute WeatherFormer validation loss using VAE-style loss function."""
-        # Use a clone of weather_indices to avoid modifying the training state
-        validation_indices = self.weather_indices.clone()
-        self._swap_features(
-            validation_indices, self.num_input_features, k=self.num_feature_swaps
-        )
-
-        # Get target indices for validation
-        target_indices = validation_indices[self.num_input_features :]
-
-        # Extract target features (ground truth)
-        target_features = weather[:, :, target_indices]
 
         # Get model predictions (mu, sigma)
         mu, sigma = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Extract predictions for target indices only
-        predicted_mu = mu[:, :, target_indices]
-        predicted_sigma = sigma[:, :, target_indices]
+        # Extract target features and predictions for masked positions only
+        target_features = weather[feature_mask]
+        predicted_mu = mu[feature_mask]
+        predicted_sigma = sigma[feature_mask]
 
         # Compute VAE loss
         loss = self.compute_elbo_loss(target_features, predicted_mu, predicted_sigma)
@@ -206,7 +140,6 @@ def weatherformer_training_loop(
     init_lr=1e-4,
     num_warmup_epochs=5,
     decay_factor=0.95,
-    num_feature_swaps=1,
     beta=0.1,
 ):
     """
@@ -220,8 +153,8 @@ def weatherformer_training_loop(
         init_lr=init_lr,
         num_warmup_epochs=num_warmup_epochs,
         decay_factor=decay_factor,
-        num_feature_swaps=num_feature_swaps,
         beta=beta,
+        masking_function="weatherformer",
     )
 
     return trainer.train(num_epochs)
@@ -250,6 +183,5 @@ if __name__ == "__main__":
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
-        num_feature_swaps=args_dict["n_feature_swaps"],
         beta=args_dict.get("beta", 0.1),  # Default beta value if not provided
     )

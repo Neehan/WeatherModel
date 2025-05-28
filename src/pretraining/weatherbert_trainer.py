@@ -120,6 +120,7 @@ def bert_training_loop(
         num_warmup_epochs=num_warmup_epochs,
         decay_factor=decay_factor,
         mask_percent=mask_percent,
+        masking_function="weatherbert",
     )
 
     return trainer.train(num_epochs)

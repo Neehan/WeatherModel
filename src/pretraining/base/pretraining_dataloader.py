@@ -25,12 +25,52 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         num_input_features=None,
         num_output_features=None,
         shuffle=False,
+        masking_function: Optional[str] = None,
+        masking_prob: float = 0.15,
+        n_masked_features: int = 1,
     ):
 
         self.file_paths = file_paths
         self.num_input_features = num_input_features
         self.num_output_features = num_output_features
         self.shuffle = shuffle
+        self.masking_prob = masking_prob
+        self.n_masked_features = n_masked_features
+        if masking_function == "weatherbert":
+            self.masking_function = self.weatherbert_masking_function
+        elif masking_function == "weatherformer":
+            self.masking_function = self.weatherformer_masking_function
+        else:
+            raise ValueError(f"Masking function {masking_function} is not valid")
+
+    def weatherbert_masking_function(self, seq_len, n_features):
+        """
+        BERT-style masking for weather data.
+        Randomly masks features across the sequence based on masking_prob.
+        """
+        # Generate random probabilities for all positions at once
+        random_probs = torch.rand(seq_len, n_features)
+
+        # Create mask where random probability is less than masking probability
+        mask = random_probs < self.masking_prob
+
+        return mask
+
+    def weatherformer_masking_function(self, seq_len, n_features):
+        """
+        WeatherFormer-style masking for weather data.
+        Masks n_masked_features completely across all timesteps.
+        """
+        # Create mask initialized to False (no masking)
+        mask = torch.zeros(seq_len, n_features, dtype=torch.bool)
+
+        # Randomly select n_masked_features to mask completely
+        masked_feature_indices = torch.randperm(n_features)[: self.n_masked_features]
+
+        # Mask the selected features across all timesteps
+        mask[:, masked_feature_indices] = True
+
+        return mask
 
     def __iter__(self):
         # Process files in groups of 3 (monthly, weekly, daily with different indices)
@@ -56,7 +96,15 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                         1984 + (temporal_index * interval.int() // 365).int()
                     ).float()
 
-                    all_samples.append((weather, coords, year, interval))
+                    # Apply masking function if provided
+                    if self.masking_function is not None:
+                        seq_len, n_features = weather.size()
+                        feature_mask = self.masking_function(seq_len, n_features)
+                        all_samples.append(
+                            (weather, coords, year, interval, feature_mask)
+                        )
+                    else:
+                        all_samples.append((weather, coords, year, interval))
 
             # Shuffle all samples from this chunk if shuffle is enabled
             if self.shuffle:
@@ -73,31 +121,6 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 )
 
 
-class MaskingCollate:
-    """Pickleable collate function that applies masking after batching."""
-
-    def __init__(self, masking_function: Optional[Callable] = None):
-        self.masking_function = masking_function
-
-    def __call__(self, batch):
-        # Separate the elements
-        weather_list, coords_list, year_list, interval_list = zip(*batch)
-
-        # Stack into batches
-        weather = torch.stack(weather_list)
-        coords = torch.stack(coords_list)
-        year = torch.stack(year_list)
-        interval = torch.stack(interval_list)
-
-        # Apply masking function if provided
-        if self.masking_function is not None:
-            batch_size, seq_len, n_features = weather.size()
-            feature_mask = self.masking_function(batch_size, seq_len, n_features)
-            return weather, coords, year, interval, feature_mask
-        else:
-            return weather, coords, year, interval
-
-
 def streaming_dataloader(
     batch_size,
     split="train",
@@ -105,7 +128,7 @@ def streaming_dataloader(
     lr_finder=False,
     num_input_features=None,
     num_output_features=None,
-    masking_function: Optional[Callable] = None,
+    masking_function: Optional[str] = None,
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
@@ -149,15 +172,8 @@ def streaming_dataloader(
         num_input_features=num_input_features,
         num_output_features=num_output_features,
         shuffle=shuffle,
+        masking_function=masking_function,
     )
-
-    # Create pickleable collate function with masking
-    collate_fn = MaskingCollate(masking_function)
-
     return torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        collate_fn=collate_fn,
-        num_workers=0,
-        pin_memory=True,
+        dataset, batch_size=batch_size, pin_memory=True, num_workers=4
     )

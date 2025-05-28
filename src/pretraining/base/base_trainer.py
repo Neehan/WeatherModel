@@ -9,6 +9,7 @@ import json
 from typing import Dict, List, Any, Tuple, Optional
 import time
 from src.pretraining.base.pretraining_dataloader import streaming_dataloader
+from src.pretraining.base.find_optimal_lr import find_optimal_lr
 from src.utils import utils
 from src.utils.constants import DATA_DIR, DEVICE, DRY_RUN
 from src.models.base_model import BaseModel
@@ -29,6 +30,7 @@ class BaseTrainer(ABC):
         decay_factor: float = 0.95,
         log_interval_seconds: int = 10,
         pretrained_model_path: Optional[str] = None,
+        masking_function: Optional[str] = None,
     ):
         self.model = model
         self.batch_size = batch_size
@@ -42,7 +44,7 @@ class BaseTrainer(ABC):
         self.scheduler = utils.get_scheduler(
             self.optimizer, num_warmup_epochs, decay_factor
         )
-
+        self.masking_function = masking_function
         # Training state
         self.logger = logging.getLogger(__name__)
 
@@ -69,25 +71,6 @@ class BaseTrainer(ABC):
         if pretrained_model_path and os.path.exists(pretrained_model_path):
             pretrained_model = torch.load(pretrained_model_path, weights_only=False)
             self.model.load_pretrained(pretrained_model)
-
-    # --- Abstract Methods ---
-    @abstractmethod
-    def create_feature_mask(
-        self, batch_size: int, seq_len: int, n_features: int
-    ) -> torch.Tensor:
-        """
-        Create a feature mask for the current training step.
-        Children classes must implement this method based on their specific masking strategy.
-
-        Args:
-            batch_size: Batch size
-            seq_len: Sequence length
-            n_features: Number of weather features
-
-        Returns:
-            Boolean mask tensor
-        """
-        pass
 
     @abstractmethod
     def compute_train_loss(
@@ -226,7 +209,9 @@ class BaseTrainer(ABC):
         with open(self.model_dir + filename, "w") as f:
             json.dump(self.output_json, f, indent=2)
 
-    def train(self, num_epochs: int) -> Tuple[BaseModel, Dict[str, List[float]]]:
+    def train(
+        self, num_epochs: int, use_optimal_lr: bool = True
+    ) -> Tuple[BaseModel, Dict[str, List[float]]]:
         """
         Main training loop.
 
@@ -236,19 +221,37 @@ class BaseTrainer(ABC):
         Returns:
             Tuple of (trained_model, losses_dict)
         """
+        # Find optimal learning rate if enabled
+        if use_optimal_lr:
+            self.logger.info("Finding optimal learning rate...")
+            train_loader = streaming_dataloader(
+                self.batch_size,
+                split="train",
+                shuffle=True,
+                masking_function=self.masking_function,
+            )
+            optimal_lr = find_optimal_lr(self, train_loader)
+
+            # Update optimizer with optimal learning rate
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = optimal_lr
+            self.logger.info(
+                f"Updated learning rate to optimal value: {optimal_lr:.6f}"
+            )
+
         for epoch in range(num_epochs):
             train_loader = streaming_dataloader(
                 self.batch_size,
                 split="train",
                 shuffle=True,
-                masking_function=self.create_feature_mask,
+                masking_function=self.masking_function,
             )
 
             test_loader = streaming_dataloader(
                 self.batch_size,
                 split="validation",
                 shuffle=False,
-                masking_function=self.create_feature_mask,
+                masking_function=self.masking_function,
             )
 
             train_loss = self.train_epoch(train_loader)

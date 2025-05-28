@@ -12,12 +12,6 @@ parser.add_argument(
 parser.add_argument(
     "--n-epochs", help="number of training epochs", default=75, type=int
 )
-parser.add_argument(
-    "--n-feature-swaps",
-    help="number of features to swap per batch",
-    default=1,
-    type=int,
-)
 parser.add_argument("--init-lr", help="initial learning rate", default=1e-6, type=float)
 parser.add_argument(
     "--n-warmup-epochs", help="number of warm-up epochs", default=10, type=float
