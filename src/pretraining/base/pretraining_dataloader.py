@@ -115,10 +115,13 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 # print(f"year: {sample[2]}, interval: {sample[3]}, coords: {sample[1]}")
                 yield sample
 
+            # Only log from main process (worker_id 0 or None)
             if (i // 3) % 5 == 0:
-                logger.info(
-                    f"Dataloader iterated over [{(i//3)+1}/{len(self.file_paths)//3}] chunks"
-                )
+                worker_info = torch.utils.data.get_worker_info()
+                if worker_info is None or worker_info.id == 0:
+                    logger.info(
+                        f"Dataloader iterated over [{(i//3)+1}/{len(self.file_paths)//3}] chunks"
+                    )
 
 
 def streaming_dataloader(
