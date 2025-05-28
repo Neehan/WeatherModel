@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Tuple, Optional
 import time
 from src.pretraining.base.pretraining_dataloader import streaming_dataloader
 from src.utils import utils
-from src.utils.constants import DATA_DIR, DEVICE
+from src.utils.constants import DATA_DIR, DEVICE, DRY_RUN
 from src.models.base_model import BaseModel
 
 
@@ -172,7 +172,7 @@ class BaseTrainer(ABC):
             total_loss += loss.item()
             loader_len += 1
 
-            if time.time() - start_time > self.log_interval_seconds:
+            if time.time() - start_time > self.log_interval_seconds and DRY_RUN:
                 self.logger.info(f"Train loss: {loss.item():.3f}")
                 start_time = time.time()
 
