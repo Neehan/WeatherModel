@@ -64,7 +64,7 @@ class WeatherBERT(BaseModel):
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2 (lat, lon) UNNORMALIZED
-        year: batch_size x 1 (UNNORMALIZED)
+        year: batch_size x seq_len (UNNORMALIZED, time-varying years)
         interval: batch_size x 1 (UNNORMALIZED in days)
         weather_feature_mask: batch_size x seq_len x n_features
         src_key_padding_mask: batch_size x seq_len
@@ -79,8 +79,8 @@ class WeatherBERT(BaseModel):
         # normalize year, interval, and coords
         year, interval, coords = normalize_year_interval_coords(year, interval, coords)
 
-        # Expand year to match weather and coords dimensions
-        year = year.unsqueeze(1).expand(batch_size, seq_len, 1)
+        # Year is [batch_size, seq_len], add feature dimension to make it [batch_size, seq_len, 1]
+        year = year.unsqueeze(2)
 
         # Expand interval to match weather and coords dimensions
         interval = interval.unsqueeze(1).expand(batch_size, seq_len, 1)

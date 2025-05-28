@@ -42,6 +42,16 @@ class BaseYieldPredictor(BaseModel):
         weather = weather.view(batch_size, n_years * seq_len, n_features)
 
         coord = coord[:, 0, :]
+
+        # Expand year to match the sequence length
+        # year is [batch_size, n_years], need to repeat each year for seq_len timesteps
+        year = year.unsqueeze(2).expand(
+            batch_size, n_years, seq_len
+        )  # [batch_size, n_years, seq_len]
+        year = year.contiguous().view(
+            batch_size, n_years * seq_len
+        )  # [batch_size, n_years * seq_len]
+
         # [7, 8, 11, 1, 2, 29] are the closest weather feature ids according to pretraining
         weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
         padded_weather = torch.zeros(

@@ -36,6 +36,10 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.shuffle = shuffle
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
+
+        logger.info(
+            f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
+        )
         if masking_function == "weatherbert":
             self.masking_function = self.weatherbert_masking_function
         elif masking_function == "weatherformer":
@@ -79,7 +83,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Load all three frequency files
             frequency_data = []
-            for file_path in chunk_files:
+            for file_path in chunk_files[:2]:
                 data = torch.load(file_path, weights_only=False)
                 frequency_data.append(data)
 
@@ -91,20 +95,26 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                     temporal_index = index[:1]
                     interval = index[1:]
 
-                    # Convert temporal index to year
-                    year = (
-                        1984 + (temporal_index * interval.int() // 365).int()
-                    ).float()
+                    # Calculate years for each of the 365 time points
+                    # temporal_index is the segment number (0, 1, 2, ...)
+                    # Each segment has 365 time points
+                    # absolute_time_index = segment * 365 + position_in_segment
+                    seq_len = weather.size(0)  # Should be 365
+                    time_point_indices = torch.arange(seq_len, dtype=torch.float32)
+                    absolute_time_indices = temporal_index * 365 + time_point_indices
+
+                    # Convert to years: 1984 + (absolute_time_index * interval_days) / 365
+                    years = 1984 + (absolute_time_indices * interval) / 365
 
                     # Apply masking function if provided
                     if self.masking_function is not None:
                         seq_len, n_features = weather.size()
                         feature_mask = self.masking_function(seq_len, n_features)
                         all_samples.append(
-                            (weather, coords, year, interval, feature_mask)
+                            (weather, coords, years, interval, feature_mask)
                         )
                     else:
-                        all_samples.append((weather, coords, year, interval))
+                        all_samples.append((weather, coords, years, interval))
 
             # Shuffle all samples from this chunk if shuffle is enabled
             if self.shuffle:
@@ -181,5 +191,5 @@ def streaming_dataloader(
         n_masked_features=n_masked_features,
     )
     return torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, pin_memory=True, num_workers=4
+        dataset, batch_size=batch_size, pin_memory=True, num_workers=0
     )
