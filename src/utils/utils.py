@@ -18,3 +18,11 @@ def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
     return optim.lr_scheduler.LambdaLR(
         optimizer, _lr_lambda(num_warmup_epochs, decay_factor)
     )
+
+
+def normalize_year_interval_coords(year, interval, coords):
+    year = (year - 1970) / 100.0
+    interval = interval / 30.0
+    coords[:, 0] = coords[:, 0] / 360.0
+    coords[:, 1] = coords[:, 1] / 180.0
+    return year, interval, coords

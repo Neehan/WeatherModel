@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
@@ -32,41 +31,35 @@ class CropDataset(Dataset):
         ]
         if test_dataset:  # test on missouri and kansas
             # test only final year
-            self.index = data[
+            candidate_data = data[
                 (data["State"] == test_states[0]) | (data["State"] == test_states[1])
-            ][["year", "loc_ID"]].reset_index(drop=True)
+            ]
         else:
-            self.index = data[
+            candidate_data = data[
                 (data["State"] != test_states[0]) & (data["State"] != test_states[1])
-            ][["year", "loc_ID"]].reset_index(drop=True)
+            ]
 
+        # Filter to only include cases where we have complete historical data
+        valid_indices = []
+        for _, row in candidate_data.iterrows():
+            year, loc_ID = row["year"], row["loc_ID"]
+            # Get the actual data we would use for this location/year
+            historical_data = data[
+                (data["year"] <= year) & (data["loc_ID"] == loc_ID)
+            ].tail(n_past_years + 1)
+            # Only include if we have exactly the right amount of data
+            if len(historical_data) == n_past_years + 1:
+                valid_indices.append((year, loc_ID))
+
+        self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
         self.data = []
-
-        which_dataset = "Test" if test_dataset else "Training"
 
         for idx in range(1000 if DRY_RUN else len(self.index)):
             year, loc_ID = self.index.iloc[idx].values.astype("int")
-            # look up last n years of data for a location
-            query_data_true = data[(data["year"] <= year) & (data["loc_ID"] == loc_ID)]
-            query_data = query_data_true
-            # attention mask for the transformer model
-            mask = np.zeros((n_past_years + 1,)).astype(bool)
-            # pad shorter history with zeros
-            if len(query_data) < n_past_years + 1:
-                zero_df = pd.DataFrame(
-                    0,
-                    index=range(n_past_years + 1 - len(query_data)),
-                    columns=query_data.columns,
-                )
-                query_data_true = pd.concat([zero_df, query_data_true]).reset_index(
-                    drop=True
-                )
-                query_data = pd.concat([zero_df, query_data]).reset_index(drop=True)
-                # make attention mask zero at the padded rows
-                mask[: len(zero_df)] = True
-            elif len(query_data) > n_past_years + 1:
-                query_data_true = query_data_true.tail(n_past_years + 1)
-                query_data = query_data.tail(n_past_years + 1)
+            # Get exactly n_past_years + 1 years of data for this location
+            query_data = data[(data["year"] <= year) & (data["loc_ID"] == loc_ID)].tail(
+                n_past_years + 1
+            )
 
             weather = (
                 query_data[self.weather_cols]
@@ -82,24 +75,23 @@ class CropDataset(Dataset):
                 query_data[self.soil_cols].values.astype("float32").reshape((-1, 11, 6))
             )  # 11 measurements, at 6 depths
             year = query_data["year"].values.astype("float32")
-            year = (year - 1970.0) / 100.0
             coord = torch.FloatTensor(
                 query_data[["lat", "lng"]].values.astype("float32")
             )
 
             # get the true yield
-            y = query_data_true.iloc[-1:]["yield"].values.astype("float32").copy()
-            y_past = query_data_true["yield"].values.astype("float32")
-            # the current year's yield the target variable, so replace it with last year's yield
+            y = query_data.iloc[-1:]["yield"].values.astype("float32").copy()
+            y_past = query_data["yield"].values.astype("float32")
+            # the current year's yield is the target variable, so replace it with last year's yield
             y_past[-1] = y_past[-2]
 
-            self.data.append(((weather, practices, soil, year, coord, y_past, mask), y))
+            self.data.append(((weather, practices, soil, year, coord, y_past), y))
 
     def __len__(self):
         return 1000 if DRY_RUN else len(self.index)
 
     def __getitem__(self, idx):
-        return self.data[idx]  # weather, practices, soil, year, y, y_mean
+        return self.data[idx]  # weather, practices, soil, year, coord, y_past
 
     def get_data_loader(self, batch_size=32):
         return DataLoader(self, batch_size=batch_size, shuffle=False)

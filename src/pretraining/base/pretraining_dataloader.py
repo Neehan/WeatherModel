@@ -42,14 +42,30 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 data = torch.load(file_path, weights_only=False)
                 frequency_data.append(data)
 
-            if self.shuffle:
-                random.shuffle(frequency_data)
-
+            # Collect all samples from the three frequency files
+            all_samples = []
             for data in frequency_data:
                 for weather, coords, index in data:
-                    coords = coords / 360.0
-                    index[1] = index[1] / 30.0
-                    yield (weather, coords, index)
+                    # index is (temporal index since 1984 jan 1, temporal interval)
+                    temporal_index = index[:1]
+                    interval = index[1:]
+
+                    # Convert temporal index to year
+                    year = (
+                        1984 + (temporal_index * interval.int() // 365).int()
+                    ).float()
+
+                    all_samples.append((weather, coords, year, interval))
+
+            # Shuffle all samples from this chunk if shuffle is enabled
+            if self.shuffle:
+                random.shuffle(all_samples)
+
+            # Yield all samples
+            for sample in all_samples:
+                # print(f"year: {sample[2]}, interval: {sample[3]}, coords: {sample[1]}")
+                yield sample
+
             if (i // 3) % 5 == 0:
                 logger.info(
                     f"Dataloader iterated over [{(i//3)+1}/{len(self.file_paths)//3}] chunks"

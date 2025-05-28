@@ -31,6 +31,8 @@ class WeatherFormer(WeatherBERT):
             max_len=max_len,
             device=device,
         )
+        # override the name
+        self.name = "weatherformer"
 
         # Override the output projection to be 2x the size for mu and sigma
         hidden_dim = hidden_dim_factor * num_heads
@@ -40,7 +42,8 @@ class WeatherFormer(WeatherBERT):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        temporal_index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         weather_feature_mask: Optional[
             torch.Tensor
         ] = None,  # batch_size x seq_len x n_features,
@@ -57,7 +60,8 @@ class WeatherFormer(WeatherBERT):
         output = super().forward(
             weather=weather,
             coords=coords,
-            temporal_index=temporal_index,
+            year=year,
+            interval=interval,
             weather_feature_mask=weather_feature_mask,
             src_key_padding_mask=src_key_padding_mask,
         )
@@ -70,6 +74,6 @@ class WeatherFormer(WeatherBERT):
         sigma = torch.exp(0.5 * log_var)
 
         # Clip sigma to prevent numerical instability
-        sigma = torch.clamp(sigma, min=1e-6)
+        sigma = torch.clamp(sigma, min=1e-4, max=5)  # sigma^2 is in [1e-8, 25]
 
         return mu, sigma

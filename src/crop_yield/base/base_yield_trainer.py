@@ -3,8 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 import time
-from typing import Tuple
+from typing import Tuple, Optional
+from src.models.base_model import BaseModel
 from src.pretraining.base.base_trainer import BaseTrainer
+from src.utils.constants import DATA_DIR
+import os
 
 
 class BaseYieldTrainer(BaseTrainer):
@@ -15,12 +18,13 @@ class BaseYieldTrainer(BaseTrainer):
 
     def __init__(
         self,
-        model: nn.Module,
+        model: BaseModel,
         batch_size: int,
         init_lr: float = 0.0009,
         num_warmup_epochs: int = 2,
         decay_factor: float = 0.95,
         log_interval_seconds: int = 10,
+        pretrained_model_path: Optional[str] = None,
     ):
         super().__init__(
             model=model,
@@ -29,14 +33,18 @@ class BaseYieldTrainer(BaseTrainer):
             num_warmup_epochs=num_warmup_epochs,
             decay_factor=decay_factor,
             log_interval_seconds=log_interval_seconds,
+            pretrained_model_path=pretrained_model_path,
         )
 
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss()
+        self.model_dir = DATA_DIR + "trained_models/crop_yield/"
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
 
     def get_model_name(self) -> str:
         """Get the model name for saving."""
-        return f"yield_model_{self.total_params_formatted}"
+        return f"{self.model.name}"
 
     def train_epoch(self, train_loader) -> float:
         """Train the model for one epoch."""

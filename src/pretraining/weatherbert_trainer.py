@@ -27,7 +27,7 @@ class BertTrainer(BaseTrainer):
     def __init__(self, model, batch_size, mask_percent=0.15, **kwargs):
         super().__init__(model, batch_size, **kwargs)
         self.mask_percent = mask_percent
-        self.criterion = nn.MSELoss()
+        self.mse_loss = nn.MSELoss()
 
     def get_model_name(self) -> str:
         return "weatherbert"
@@ -37,47 +37,48 @@ class BertTrainer(BaseTrainer):
     ) -> torch.Tensor:
         """
         Create a BERT-like MLM mask for the weather features.
-        Randomly mask a percentage of the weather features.
+        Randomly mask individual tokens across batch×seq_len×features space.
         """
-        # Calculate the total number of elements in the feature dimension
-        total_elements = batch_size * n_features
+        # Calculate the total number of elements across all dimensions
+        total_elements = batch_size * seq_len * n_features
 
         # Calculate the number of elements to mask
         num_mask = int(self.mask_percent * total_elements)
 
-        # Generate random indices for masking within the entire tensor
+        # Generate random indices for masking within the entire flattened tensor
         mask_indices = torch.randperm(total_elements)[:num_mask]
 
         # Convert flat indices to multi-dimensional indices
-        mask_indices = (mask_indices // n_features, mask_indices % n_features)
+        batch_indices = mask_indices // (seq_len * n_features)
+        remaining = mask_indices % (seq_len * n_features)
+        seq_indices = remaining // n_features
+        feature_indices = remaining % n_features
 
-        # Create the initial mask tensor filled with zeros
-        mask_tensor = torch.zeros(
-            batch_size, n_features, dtype=torch.float32, device=self.device
+        # Create the mask tensor filled with False
+        weather_feature_mask = torch.zeros(
+            batch_size, seq_len, n_features, dtype=torch.bool, device=self.device
         )
 
-        # Set the randomly selected indices to 1
-        mask_tensor[mask_indices] = True
+        # Set the randomly selected indices to True
+        weather_feature_mask[batch_indices, seq_indices, feature_indices] = True
 
-        # Expand the mask to match the sequence dimension
-        weather_feature_mask = mask_tensor.unsqueeze(1).expand(-1, seq_len, -1)
-
-        return weather_feature_mask.bool()
+        return weather_feature_mask
 
     def compute_train_loss(
         self,
         data: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute BERT training loss using MSE between predicted and actual masked tokens."""
         target_tokens = data[feature_mask]
 
-        output = self.model(data, coords, index, weather_feature_mask=feature_mask)[
-            feature_mask
-        ]
-        loss = self.criterion(target_tokens, output)
+        output = self.model(
+            data, coords, year, interval, weather_feature_mask=feature_mask
+        )[feature_mask]
+        loss = self.mse_loss(target_tokens, output)
 
         return loss
 
@@ -85,15 +86,16 @@ class BertTrainer(BaseTrainer):
         self,
         data: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute BERT validation loss using MSE between predicted and actual masked tokens."""
         target_tokens = data[feature_mask]
 
-        output = self.model(data, coords, index, weather_feature_mask=feature_mask)[
-            feature_mask
-        ]
+        output = self.model(
+            data, coords, year, interval, weather_feature_mask=feature_mask
+        )[feature_mask]
         loss = F.mse_loss(target_tokens, output)
 
         return loss

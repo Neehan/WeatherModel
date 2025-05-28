@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch_lr_finder import LRFinder
 import logging
 
-from src.pretraining.base.dataloader import streaming_dataloader
+from src.pretraining.base.pretraining_dataloader import streaming_dataloader
 from src.utils.constants import DEVICE
 
 logger = logging.getLogger(__name__)

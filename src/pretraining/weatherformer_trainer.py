@@ -136,7 +136,8 @@ class WeatherFormerTrainer(BaseTrainer):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute WeatherFormer training loss using VAE-style loss function."""
@@ -148,7 +149,7 @@ class WeatherFormerTrainer(BaseTrainer):
 
         # Get model predictions (mu, sigma)
         mu, sigma = self.model(
-            weather, coords, index, weather_feature_mask=feature_mask
+            weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract predictions for target indices only
@@ -164,7 +165,8 @@ class WeatherFormerTrainer(BaseTrainer):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """Compute WeatherFormer validation loss using VAE-style loss function."""
@@ -182,7 +184,7 @@ class WeatherFormerTrainer(BaseTrainer):
 
         # Get model predictions (mu, sigma)
         mu, sigma = self.model(
-            weather, coords, index, weather_feature_mask=feature_mask
+            weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract predictions for target indices only

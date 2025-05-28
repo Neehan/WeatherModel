@@ -3,11 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 from typing import Optional
+
 from src.models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
+from src.models.base_model import BaseModel
+from src.utils.utils import normalize_year_interval_coords
 
 
-class WeatherBERT(nn.Module):
+class WeatherBERT(BaseModel):
     def __init__(
         self,
         weather_dim,
@@ -18,12 +21,12 @@ class WeatherBERT(nn.Module):
         max_len=MAX_CONTEXT_LENGTH,
         device=DEVICE,
     ):
-        super(WeatherBERT, self).__init__()
+        super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
         self.input_dim = (
-            weather_dim + 2 + 1
-        )  # weather (normalized) + coords/360  + temporal_granularity in days /30
+            weather_dim + 2 + 1 + 1
+        )  # weather (normalized) + coords/360  + (year-1970)/100 + interval days /30
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -51,7 +54,8 @@ class WeatherBERT(nn.Module):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        temporal_index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         weather_feature_mask: Optional[
             torch.Tensor
         ] = None,  # batch_size x seq_len x n_features,
@@ -59,8 +63,9 @@ class WeatherBERT(nn.Module):
     ) -> torch.Tensor:
         """
         weather: batch_size x seq_len x n_features
-        coords: batch_size x 2
-        temporal_index: batch_size x 2
+        coords: batch_size x 2 (lat, lon) UNNORMALIZED
+        year: batch_size x 1 (UNNORMALIZED)
+        interval: batch_size x 1 (UNNORMALIZED in days)
         weather_feature_mask: batch_size x seq_len x n_features
         src_key_padding_mask: batch_size x seq_len
         """
@@ -71,25 +76,26 @@ class WeatherBERT(nn.Module):
                 f"expected {self.weather_dim} weather features but received {n_features} features"
             )
 
-        # temporal index is index in time and temporal granularity (in days)
-        temporal_granularity = temporal_index[:, 1]
+        # normalize year, interval, and coords
+        year, interval, coords = normalize_year_interval_coords(year, interval, coords)
 
-        # Expand temporal_granularity to match weather and coords dimensions
-        # From [batch_size] to [batch_size, seq_len, 1]
-        temporal_granularity = (
-            temporal_granularity.unsqueeze(1)
-            .unsqueeze(2)
-            .expand(batch_size, seq_len, 1)
-        )
+        # Expand year to match weather and coords dimensions
+        year = year.unsqueeze(1).expand(batch_size, seq_len, 1)
+
+        # Expand interval to match weather and coords dimensions
+        interval = interval.unsqueeze(1).expand(batch_size, seq_len, 1)
 
         # Expand coords to match sequence length if needed
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
         # mask the masked dimensions
-        if weather_feature_mask is not None:
+        if (
+            weather_feature_mask is not None
+            and weather_feature_mask.shape == weather.shape
+        ):
             weather = weather * (~weather_feature_mask)
 
-        input_tensor = torch.cat([weather, coords, temporal_granularity], dim=2)
+        input_tensor = torch.cat([weather, coords, year, interval], dim=2)
         input_tensor = self.in_proj(input_tensor)
         input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(

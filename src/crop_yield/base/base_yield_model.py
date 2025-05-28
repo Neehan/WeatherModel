@@ -4,63 +4,77 @@ from typing import Optional
 
 from src.models.weatherbert import WeatherBERT
 from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
+from src.models.base_model import BaseModel
 
 
-class BaseYieldPredictor(nn.Module):
+class BaseYieldPredictor(BaseModel):
     def __init__(
         self,
-        pretrained_weather_model: Optional[WeatherBERT],
-        weather_model_size_params: dict,
+        name: str,
+        weather_model: BaseModel,
+        mlp_input_dim: int,
     ):
-        super().__init__()
-        self.weather_model = WeatherBERT(
-            31, 31, max_len=MAX_CONTEXT_LENGTH, **weather_model_size_params
-        )
-        if pretrained_weather_model is not None:
-            self.weather_model.load_pretrained(pretrained_weather_model)
-
+        super().__init__(name)
+        self.weather_model = weather_model
+        self.mlp_input_dim = mlp_input_dim
         self.mlp = nn.Sequential(
-            nn.Linear(31 * MAX_CONTEXT_LENGTH, 120),
-            nn.ReLU(),
+            nn.Linear(mlp_input_dim, 120),
+            nn.GELU(),
             nn.Linear(120, 1),
         )
 
-    def forward(self, input_data):
-        weather, practices, soil, year, coord, y_past, mask = input_data
+    def load_pretrained(self, pretrained_model: WeatherBERT):
+        """
+        override the load_pretrained method from BaseModel to load the weather model
+        """
+        self.weather_model.load_pretrained(pretrained_model)
 
+    def prepare_weather_input(self, input_data):
+        weather, practices, soil, year, coord, y_past = input_data
         batch_size, n_years, n_features, seq_len = weather.size()
-        weather = weather.view(batch_size * n_years, -1, n_features)
 
-        coord = coord.view(batch_size * n_years, 2)
-        year = year.view(batch_size * n_years, 1)
+        if n_years * seq_len > MAX_CONTEXT_LENGTH:
+            raise ValueError(
+                f"n_years * seq_len = {n_years * seq_len} is greater than MAX_CONTEXT_LENGTH = {MAX_CONTEXT_LENGTH}"
+            )
+
+        weather = weather.transpose(2, 3)  # transpose n_features and seq_len
+        weather = weather.view(batch_size, n_years * seq_len, n_features)
+
+        coord = coord[:, 0, :]
         # [7, 8, 11, 1, 2, 29] are the closest weather feature ids according to pretraining
         weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
         padded_weather = torch.zeros(
             (
-                batch_size * n_years,
-                seq_len,
-                self.weather_model.input_dim,
+                batch_size,
+                seq_len * n_years,
+                n_features,
             ),
             device=DEVICE,
         )
         padded_weather[:, :, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
-            self.weather_model.input_dim,
+            n_features,
             dtype=torch.bool,
             device=DEVICE,
         )
         weather_feature_mask[weather_indices] = False
 
         # create temporal index (weekly data)
-        temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
-        temporal_index = torch.cat([year, temporal_gran], dim=1)
+        interval = torch.full((batch_size, 1), 7, device=DEVICE)
+        return padded_weather, coord, year, interval, weather_feature_mask
+
+    def forward(self, input_data):
+        weather, coord, year, interval, weather_feature_mask = (
+            self.prepare_weather_input(input_data)
+        )
 
         weather = self.weather_model(
-            (padded_weather, coord, temporal_index),
+            (weather, coord, year, interval),
             weather_feature_mask=weather_feature_mask,
         )
 
-        weather = weather.view(batch_size * n_years, -1)
+        weather = weather.view(weather.size(0), -1)
         output = self.mlp(weather)
         return output

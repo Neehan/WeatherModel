@@ -6,11 +6,12 @@ from abc import ABC, abstractmethod
 import logging
 import os
 import json
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import time
-from src.pretraining.base.dataloader import streaming_dataloader
+from src.pretraining.base.pretraining_dataloader import streaming_dataloader
 from src.utils import utils
 from src.utils.constants import DATA_DIR, DEVICE
+from src.models.base_model import BaseModel
 
 
 class BaseTrainer(ABC):
@@ -21,12 +22,13 @@ class BaseTrainer(ABC):
 
     def __init__(
         self,
-        model: nn.Module,
+        model: BaseModel,
         batch_size: int,
         init_lr: float = 1e-4,
         num_warmup_epochs: int = 5,
         decay_factor: float = 0.95,
         log_interval_seconds: int = 10,
+        pretrained_model_path: Optional[str] = None,
     ):
         self.model = model
         self.batch_size = batch_size
@@ -44,17 +46,13 @@ class BaseTrainer(ABC):
         # Training state
         self.logger = logging.getLogger(__name__)
 
-        self.total_params = sum(p.numel() for p in self.model.parameters())
-        self.total_params_formatted = (
-            f"{self.total_params/10**6:.1f}M"
-            if self.total_params > 10**6
-            else f"{self.total_params/10**3:.1f}k"
+        self.logger.info(
+            f"Total number of parameters: {self.model.total_params_formatted()}"
         )
-        self.logger.info(f"Total number of parameters: {self.total_params_formatted}")
 
         self.output_json = {
             "model_config": {
-                "total_params": self.total_params,
+                "total_params": self.model.total_params(),
                 "batch_size": batch_size,
                 "init_lr": init_lr,
                 "num_warmup_epochs": num_warmup_epochs,
@@ -66,6 +64,11 @@ class BaseTrainer(ABC):
         self.model_dir = DATA_DIR + "trained_models/pretraining/"
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
+
+        # Load pretrained model if provided
+        if pretrained_model_path and os.path.exists(pretrained_model_path):
+            pretrained_model = torch.load(pretrained_model_path, weights_only=False)
+            self.model.load_pretrained(pretrained_model)
 
     # --- Abstract Methods ---
     @abstractmethod
@@ -91,7 +94,8 @@ class BaseTrainer(ABC):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """
@@ -114,7 +118,8 @@ class BaseTrainer(ABC):
         self,
         weather: torch.Tensor,
         coords: torch.Tensor,
-        index: torch.Tensor,
+        year: torch.Tensor,
+        interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> torch.Tensor:
         """
@@ -149,17 +154,20 @@ class BaseTrainer(ABC):
 
         start_time = time.time()
 
-        for weather, coords, index in loader:
+        for weather, coords, year, interval in loader:
             weather = weather.to(self.device)
             coords = coords.to(self.device)
-            index = index.to(self.device)
+            year = year.to(self.device)
+            interval = interval.to(self.device)
 
             self.optimizer.zero_grad()
 
             batch_size, seq_len, n_features = weather.size()
             feature_mask = self.create_feature_mask(batch_size, seq_len, n_features)
 
-            loss = self.compute_train_loss(weather, coords, index, feature_mask)
+            loss = self.compute_train_loss(
+                weather, coords, year, interval, feature_mask
+            )
 
             total_loss += loss.item()
             loader_len += 1
@@ -183,17 +191,17 @@ class BaseTrainer(ABC):
 
         self.logger.info(f"Started validation epoch.")
 
-        for weather, coords, index in loader:
+        for weather, coords, year, interval in loader:
             weather = weather.to(self.device)
             coords = coords.to(self.device)
-            index = index.to(self.device)
-
+            year = year.to(self.device)
+            interval = interval.to(self.device)
             batch_size, seq_len, n_features = weather.size()
             feature_mask = self.create_feature_mask(batch_size, seq_len, n_features)
 
             with torch.no_grad():
                 loss = self.compute_validation_loss(
-                    weather, coords, index, feature_mask
+                    weather, coords, year, interval, feature_mask
                 )
 
             total_loss += loss.item()
@@ -206,21 +214,20 @@ class BaseTrainer(ABC):
 
         torch.save(
             self.model,
-            self.model_dir
-            + f"yield_model_{self.total_params_formatted}_epoch_{epoch}.pth",
+            self.model_dir + f"{self.model.name}_epoch_{epoch}.pth",
         )
         torch.save(
             self.model,
-            self.model_dir + f"yield_model_{self.total_params_formatted}_latest.pth",
+            self.model_dir + f"{self.model.name}_latest.pth",
         )
 
     def save_output_json(self):
         """Save the output JSON containing model config and losses."""
-        filename = f"yield_model_{self.total_params_formatted}_output.json"
+        filename = f"{self.model.name}_output.json"
         with open(self.model_dir + filename, "w") as f:
             json.dump(self.output_json, f, indent=2)
 
-    def train(self, num_epochs: int) -> Tuple[nn.Module, Dict[str, List[float]]]:
+    def train(self, num_epochs: int) -> Tuple[BaseModel, Dict[str, List[float]]]:
         """
         Main training loop.
 
