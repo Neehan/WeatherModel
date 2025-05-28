@@ -3,8 +3,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-
-from .constants import *
+from src.drought.constants import TQDM_OUTPUT
+from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE, DRY_RUN
 
 
 class CropDataset(Dataset):
@@ -44,13 +44,7 @@ class CropDataset(Dataset):
 
         which_dataset = "Test" if test_dataset else "Training"
 
-        for idx in tqdm(
-            range(1000 if TEST_ENV else len(self.index)),
-            file=TQDM_OUTPUT,
-            desc=f"Loading {which_dataset} Dataset",
-            dynamic_ncols=True,
-            mininterval=3 * 60,
-        ):
+        for idx in range(1000 if DRY_RUN else len(self.index)):
             year, loc_ID = self.index.iloc[idx].values.astype("int")
             # look up last n years of data for a location
             query_data_true = data[(data["year"] <= year) & (data["loc_ID"] == loc_ID)]
@@ -77,8 +71,8 @@ class CropDataset(Dataset):
             weather = (
                 query_data[self.weather_cols]
                 .values.astype("float32")
-                .reshape((-1, 6, SEQ_LEN))
-            )  # 9 measurements, SEQ_LEN weeks
+                .reshape((-1, 6, 52))
+            )  # 6 measurements, 52 weeks
             practices = (
                 query_data[self.practice_cols]
                 .values.astype("float32")
@@ -102,7 +96,7 @@ class CropDataset(Dataset):
             self.data.append(((weather, practices, soil, year, coord, y_past, mask), y))
 
     def __len__(self):
-        return 1000 if TEST_ENV else len(self.index)
+        return 1000 if DRY_RUN else len(self.index)
 
     def __getitem__(self, idx):
         return self.data[idx]  # weather, practices, soil, year, y, y_mean

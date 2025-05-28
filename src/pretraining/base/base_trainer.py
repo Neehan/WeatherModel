@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from abc import ABC, abstractmethod
 import logging
+import os
 import json
 from typing import Dict, List, Any, Tuple
 import time
@@ -44,12 +45,12 @@ class BaseTrainer(ABC):
         self.logger = logging.getLogger(__name__)
 
         self.total_params = sum(p.numel() for p in self.model.parameters())
-        total_params_formatted = (
-            f"{self.total_params/10**6:.3f}M"
+        self.total_params_formatted = (
+            f"{self.total_params/10**6:.1f}M"
             if self.total_params > 10**6
-            else f"{self.total_params/10**3:.3f}k"
+            else f"{self.total_params/10**3:.1f}k"
         )
-        self.logger.info(f"Total number of parameters: {total_params_formatted}")
+        self.logger.info(f"Total number of parameters: {self.total_params_formatted}")
 
         self.output_json = {
             "model_config": {
@@ -62,6 +63,9 @@ class BaseTrainer(ABC):
             },
             "losses": {"train": [], "val": []},
         }
+        self.model_dir = DATA_DIR + "trained_models/pretraining/"
+        if not os.path.exists(self.model_dir):
+            os.makedirs(self.model_dir)
 
     # --- Abstract Methods ---
     @abstractmethod
@@ -199,21 +203,21 @@ class BaseTrainer(ABC):
 
     def save_model(self, epoch: int):
         """Save the model at the current epoch."""
+
         torch.save(
             self.model,
-            DATA_DIR
-            + f"trained_models/{self.get_model_name()}_{self.total_params / 10**6:.1f}m_epoch_{epoch}.pth",
+            self.model_dir
+            + f"yield_model_{self.total_params_formatted}_epoch_{epoch}.pth",
         )
         torch.save(
             self.model,
-            DATA_DIR
-            + f"trained_models/{self.get_model_name()}_{self.total_params / 10**6:.1f}m_latest.pth",
+            self.model_dir + f"yield_model_{self.total_params_formatted}_latest.pth",
         )
 
     def save_output_json(self):
         """Save the output JSON containing model config and losses."""
-        filename = f"weatherformer_{self.total_params / 10**6:.1f}m_output.json"
-        with open(DATA_DIR + filename, "w") as f:
+        filename = f"yield_model_{self.total_params_formatted}_output.json"
+        with open(self.model_dir + filename, "w") as f:
             json.dump(self.output_json, f, indent=2)
 
     def train(self, num_epochs: int) -> Tuple[nn.Module, Dict[str, List[float]]]:

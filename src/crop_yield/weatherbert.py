@@ -1,5 +1,7 @@
-from ..model.model import Weatherformer
-from .constants import *
+from src.models.weatherbert.weatherbert import WeatherBERT
+from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
+from src.models.model import TransformerModel
+from src.crop_yield.soil_cnn import SoilCNN
 
 import torch
 import torch.nn as nn
@@ -7,37 +9,15 @@ import copy
 import math
 
 
-class WFLinearPredictor(nn.Module):
+class BERTYieldPredictor(nn.Module):
     def __init__(
-        self, pretrained_weatherformer: Weatherformer, weatherformer_size_params
+        self, pretrained_weatherformer: WeatherBERT, weatherformer_size_params
     ):
         super().__init__()
-        self.soil_cnn = nn.Sequential(
-            nn.Conv1d(
-                in_channels=1, out_channels=4, kernel_size=3, stride=1, padding=1
-            ),
-            nn.ReLU(),  #
-            nn.AvgPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(
-                in_channels=4, out_channels=8, kernel_size=3, stride=1, padding=1
-            ),
-            nn.ReLU(),
-            nn.AvgPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(
-                in_channels=8, out_channels=12, kernel_size=2, stride=1, padding=1
-            ),
-            # Flattening the output to fit Linear Layer
-            nn.Flatten(),  # 24 x 1
-            nn.Linear(24, 12),
-            nn.ReLU(),
-        )
+        self.soil_model = SoilCNN()
 
-        self.soil_fc = nn.Sequential(
-            nn.Linear(11 * 12, 40),
-        )
-
-        self.weather_transformer = Weatherformer(
-            31, 48, max_len=SEQ_LEN, **weatherformer_size_params
+        self.weather_transformer = WeatherBERT(
+            31, 48, max_len=MAX_CONTEXT_LENGTH, **weatherformer_size_params
         )
         if pretrained_weatherformer is not None:
             self.weather_transformer.in_proj = copy.deepcopy(
@@ -52,20 +32,21 @@ class WFLinearPredictor(nn.Module):
             self.weather_transformer.input_scaler = copy.deepcopy(
                 pretrained_weatherformer.input_scaler
             )
-            # self.weather_transformer.temporal_pos_encoding = copy.deepcopy(
-            #     pretrained_weatherformer.temporal_pos_encoding
-            # )
 
             self.weather_transformer.max_len = pretrained_weatherformer.max_len
 
         self.weather_fc = nn.Sequential(
-            nn.Linear(48 * SEQ_LEN, 120),
+            nn.Linear(48 * MAX_CONTEXT_LENGTH, 120),
             # nn.ReLu()
         )
 
         fc_dims = 120 + 40 + 14 + 1 + 1
-
-        self.fc1 = nn.Linear(in_features=fc_dims * 7, out_features=1)
+        self.trend_transformer = TransformerModel(
+            input_dim=fc_dims,
+            output_dim=32,
+            num_layers=3,
+        )
+        self.fc1 = nn.Linear(in_features=32, out_features=1)
 
     def forward(self, weather, soil, practices, year, coord, y_past, mask):
 
@@ -87,11 +68,11 @@ class WFLinearPredictor(nn.Module):
         padded_weather[:, :, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
-            self.weather_transformer.input_dim,
+            (batch_size * n_years, seq_len, self.weather_transformer.input_dim),
             dtype=torch.bool,
             device=DEVICE,
         )
-        weather_feature_mask[weather_indices] = False
+        weather_feature_mask[:, :, weather_indices] = False
 
         # create temporal index
         temporal_gran = torch.full((batch_size * n_years, 1), 7, device=DEVICE)
@@ -108,11 +89,7 @@ class WFLinearPredictor(nn.Module):
         weather = self.weather_fc(weather)
         weather = weather.view(batch_size, n_years, -1)
 
-        soil = soil.reshape(batch_size * n_years * soil.shape[2], 1, -1)
-        soil_out = self.soil_cnn(soil)
-        soil_out = soil_out.view(batch_size * n_years, -1)
-        soil_out = self.soil_fc(soil_out)
-        soil_out = soil_out.view(batch_size, n_years, -1)
+        soil_out = self.soil_model(soil)
 
         combined = torch.cat(
             (
@@ -124,6 +101,8 @@ class WFLinearPredictor(nn.Module):
             ),
             dim=2,
         )
-        combined = combined.view(batch_size, -1)
+        combined = self.trend_transformer(
+            combined, coord.view(batch_size, -1, 2)[:, -1, :], mask
+        )
         out = self.fc1(combined)
         return out

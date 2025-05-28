@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .constants import *
+from src.utils.constants import *
 from typing import Optional
 
 
@@ -72,7 +72,7 @@ class Weatherformer(nn.Module):
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
-        max_len=CONTEXT_LENGTH,
+        max_len=MAX_CONTEXT_LENGTH,
         device=DEVICE,
     ):
         super(Weatherformer, self).__init__()

@@ -5,7 +5,7 @@ import random
 
 from src.pretraining.base.base_trainer import BaseTrainer
 from src.utils.arg_parser import parse_args
-from src.models.weatherformer.weatherformer import WeatherFormer
+from src.models.weatherformer import WeatherFormer
 from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
 
 # Configure logging
@@ -100,6 +100,7 @@ class WeatherFormerTrainer(BaseTrainer):
         target_features: torch.Tensor,
         mu: torch.Tensor,
         sigma: torch.Tensor,
+        log_losses: bool = False,
     ) -> torch.Tensor:
         """
         Compute the VAE-style loss from the mathematical formula:
@@ -111,9 +112,6 @@ class WeatherFormerTrainer(BaseTrainer):
             mu: Predicted mean values
             sigma: Predicted standard deviation values
         """
-        # Add numerical stability to sigma
-        sigma = torch.clamp(sigma, min=1e-6)
-
         # Reconstruction term: (z - μ)² / σ²
         reconstruction_term = torch.mean(((target_features - mu) ** 2) / (sigma**2))
 
@@ -123,9 +121,12 @@ class WeatherFormerTrainer(BaseTrainer):
         # KL regularization term: β(μ² + σ²)
         kl_regularization_term = torch.mean(self.beta * (mu**2 + sigma**2))
 
-        # self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
-        # self.logger.info(f"Log Variance Term: {log_variance_term.item():.6f}")
-        # self.logger.info(f"KL Regularization Term: {kl_regularization_term.item():.6f}")
+        if log_losses:
+            self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
+            self.logger.info(f"Log Variance Term: {log_variance_term.item():.6f}")
+            self.logger.info(
+                f"KL Regularization Term: {kl_regularization_term.item():.6f}"
+            )
 
         total_loss = reconstruction_term + log_variance_term + kl_regularization_term
 

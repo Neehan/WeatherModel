@@ -1,18 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import copy
 from typing import Optional
-from src.models.weatherbert.vanilla_pos_encoding import VanillaPositionalEncoding
+from src.models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 
-"""
-This class implements the WeatherFormer model.
 
-The output is a tuple of mu, sigma, where mu is the mean and sigma is the standard deviation of the normal distribution.
-"""
-
-
-class WeatherFormer(nn.Module):
+class WeatherBERT(nn.Module):
     def __init__(
         self,
         weather_dim,
@@ -23,12 +18,12 @@ class WeatherFormer(nn.Module):
         max_len=MAX_CONTEXT_LENGTH,
         device=DEVICE,
     ):
-        super(WeatherFormer, self).__init__()
+        super(WeatherBERT, self).__init__()
 
         self.weather_dim = weather_dim
         self.input_dim = (
             weather_dim + 2 + 1
-        )  # weather (normalized) + coords (/360) + temporal_granularity in days / 30
+        )  # weather (normalized) + coords/360  + temporal_granularity in days /30
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -50,7 +45,7 @@ class WeatherFormer(nn.Module):
             encoder_layer, num_layers=num_layers
         )
 
-        self.out_proj = nn.Linear(hidden_dim, 2 * output_dim)
+        self.out_proj = nn.Linear(hidden_dim, output_dim)
 
     def forward(
         self,
@@ -61,7 +56,7 @@ class WeatherFormer(nn.Module):
             torch.Tensor
         ] = None,  # batch_size x seq_len x n_features,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2
@@ -102,11 +97,21 @@ class WeatherFormer(nn.Module):
         )
         output = self.out_proj(input_tensor)
 
-        # Split output into mu and log_var (VAE-style parameterization)
-        mu = output[..., : self.output_dim]
-        log_var = output[..., self.output_dim :]
+        return output
 
-        # Compute sigma from log variance: sigma = exp(0.5 * log_var)
-        sigma = torch.exp(0.5 * log_var)
+    def load_pretrained(self, pretrained_model: "WeatherBERT"):
+        """Load weights from a pretrained WeatherBERT model by deep copying each layer."""
 
-        return mu, sigma
+        if self.input_dim != pretrained_model.input_dim:
+            raise ValueError(
+                f"expected input dimension {self.input_dim} but received {pretrained_model.input_dim}"
+            )
+        if self.max_len != pretrained_model.max_len:
+            raise ValueError(
+                f"expected max length {self.max_len} but received {pretrained_model.max_len}"
+            )
+
+        self.in_proj = copy.deepcopy(pretrained_model.in_proj)
+        self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
+        self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
+        self.out_proj = copy.deepcopy(pretrained_model.out_proj)

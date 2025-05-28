@@ -9,6 +9,8 @@ This class implements the classic sinusoidal positional encoding introduced in t
 
 
 class VanillaPositionalEncoding(nn.Module):
+    pos_encoding: torch.Tensor  # Type hint for the buffer
+
     def __init__(self, hidden_dim, max_len, device):
         assert (
             hidden_dim % 2 == 0

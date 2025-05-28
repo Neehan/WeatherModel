@@ -5,7 +5,7 @@ import logging
 
 from src.pretraining.base.base_trainer import BaseTrainer
 from src.utils.arg_parser import parse_args
-from src.models.weatherbert.weatherbert import WeatherBERT
+from src.models.weatherbert import WeatherBERT
 from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
 
 # Configure logging

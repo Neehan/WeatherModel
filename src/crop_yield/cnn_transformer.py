@@ -1,5 +1,5 @@
-from .model import TransformerModel
-from .constants import *
+from src.models.transformer_encoder import TransformerEncoder
+from src.utils.constants import *
 
 import torch
 import torch.nn as nn
@@ -62,7 +62,7 @@ class CNNYieldPredictor(nn.Module):
         )
 
         fc_dims = 60 + 40 + 14 + 1 + 1
-        self.trend_transformer = TransformerModel(
+        self.trend_transformer = TransformerEncoder(
             input_dim=fc_dims,
             output_dim=32,
             num_layers=3,
