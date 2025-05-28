@@ -155,6 +155,7 @@ def weatherformer_training_loop(
         decay_factor=decay_factor,
         beta=beta,
         masking_function="weatherformer",
+        n_masked_features=num_output_features,
     )
 
     return trainer.train(num_epochs)

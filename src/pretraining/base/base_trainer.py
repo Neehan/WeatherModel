@@ -31,6 +31,8 @@ class BaseTrainer(ABC):
         log_interval_seconds: int = 10,
         pretrained_model_path: Optional[str] = None,
         masking_function: Optional[str] = None,
+        masking_prob: float = 0.15,
+        n_masked_features: int = 1,
     ):
         self.model = model
         self.batch_size = batch_size
@@ -47,6 +49,9 @@ class BaseTrainer(ABC):
         self.masking_function = masking_function
         # Training state
         self.logger = logging.getLogger(__name__)
+
+        self.masking_prob = masking_prob
+        self.n_masked_features = n_masked_features
 
         self.logger.info(
             f"Total number of parameters: {self.model.total_params_formatted()}"
@@ -229,6 +234,8 @@ class BaseTrainer(ABC):
                 split="train",
                 shuffle=True,
                 masking_function=self.masking_function,
+                masking_prob=self.masking_prob,
+                n_masked_features=self.n_masked_features,
             )
             optimal_lr = find_optimal_lr(self, train_loader)
 
@@ -245,6 +252,8 @@ class BaseTrainer(ABC):
                 split="train",
                 shuffle=True,
                 masking_function=self.masking_function,
+                masking_prob=self.masking_prob,
+                n_masked_features=self.n_masked_features,
             )
 
             test_loader = streaming_dataloader(
@@ -252,6 +261,8 @@ class BaseTrainer(ABC):
                 split="validation",
                 shuffle=False,
                 masking_function=self.masking_function,
+                masking_prob=self.masking_prob,
+                n_masked_features=self.n_masked_features,
             )
 
             train_loss = self.train_epoch(train_loader)

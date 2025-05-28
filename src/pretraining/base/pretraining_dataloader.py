@@ -128,14 +128,15 @@ def streaming_dataloader(
     batch_size,
     split="train",
     shuffle=False,
-    lr_finder=False,
     num_input_features=None,
     num_output_features=None,
     masking_function: Optional[str] = None,
+    masking_prob: float = 0.15,
+    n_masked_features: int = 1,
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
-    if DRY_RUN or lr_finder:
+    if DRY_RUN:
         train_indices = DRY_RUN_TRAIN_CHUNK_IDS
         test_indices = VALIDATION_CHUNK_IDS[:1]
     else:
@@ -176,6 +177,8 @@ def streaming_dataloader(
         num_output_features=num_output_features,
         shuffle=shuffle,
         masking_function=masking_function,
+        masking_prob=masking_prob,
+        n_masked_features=n_masked_features,
     )
     return torch.utils.data.DataLoader(
         dataset, batch_size=batch_size, pin_memory=True, num_workers=4

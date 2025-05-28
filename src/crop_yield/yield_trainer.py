@@ -12,14 +12,16 @@ np.random.seed(1234)
 
 torch.use_deterministic_algorithms(True)
 
-from torch_lr_finder import LRFinder
 
-from src.yield_prediction.dataloader import read_soybean_dataset, get_train_test_loaders
-from src.yield_prediction.model import YieldPredictor
-from src.yield_prediction.cnn_transformer import CNNYieldPredictor
-from src.yield_prediction.wf_linear import WFLinearPredictor
-from src.yield_prediction.bert_model import BERTYieldPredictor
-from src.yield_prediction.train import training_loop
+from src.crop_yield.base.yield_dataloader import (
+    read_soybean_dataset,
+    get_train_test_loaders,
+)
+from src.crop_yield.base.base_yield_model import BaseYieldPredictor
+from src.crop_yield.cnn_transformer import CNNYieldPredictor
+from src.crop_yield.wf_linear import WFLinearPredictor
+from src.crop_yield.bert_model import BERTYieldPredictor
+from src.crop_yield.train import training_loop
 from src.yield_prediction.constants import *
 import torch.optim as optim
 import torch.nn as nn

@@ -19,14 +19,13 @@ random.seed(1234)
 torch.manual_seed(1234)
 
 
-class BertTrainer(BaseTrainer):
+class WeatherBertTrainer(BaseTrainer):
     """
     BERT-style trainer that implements masked language modeling for weather data.
     """
 
-    def __init__(self, model, batch_size, mask_percent=0.15, **kwargs):
+    def __init__(self, model, batch_size, **kwargs):
         super().__init__(model, batch_size, **kwargs)
-        self.mask_percent = mask_percent
         self.mse_loss = nn.MSELoss()
 
     def get_model_name(self) -> str:
@@ -43,7 +42,7 @@ class BertTrainer(BaseTrainer):
         total_elements = batch_size * seq_len * n_features
 
         # Calculate the number of elements to mask
-        num_mask = int(self.mask_percent * total_elements)
+        num_mask = int(self.masking_prob * total_elements)
 
         # Generate random indices for masking within the entire flattened tensor
         mask_indices = torch.randperm(total_elements)[:num_mask]
@@ -108,18 +107,18 @@ def bert_training_loop(
     init_lr=1e-4,
     num_warmup_epochs=5,
     decay_factor=0.95,
-    mask_percent=0.15,
+    masking_prob=0.15,
 ):
     """
     Simplified BERT training loop using the BertTrainer class.
     """
-    trainer = BertTrainer(
+    trainer = WeatherBertTrainer(
         model=model,
         batch_size=batch_size,
         init_lr=init_lr,
         num_warmup_epochs=num_warmup_epochs,
         decay_factor=decay_factor,
-        mask_percent=mask_percent,
+        masking_prob=masking_prob,
         masking_function="weatherbert",
     )
 
@@ -146,5 +145,5 @@ if __name__ == "__main__":
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
-        mask_percent=args_dict["mask_pcnt"],
+        masking_prob=args_dict["masking_prob"],
     )
