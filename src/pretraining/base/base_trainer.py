@@ -105,7 +105,8 @@ class BaseTrainer(ABC):
         Args:
             weather: Weather data tensor
             coords: Coordinate tensor
-            index: Index tensor
+            year: Year tensor
+            interval: Interval tensor
             feature_mask: Feature mask tensor
 
         Returns:
@@ -129,7 +130,8 @@ class BaseTrainer(ABC):
         Args:
             weather: Weather data tensor
             coords: Coordinate tensor
-            index: Index tensor
+            year: Year tensor
+            interval: Interval tensor
             feature_mask: Feature mask tensor
 
         Returns:
@@ -154,16 +156,14 @@ class BaseTrainer(ABC):
 
         start_time = time.time()
 
-        for weather, coords, year, interval in loader:
+        for weather, coords, year, interval, feature_mask in loader:
             weather = weather.to(self.device)
             coords = coords.to(self.device)
             year = year.to(self.device)
             interval = interval.to(self.device)
+            feature_mask = feature_mask.to(self.device)
 
             self.optimizer.zero_grad()
-
-            batch_size, seq_len, n_features = weather.size()
-            feature_mask = self.create_feature_mask(batch_size, seq_len, n_features)
 
             loss = self.compute_train_loss(
                 weather, coords, year, interval, feature_mask
@@ -191,13 +191,12 @@ class BaseTrainer(ABC):
 
         self.logger.info(f"Started validation epoch.")
 
-        for weather, coords, year, interval in loader:
+        for weather, coords, year, interval, feature_mask in loader:
             weather = weather.to(self.device)
             coords = coords.to(self.device)
             year = year.to(self.device)
             interval = interval.to(self.device)
-            batch_size, seq_len, n_features = weather.size()
-            feature_mask = self.create_feature_mask(batch_size, seq_len, n_features)
+            feature_mask = feature_mask.to(self.device)
 
             with torch.no_grad():
                 loss = self.compute_validation_loss(
@@ -239,11 +238,17 @@ class BaseTrainer(ABC):
         """
         for epoch in range(num_epochs):
             train_loader = streaming_dataloader(
-                self.batch_size, split="train", shuffle=True
+                self.batch_size,
+                split="train",
+                shuffle=True,
+                masking_function=self.create_feature_mask,
             )
 
             test_loader = streaming_dataloader(
-                self.batch_size, split="validation", shuffle=False
+                self.batch_size,
+                split="validation",
+                shuffle=False,
+                masking_function=self.create_feature_mask,
             )
 
             train_loss = self.train_epoch(train_loader)

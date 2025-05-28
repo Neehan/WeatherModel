@@ -3,6 +3,7 @@ import torch.utils.data
 from torch.utils.data import DataLoader
 import logging
 import random
+from typing import Callable, Optional
 from src.utils.constants import (
     DATA_DIR,
     DRY_RUN,
@@ -72,6 +73,31 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 )
 
 
+class MaskingCollate:
+    """Pickleable collate function that applies masking after batching."""
+
+    def __init__(self, masking_function: Optional[Callable] = None):
+        self.masking_function = masking_function
+
+    def __call__(self, batch):
+        # Separate the elements
+        weather_list, coords_list, year_list, interval_list = zip(*batch)
+
+        # Stack into batches
+        weather = torch.stack(weather_list)
+        coords = torch.stack(coords_list)
+        year = torch.stack(year_list)
+        interval = torch.stack(interval_list)
+
+        # Apply masking function if provided
+        if self.masking_function is not None:
+            batch_size, seq_len, n_features = weather.size()
+            feature_mask = self.masking_function(batch_size, seq_len, n_features)
+            return weather, coords, year, interval, feature_mask
+        else:
+            return weather, coords, year, interval
+
+
 def streaming_dataloader(
     batch_size,
     split="train",
@@ -79,6 +105,7 @@ def streaming_dataloader(
     lr_finder=False,
     num_input_features=None,
     num_output_features=None,
+    masking_function: Optional[Callable] = None,
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
@@ -123,4 +150,14 @@ def streaming_dataloader(
         num_output_features=num_output_features,
         shuffle=shuffle,
     )
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size)
+
+    # Create pickleable collate function with masking
+    collate_fn = MaskingCollate(masking_function)
+
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        collate_fn=collate_fn,
+        num_workers=0,
+        pin_memory=True,
+    )
