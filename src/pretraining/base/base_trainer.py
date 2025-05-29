@@ -33,6 +33,7 @@ class BaseTrainer(ABC):
         masking_function: Optional[str] = None,
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
+        resume_from_checkpoint: Optional[str] = None,
     ):
         self.model = model
         self.batch_size = batch_size
@@ -76,6 +77,11 @@ class BaseTrainer(ABC):
         if pretrained_model_path and os.path.exists(pretrained_model_path):
             pretrained_model = torch.load(pretrained_model_path, weights_only=False)
             self.model.load_pretrained(pretrained_model)
+
+        self.start_epoch = 0
+        # Resume from checkpoint if provided
+        if resume_from_checkpoint and os.path.exists(resume_from_checkpoint):
+            self.load_checkpoint(resume_from_checkpoint)
 
     @abstractmethod
     def compute_train_loss(
@@ -158,11 +164,6 @@ class BaseTrainer(ABC):
             )
             loss = loss_dict["total_loss"]
 
-            # Ensure total_loss_dict has all keys from loss_dict
-            for key in loss_dict:
-                if key not in total_loss_dict:
-                    total_loss_dict[key] = 0.0
-
             # Accumulate losses and its components
             for key in loss_dict:
                 total_loss_dict[key] += loss_dict[key].item()
@@ -181,7 +182,7 @@ class BaseTrainer(ABC):
         for key in self.output_json["losses"]["train"]:
             self.output_json["losses"]["train"][key] = total_loss_dict[key] / loader_len
 
-        return total_loss_dict["total_loss"] / loader_len
+        return total_loss_dict["total_loss"]
 
     def validate_epoch(self, loader) -> float:
         """Validate the model for one epoch."""
@@ -205,30 +206,54 @@ class BaseTrainer(ABC):
 
             loader_len += 1
 
-            # Ensure total_loss_dict has all keys from loss_dict
-            for key in loss_dict:
-                if key not in total_loss_dict:
-                    total_loss_dict[key] = 0.0
-
             # Accumulate losses and its components
             for key in loss_dict:
                 total_loss_dict[key] += loss_dict[key].item()
 
-        for key in self.output_json["losses"]["val"]:
-            self.output_json["losses"]["val"][key] = total_loss_dict[key] / loader_len
+            for key in self.output_json["losses"]["val"]:
+                self.output_json["losses"]["val"][key] = (
+                    total_loss_dict[key] / loader_len
+                )
 
-        return total_loss_dict["total_loss"] / loader_len
+        return total_loss_dict["total_loss"]
 
-    def save_model(self, epoch: int):
-        """Save the model at the current epoch."""
+    def save_checkpoint(self, epoch: int, val_loss: float):
+        """Save a complete checkpoint including model, optimizer, scheduler, and training state."""
+        checkpoint = {
+            "epoch": epoch + 1,  # Next epoch to resume from
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
+            "output_json": self.output_json,
+        }
 
-        torch.save(
-            self.model,
-            self.model_dir + f"{self.model.name}_epoch_{epoch}.pth",
+        # Save epoch-specific checkpoint
+        checkpoint_path = (
+            self.model_dir + f"{self.model.name}_epoch_{epoch}_checkpoint.pth"
         )
-        torch.save(
-            self.model,
-            self.model_dir + f"{self.model.name}_latest.pth",
+        torch.save(checkpoint, checkpoint_path)
+
+        # Save latest checkpoint
+        latest_checkpoint_path = (
+            self.model_dir + f"{self.model.name}_latest_checkpoint.pth"
+        )
+        torch.save(checkpoint, latest_checkpoint_path)
+
+        # Also save the model separately for compatibility
+        torch.save(self.model, self.model_dir + f"{self.model.name}_epoch_{epoch}.pth")
+        torch.save(self.model, self.model_dir + f"{self.model.name}_latest.pth")
+
+    def load_checkpoint(self, checkpoint_path: str):
+        """Load a checkpoint to resume training."""
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        self.start_epoch = checkpoint["epoch"]
+        if "output_json" in checkpoint:
+            self.output_json = checkpoint["output_json"]
+        self.logger.info(
+            f"Loaded checkpoint from {checkpoint_path}, resuming from epoch {self.start_epoch}"
         )
 
     def save_output_json(self):
@@ -249,8 +274,8 @@ class BaseTrainer(ABC):
         Returns:
             Tuple of (trained_model, losses_dict)
         """
-        # Find optimal learning rate if enabled
-        if use_optimal_lr:
+        # Find optimal learning rate if enabled and not resuming from checkpoint
+        if use_optimal_lr and self.start_epoch == 0:
             self.logger.info("Finding optimal learning rate...")
             train_loader = streaming_dataloader(
                 self.batch_size,
@@ -269,7 +294,7 @@ class BaseTrainer(ABC):
                 f"Updated learning rate to optimal value: {optimal_lr:.6f}"
             )
 
-        for epoch in range(num_epochs):
+        for epoch in range(self.start_epoch, num_epochs):
             train_loader = streaming_dataloader(
                 self.batch_size,
                 split="train",
@@ -296,7 +321,7 @@ class BaseTrainer(ABC):
             )
 
             if epoch % 2 == 1 or epoch == num_epochs - 1:
-                self.save_model(epoch)
+                self.save_checkpoint(epoch, val_loss)
 
             self.save_output_json()
 

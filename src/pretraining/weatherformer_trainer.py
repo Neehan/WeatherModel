@@ -4,7 +4,6 @@ import logging
 import random
 from typing import Dict
 from src.pretraining.base.base_trainer import BaseTrainer
-from src.utils.arg_parser import parse_args
 from src.models.weatherformer import WeatherFormer
 from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
 
@@ -24,16 +23,12 @@ class WeatherFormerTrainer(BaseTrainer):
 
     def __init__(
         self,
-        model,
-        batch_size,
-        num_input_features,
-        num_output_features,
-        beta,
+        model: WeatherFormer,
+        batch_size: int,
+        beta: float,
         **kwargs,
     ):
         super().__init__(model, batch_size, **kwargs)
-        self.num_input_features = num_input_features
-        self.num_output_features = num_output_features
         self.beta = beta  # Hyperparameter controlling reconstruction vs regularization trade-off
 
         self.output_json["losses"] = {
@@ -151,39 +146,11 @@ class WeatherFormerTrainer(BaseTrainer):
         return loss_dict
 
 
-def weatherformer_training_loop(
-    model,
-    batch_size,
-    num_input_features,
-    num_output_features,
-    num_epochs,
-    init_lr=1e-4,
-    num_warmup_epochs=5,
-    decay_factor=0.95,
-    beta=0.1,
-):
+def weatherformer_training_loop(args_dict):
     """
     WeatherFormer training loop using the WeatherFormerTrainer class.
+    Initializes the model internally and handles all training.
     """
-    trainer = WeatherFormerTrainer(
-        model=model,
-        batch_size=batch_size,
-        num_input_features=num_input_features,
-        num_output_features=num_output_features,
-        init_lr=init_lr,
-        num_warmup_epochs=num_warmup_epochs,
-        decay_factor=decay_factor,
-        beta=beta,
-        masking_function="weatherformer",
-        n_masked_features=num_output_features,
-    )
-
-    return trainer.train(num_epochs)
-
-
-if __name__ == "__main__":
-    args_dict = parse_args()
-
     # Initialize WeatherFormer model
     model = WeatherFormer(
         weather_dim=TOTAL_WEATHER_VARS,
@@ -194,15 +161,16 @@ if __name__ == "__main__":
 
     logging.info(str(model))
 
-    # Run WeatherFormer training loop with proper parameters
-    model, losses = weatherformer_training_loop(
+    trainer = WeatherFormerTrainer(
         model=model,
         batch_size=args_dict["batch_size"],
-        num_input_features=args_dict["n_input_features"],
-        num_output_features=TOTAL_WEATHER_VARS - args_dict["n_input_features"],
-        num_epochs=args_dict["n_epochs"],
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
-        beta=args_dict.get("beta", 0.1),  # Default beta value if not provided
+        beta=args_dict["beta"],
+        masking_function="weatherformer",
+        n_masked_features=TOTAL_WEATHER_VARS - args_dict["n_input_features"],
+        resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
     )
+
+    return trainer.train(args_dict["n_epochs"])

@@ -37,9 +37,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
 
-        logger.info(
-            f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
-        )
+        # logger.info(
+        #     f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
+        # )
         if masking_function == "weatherbert":
             self.masking_function = self.weatherbert_masking_function
         elif masking_function == "weatherformer":

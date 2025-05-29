@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import logging
 
 from src.pretraining.base.base_trainer import BaseTrainer
-from src.utils.arg_parser import parse_args
 from src.models.weatherbert import WeatherBERT
 from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
 
@@ -25,7 +24,7 @@ class WeatherBertTrainer(BaseTrainer):
     BERT-style trainer that implements masked language modeling for weather data.
     """
 
-    def __init__(self, model, batch_size, **kwargs):
+    def __init__(self, model: WeatherBERT, batch_size: int, **kwargs):
         super().__init__(model, batch_size, **kwargs)
         self.mse_loss = nn.MSELoss()
 
@@ -101,34 +100,11 @@ class WeatherBertTrainer(BaseTrainer):
         return {"total_loss": loss}
 
 
-def bert_training_loop(
-    model,
-    batch_size,
-    num_epochs,
-    init_lr=1e-4,
-    num_warmup_epochs=5,
-    decay_factor=0.95,
-    masking_prob=0.15,
-):
+def bert_training_loop(args_dict):
     """
-    Simplified BERT training loop using the BertTrainer class.
+    BERT training loop using the WeatherBertTrainer class.
+    Initializes the model internally and handles all training.
     """
-    trainer = WeatherBertTrainer(
-        model=model,
-        batch_size=batch_size,
-        init_lr=init_lr,
-        num_warmup_epochs=num_warmup_epochs,
-        decay_factor=decay_factor,
-        masking_prob=masking_prob,
-        masking_function="weatherbert",
-    )
-
-    return trainer.train(num_epochs)
-
-
-if __name__ == "__main__":
-    args_dict = parse_args()
-
     # Initialize WeatherBERT model
     model = WeatherBERT(
         weather_dim=TOTAL_WEATHER_VARS,
@@ -138,13 +114,16 @@ if __name__ == "__main__":
     ).to(DEVICE)
 
     logging.info(str(model))
-    # Run BERT training loop with proper parameters
-    model, losses = bert_training_loop(
+
+    trainer = WeatherBertTrainer(
         model=model,
         batch_size=args_dict["batch_size"],
-        num_epochs=args_dict["n_epochs"],
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
         masking_prob=args_dict["masking_prob"],
+        masking_function="weatherbert",
+        resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
     )
+
+    return trainer.train(args_dict["n_epochs"])
