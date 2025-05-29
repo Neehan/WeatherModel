@@ -7,8 +7,6 @@ import torch.nn as nn
 import logging
 import numpy as np
 
-from src.utils.constants import DEVICE
-
 if TYPE_CHECKING:
     from src.pretraining.base.base_trainer import BaseTrainer
     from src.crop_yield.base.base_yield_trainer import BaseYieldTrainer
@@ -61,11 +59,11 @@ def simple_lr_finder(
         if is_pretraining:
             # Pretraining format: (weather, coords, year, interval, feature_mask)
             weather, coords, year, interval, feature_mask = batch
-            weather = weather.to(DEVICE)
-            coords = coords.to(DEVICE)
-            year = year.to(DEVICE)
-            interval = interval.to(DEVICE)
-            feature_mask = feature_mask.to(DEVICE)
+            weather = weather.to(trainer.device)
+            coords = coords.to(trainer.device)
+            year = year.to(trainer.device)
+            interval = interval.to(trainer.device)
+            feature_mask = feature_mask.to(trainer.device)
 
             # Compute loss using trainer's method
             loss_dict = trainer.compute_train_loss(
@@ -75,8 +73,8 @@ def simple_lr_finder(
         else:
             # Yield training format: (input_data, y)
             input_data, y = batch
-            input_data = [x.to(DEVICE) for x in input_data]
-            y = y.to(DEVICE)
+            input_data = [x.to(trainer.device) for x in input_data]
+            y = y.to(trainer.device)
 
             # Forward pass and compute loss
             outputs = trainer.model(input_data)
