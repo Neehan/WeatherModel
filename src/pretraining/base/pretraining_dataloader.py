@@ -161,15 +161,22 @@ def streaming_dataloader(
 
     # For distributed training, partition the data across ranks
     if world_size > 1:
+        # Ensure all GPUs get exactly the same number of chunks
+        # Truncate to largest number evenly divisible by world_size
+        num_chunks_per_gpu = len(indices_list) // world_size
+        total_chunks_to_use = num_chunks_per_gpu * world_size
+        indices_list = indices_list[:total_chunks_to_use]
+
         # Distribute indices across ranks
         indices_per_rank = len(indices_list) // world_size
         start_idx = rank * indices_per_rank
-        if rank == world_size - 1:
-            # Last rank gets any remaining indices
-            end_idx = len(indices_list)
-        else:
-            end_idx = start_idx + indices_per_rank
+        end_idx = start_idx + indices_per_rank
         indices_list = indices_list[start_idx:end_idx]
+
+        # Log distribution for debugging
+        logger.info(
+            f"Rank {rank}: Processing {len(indices_list)} chunks out of {total_chunks_to_use} total chunks (dropped {len(list(indices)) - total_chunks_to_use} chunks)"
+        )
 
     # Create different shuffled orderings for each frequency
     monthly_indices = indices_list.copy()
