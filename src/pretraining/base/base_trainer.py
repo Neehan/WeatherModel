@@ -261,7 +261,14 @@ class BaseTrainer(ABC):
         if self.rank == 0:
             self.logger.info(f"Started validation epoch.")
 
+        # Add detailed logging
+        self.logger.info(f"Rank {self.rank}: About to start validation loop")
+
         for weather, coords, year, interval, feature_mask in loader:
+            self.logger.info(
+                f"Rank {self.rank}: Processing validation batch {loader_len + 1}"
+            )
+
             weather = weather.to(self.device)
             coords = coords.to(self.device)
             year = year.to(self.device)
@@ -279,9 +286,21 @@ class BaseTrainer(ABC):
             for key in loss_dict:
                 total_loss_dict[key] += loss_dict[key].item()
 
+            self.logger.info(
+                f"Rank {self.rank}: Completed validation batch {loader_len}"
+            )
+
+        self.logger.info(
+            f"Rank {self.rank}: Finished validation loop, processed {loader_len} batches"
+        )
+
         # Explicit synchronization barrier to ensure all GPUs finish validation epoch
         if self.is_distributed:
+            self.logger.info(f"Rank {self.rank}: About to call dist.barrier()")
             dist.barrier()
+            self.logger.info(f"Rank {self.rank}: Passed dist.barrier()")
+
+        self.logger.info(f"Rank {self.rank}: About to start loss averaging")
 
         # Average losses across all processes
         if self.is_distributed:
@@ -289,16 +308,25 @@ class BaseTrainer(ABC):
                 total_loss_dict[key] = total_loss_dict[key] / loader_len
                 # Convert to tensor for all_reduce
                 loss_tensor = torch.tensor(total_loss_dict[key], device=self.device)
+                self.logger.info(
+                    f"Rank {self.rank}: About to call all_reduce for {key}"
+                )
                 dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+                self.logger.info(f"Rank {self.rank}: Completed all_reduce for {key}")
                 total_loss_dict[key] = loss_tensor.item() / self.world_size
         else:
             for key in total_loss_dict:
                 total_loss_dict[key] = total_loss_dict[key] / loader_len
 
+        self.logger.info(f"Rank {self.rank}: Completed loss averaging")
+
         # Update output_json only on rank 0
         if self.rank == 0:
             for key in self.output_json["losses"]["val"]:
                 self.output_json["losses"]["val"][key] = total_loss_dict[key]
+            self.logger.info(f"Rank {self.rank}: Updated output_json")
+
+        self.logger.info(f"Rank {self.rank}: Validation epoch completed successfully")
 
         return total_loss_dict["total_loss"]
 
@@ -403,6 +431,9 @@ class BaseTrainer(ABC):
             )
 
         for epoch in range(self.start_epoch, num_epochs):
+            if self.rank == 0:
+                self.logger.info(f"=== Starting Epoch {epoch + 1}/{num_epochs} ===")
+
             train_loader = streaming_dataloader(
                 self.batch_size,
                 split="train",
@@ -425,7 +456,16 @@ class BaseTrainer(ABC):
                 rank=self.rank,
             )
 
+            if self.rank == 0:
+                self.logger.info(f"Created dataloaders for epoch {epoch + 1}")
+
             train_loss = self.train_epoch(train_loader)
+
+            if self.rank == 0:
+                self.logger.info(
+                    f"Completed training epoch {epoch + 1}, starting validation"
+                )
+
             val_loss = self.validate_epoch(test_loader)
 
             if self.rank == 0:
@@ -437,6 +477,7 @@ class BaseTrainer(ABC):
                     self.save_checkpoint(epoch, val_loss)
 
                 self.save_output_json()
+                self.logger.info(f"=== Completed Epoch {epoch + 1}/{num_epochs} ===")
 
         # Return the unwrapped model if distributed
         return self._get_underlying_model(), (
