@@ -391,8 +391,8 @@ class BaseTrainer(ABC):
                     masking_function=self.masking_function,
                     masking_prob=self.masking_prob,
                     n_masked_features=self.n_masked_features,
-                    world_size=self.world_size,
-                    rank=self.rank,
+                    world_size=1,  # Use full dataset for optimal LR finding
+                    rank=0,  # Always rank 0 for full dataset
                 )
                 optimal_lr = find_optimal_lr(self, train_loader)
                 self.logger.info(f"Found optimal learning rate: {optimal_lr:.6f}")
