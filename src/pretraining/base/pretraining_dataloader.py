@@ -191,5 +191,5 @@ def streaming_dataloader(
         n_masked_features=n_masked_features,
     )
     return torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, pin_memory=True, num_workers=0
+        dataset, batch_size=batch_size, pin_memory=True, num_workers=4
     )

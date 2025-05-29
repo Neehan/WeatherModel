@@ -66,7 +66,7 @@ class BaseTrainer(ABC):
                 "decay_factor": decay_factor,
                 "model_layers": str(self.model),
             },
-            "losses": {"train": [], "val": []},
+            "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},
         }
         self.model_dir = DATA_DIR + "trained_models/pretraining/"
         if not os.path.exists(self.model_dir):
@@ -85,9 +85,9 @@ class BaseTrainer(ABC):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """
-        Compute training loss for a batch.
+        Compute training loss for a batch and update the output JSON.
         Children classes must implement this method.
 
         Args:
@@ -98,7 +98,7 @@ class BaseTrainer(ABC):
             feature_mask: Feature mask tensor
 
         Returns:
-            Loss tensor
+            Loss tensor (called total_loss) and other loss tensors
         """
         pass
 
@@ -110,9 +110,9 @@ class BaseTrainer(ABC):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """
-        Compute validation loss for a batch.
+        Compute validation loss for a batch and update the output JSON.
         Children classes must implement this method.
 
         Args:
@@ -123,7 +123,7 @@ class BaseTrainer(ABC):
             feature_mask: Feature mask tensor
 
         Returns:
-            Loss tensor
+            Loss tensor (called total_loss) and other loss tensors
         """
         pass
 
@@ -137,8 +137,8 @@ class BaseTrainer(ABC):
     def train_epoch(self, loader) -> float:
         """Train the model for one epoch."""
         self.model.train()
-        total_loss = 0
         loader_len = 0
+        total_loss_dict = {key: 0.0 for key in self.output_json["losses"]["train"]}
 
         self.logger.info(f"Started training epoch.")
 
@@ -153,11 +153,20 @@ class BaseTrainer(ABC):
 
             self.optimizer.zero_grad()
 
-            loss = self.compute_train_loss(
+            loss_dict = self.compute_train_loss(
                 weather, coords, year, interval, feature_mask
             )
+            loss = loss_dict["total_loss"]
 
-            total_loss += loss.item()
+            # Ensure total_loss_dict has all keys from loss_dict
+            for key in loss_dict:
+                if key not in total_loss_dict:
+                    total_loss_dict[key] = 0.0
+
+            # Accumulate losses and its components
+            for key in loss_dict:
+                total_loss_dict[key] += loss_dict[key].item()
+
             loader_len += 1
 
             if time.time() - start_time > self.log_interval_seconds and DRY_RUN:
@@ -169,13 +178,16 @@ class BaseTrainer(ABC):
             self.optimizer.step()
 
         self.scheduler.step()
-        return total_loss / loader_len
+        for key in self.output_json["losses"]["train"]:
+            self.output_json["losses"]["train"][key] = total_loss_dict[key] / loader_len
+
+        return total_loss_dict["total_loss"] / loader_len
 
     def validate_epoch(self, loader) -> float:
         """Validate the model for one epoch."""
         self.model.eval()
-        total_loss = 0
         loader_len = 0
+        total_loss_dict = {key: 0.0 for key in self.output_json["losses"]["val"]}
 
         self.logger.info(f"Started validation epoch.")
 
@@ -187,14 +199,25 @@ class BaseTrainer(ABC):
             feature_mask = feature_mask.to(self.device)
 
             with torch.no_grad():
-                loss = self.compute_validation_loss(
+                loss_dict = self.compute_validation_loss(
                     weather, coords, year, interval, feature_mask
                 )
 
-            total_loss += loss.item()
             loader_len += 1
 
-        return total_loss / loader_len
+            # Ensure total_loss_dict has all keys from loss_dict
+            for key in loss_dict:
+                if key not in total_loss_dict:
+                    total_loss_dict[key] = 0.0
+
+            # Accumulate losses and its components
+            for key in loss_dict:
+                total_loss_dict[key] += loss_dict[key].item()
+
+        for key in self.output_json["losses"]["val"]:
+            self.output_json["losses"]["val"][key] = total_loss_dict[key] / loader_len
+
+        return total_loss_dict["total_loss"] / loader_len
 
     def save_model(self, epoch: int):
         """Save the model at the current epoch."""
@@ -267,9 +290,6 @@ class BaseTrainer(ABC):
 
             train_loss = self.train_epoch(train_loader)
             val_loss = self.validate_epoch(test_loader)
-
-            self.output_json["losses"]["train"].append(train_loss)
-            self.output_json["losses"]["val"].append(val_loss)
 
             self.logger.info(
                 f"Epoch [{epoch+1} / {num_epochs}]: Train loss: {train_loss:.3f} Validation loss: {val_loss:.3f}"

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import logging
 import random
-
+from typing import Dict
 from src.pretraining.base.base_trainer import BaseTrainer
 from src.utils.arg_parser import parse_args
 from src.models.weatherformer import WeatherFormer
@@ -36,9 +36,20 @@ class WeatherFormerTrainer(BaseTrainer):
         self.num_output_features = num_output_features
         self.beta = beta  # Hyperparameter controlling reconstruction vs regularization trade-off
 
-        # Initialize feature indices for swapping
-        feature_dim = num_input_features + num_output_features
-        self.weather_indices = torch.arange(feature_dim)
+        self.output_json["losses"] = {
+            "train": {
+                "total_loss": [],
+                "reconstruction": [],
+                "log_variance": [],
+                "kl_regularization": [],
+            },
+            "val": {
+                "total_loss": [],
+                "reconstruction": [],
+                "log_variance": [],
+                "kl_regularization": [],
+            },
+        }
 
     def get_model_name(self) -> str:
         return "weatherformer"
@@ -49,7 +60,7 @@ class WeatherFormerTrainer(BaseTrainer):
         mu: torch.Tensor,
         sigma: torch.Tensor,
         log_losses: bool = False,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """
         Compute the VAE-style loss from the mathematical formula:
         L_pretrain = mean over masked features of:
@@ -78,7 +89,12 @@ class WeatherFormerTrainer(BaseTrainer):
 
         total_loss = reconstruction_term + log_variance_term + kl_regularization_term
 
-        return total_loss
+        return {
+            "total_loss": total_loss,
+            "reconstruction": reconstruction_term,
+            "log_variance": log_variance_term,
+            "kl_regularization": kl_regularization_term,
+        }
 
     def compute_train_loss(
         self,
@@ -87,7 +103,7 @@ class WeatherFormerTrainer(BaseTrainer):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """Compute WeatherFormer training loss using VAE-style loss function."""
 
         # Get model predictions (mu, sigma)
@@ -101,9 +117,11 @@ class WeatherFormerTrainer(BaseTrainer):
         predicted_sigma = sigma[feature_mask]
 
         # Compute VAE loss
-        loss = self.compute_elbo_loss(target_features, predicted_mu, predicted_sigma)
+        loss_dict = self.compute_elbo_loss(
+            target_features, predicted_mu, predicted_sigma
+        )
 
-        return loss
+        return loss_dict
 
     def compute_validation_loss(
         self,
@@ -112,7 +130,7 @@ class WeatherFormerTrainer(BaseTrainer):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """Compute WeatherFormer validation loss using VAE-style loss function."""
 
         # Get model predictions (mu, sigma)
@@ -126,9 +144,11 @@ class WeatherFormerTrainer(BaseTrainer):
         predicted_sigma = sigma[feature_mask]
 
         # Compute VAE loss
-        loss = self.compute_elbo_loss(target_features, predicted_mu, predicted_sigma)
+        loss_dict = self.compute_elbo_loss(
+            target_features, predicted_mu, predicted_sigma
+        )
 
-        return loss
+        return loss_dict
 
 
 def weatherformer_training_loop(

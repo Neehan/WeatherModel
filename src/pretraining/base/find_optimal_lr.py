@@ -68,9 +68,10 @@ def simple_lr_finder(
             feature_mask = feature_mask.to(DEVICE)
 
             # Compute loss using trainer's method
-            loss = trainer.compute_train_loss(
+            loss_dict = trainer.compute_train_loss(
                 weather, coords, year, interval, feature_mask
             )
+            loss = loss_dict["total_loss"]
         else:
             # Yield training format: (input_data, y)
             input_data, y = batch

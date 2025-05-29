@@ -1,3 +1,4 @@
+from typing import Dict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -70,7 +71,7 @@ class WeatherBertTrainer(BaseTrainer):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """Compute BERT training loss using MSE between predicted and actual masked tokens."""
         target_tokens = data[feature_mask]
 
@@ -79,7 +80,7 @@ class WeatherBertTrainer(BaseTrainer):
         )[feature_mask]
         loss = self.mse_loss(target_tokens, output)
 
-        return loss
+        return {"total_loss": loss}
 
     def compute_validation_loss(
         self,
@@ -88,7 +89,7 @@ class WeatherBertTrainer(BaseTrainer):
         year: torch.Tensor,
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Dict[str, torch.Tensor]:
         """Compute BERT validation loss using MSE between predicted and actual masked tokens."""
         target_tokens = data[feature_mask]
 
@@ -97,7 +98,7 @@ class WeatherBertTrainer(BaseTrainer):
         )[feature_mask]
         loss = F.mse_loss(target_tokens, output)
 
-        return loss
+        return {"total_loss": loss}
 
 
 def bert_training_loop(
