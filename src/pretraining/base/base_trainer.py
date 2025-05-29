@@ -99,6 +99,8 @@ class BaseTrainer(ABC):
                 "init_lr": init_lr,
                 "num_warmup_epochs": num_warmup_epochs,
                 "decay_factor": decay_factor,
+                "masking_prob": masking_prob,
+                "n_masked_features": n_masked_features,
                 "model_layers": str(model_for_config),
             },
             "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},

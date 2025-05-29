@@ -47,6 +47,7 @@ class WeatherFormerTrainer(BaseTrainer):
                 "kl_regularization": [],
             },
         }
+        self.output_json["model_config"]["beta"] = self.beta
 
     def get_model_name(self) -> str:
         return "weatherformer"
