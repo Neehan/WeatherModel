@@ -413,6 +413,9 @@ class BaseTrainer(ABC):
                 # Synchronize all ranks
                 dist.barrier()
 
+            if self.rank == 0:
+                self.output_json["model_config"]["init_lr"] = optimal_lr
+
             # Update optimizer with averaged optimal learning rate on all ranks
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = optimal_lr
