@@ -217,5 +217,5 @@ def streaming_dataloader(
         dataset,
         batch_size=batch_size,
         pin_memory=True,
-        num_workers=0,  # Use main process only for distributed training
+        num_workers=4,  # Use main process only for distributed training
     )
