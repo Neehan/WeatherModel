@@ -250,7 +250,7 @@ class BaseTrainer(ABC):
         # Update output_json only on rank 0
         if self.rank == 0:
             for key in self.output_json["losses"]["train"]:
-                self.output_json["losses"]["train"][key] = total_loss_dict[key]
+                self.output_json["losses"]["train"][key].append(total_loss_dict[key])
 
         return total_loss_dict["total_loss"]
 
@@ -300,7 +300,7 @@ class BaseTrainer(ABC):
         # Update output_json only on rank 0
         if self.rank == 0:
             for key in self.output_json["losses"]["val"]:
-                self.output_json["losses"]["val"][key] = total_loss_dict[key]
+                self.output_json["losses"]["val"][key].append(total_loss_dict[key])
 
         return total_loss_dict["total_loss"]
 
