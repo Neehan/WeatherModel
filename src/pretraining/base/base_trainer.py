@@ -88,22 +88,24 @@ class BaseTrainer(ABC):
             )
             self.logger.info(f"Batch size per GPU: {self.batch_size}")
 
-        # Only initialize output_json on rank 0
+        # Initialize output_json on all ranks for consistent loss dict structure
+        model_for_config = self._get_underlying_model()
+        self.output_json = {
+            "model_config": {
+                "total_params": model_for_config.total_params(),
+                "batch_size": batch_size,  # Original batch size before distributed split
+                "batch_size_per_gpu": self.batch_size,
+                "world_size": world_size,
+                "init_lr": init_lr,
+                "num_warmup_epochs": num_warmup_epochs,
+                "decay_factor": decay_factor,
+                "model_layers": str(model_for_config),
+            },
+            "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},
+        }
+
+        # Only create model directory on rank 0
         if self.rank == 0:
-            model_for_config = self._get_underlying_model()
-            self.output_json = {
-                "model_config": {
-                    "total_params": model_for_config.total_params(),
-                    "batch_size": batch_size,  # Original batch size before distributed split
-                    "batch_size_per_gpu": self.batch_size,
-                    "world_size": world_size,
-                    "init_lr": init_lr,
-                    "num_warmup_epochs": num_warmup_epochs,
-                    "decay_factor": decay_factor,
-                    "model_layers": str(model_for_config),
-                },
-                "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},
-            }
             self.model_dir = DATA_DIR + "trained_models/pretraining/"
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
@@ -186,11 +188,7 @@ class BaseTrainer(ABC):
         """Train the model for one epoch."""
         self.model.train()
         loader_len = 0
-        total_loss_dict = (
-            {key: 0.0 for key in self.output_json["losses"]["train"]}
-            if self.rank == 0
-            else {"total_loss": 0.0}
-        )
+        total_loss_dict = {key: 0.0 for key in self.output_json["losses"]["train"]}
 
         if self.rank == 0:
             self.logger.info(f"Started training epoch.")
@@ -231,6 +229,10 @@ class BaseTrainer(ABC):
 
         self.scheduler.step()
 
+        # Explicit synchronization barrier to ensure all GPUs finish training epoch
+        if self.is_distributed:
+            dist.barrier()
+
         # Average losses across all processes
         if self.is_distributed:
             for key in total_loss_dict:
@@ -254,11 +256,7 @@ class BaseTrainer(ABC):
         """Validate the model for one epoch."""
         self.model.eval()
         loader_len = 0
-        total_loss_dict = (
-            {key: 0.0 for key in self.output_json["losses"]["val"]}
-            if self.rank == 0
-            else {"total_loss": 0.0}
-        )
+        total_loss_dict = {key: 0.0 for key in self.output_json["losses"]["val"]}
 
         if self.rank == 0:
             self.logger.info(f"Started validation epoch.")
@@ -280,6 +278,10 @@ class BaseTrainer(ABC):
             # Accumulate losses and its components
             for key in loss_dict:
                 total_loss_dict[key] += loss_dict[key].item()
+
+        # Explicit synchronization barrier to ensure all GPUs finish validation epoch
+        if self.is_distributed:
+            dist.barrier()
 
         # Average losses across all processes
         if self.is_distributed:

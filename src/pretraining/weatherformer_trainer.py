@@ -5,7 +5,9 @@ import random
 from typing import Dict
 from src.pretraining.base.base_trainer import BaseTrainer
 from src.models.weatherformer import WeatherFormer
-from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
+from src.utils.constants import TOTAL_WEATHER_VARS, DRY_RUN
+import time
+import torch.distributed as dist
 
 # Configure logging
 logging.basicConfig(

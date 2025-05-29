@@ -83,7 +83,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Load all three frequency files
             frequency_data = []
-            for file_path in chunk_files[:2]:
+            for file_path in chunk_files:
                 data = torch.load(file_path, weights_only=False)
                 frequency_data.append(data)
 
