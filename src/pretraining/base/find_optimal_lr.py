@@ -20,7 +20,7 @@ def simple_lr_finder(
     trainer,
     dataloader,
     start_lr: float = 1e-6,
-    end_lr: float = 1,
+    end_lr: float = 0.1,  # Reduced from 1 to 0.1 for transformer safety
     num_iter: int = 100,
     is_pretraining: bool = True,
 ):
@@ -105,10 +105,45 @@ def simple_lr_finder(
         for param_group in trainer.optimizer.param_groups:
             param_group["lr"] = current_lr
 
-    # Find optimal learning rate (steepest descent)
+    # Find optimal learning rate using Leslie Smith's methodology
+    # Leslie Smith approach: find where loss decreases fastest, then back off
+
+    # First, find where loss starts diverging (loss increases significantly)
+    min_loss = min(losses)
+    min_loss_idx = losses.index(min_loss)
+
+    # Look for divergence point - where loss > 4 * min_loss
+    diverge_idx = len(losses)  # Default to end if no divergence found
+    for i in range(min_loss_idx, len(losses)):
+        if losses[i] > 4 * min_loss:
+            diverge_idx = i
+            break
+
+    # Calculate gradients (rate of change of loss w.r.t. iteration)
     gradients = np.gradient(losses)
-    min_grad_idx = gradients.argmin()
-    optimal_lr = lrs[min_grad_idx]
+
+    # Find the most negative gradient (steepest decline) before divergence
+    # Only consider the region up to divergence point
+    search_region = gradients[:diverge_idx]
+    if len(search_region) > 0:
+        steepest_idx = np.argmin(search_region)
+        steepest_lr = lrs[steepest_idx]
+
+        # Leslie Smith recommendation: use LR that's ~1/10th of where steep decline occurs
+        # This ensures we're in the steep part but not too close to divergence
+        optimal_lr = steepest_lr / 10
+
+        # Ensure it's not too small
+        if optimal_lr < start_lr * 10:
+            optimal_lr = start_lr * 10
+
+        logger.info(f"Min loss: {min_loss:.4f} at LR {lrs[min_loss_idx]:.2e}")
+        logger.info(f"Steepest decline at LR {steepest_lr:.2e}")
+        logger.info(f"Selected optimal LR: {optimal_lr:.2e} (1/10th of steepest)")
+
+    else:
+        optimal_lr = start_lr * 10
+        logger.warning("No clear steepest decline found, using conservative default")
 
     # Restore original learning rate
     for param_group in trainer.optimizer.param_groups:
@@ -121,25 +156,28 @@ def find_optimal_lr(
     trainer: "Union[BaseTrainer, BaseYieldTrainer]",
     dataloader: DataLoader,
     start_lr: float = 1e-6,
-    end_lr: float = 1,
+    end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed
     num_iter: int = 100,
     is_pretraining: bool = True,
 ):
     """
-    Find optimal learning rate for any trainer using learning rate range test.
+    Find optimal learning rate using Leslie Smith's LR range test methodology.
+
+    Based on "Cyclical Learning Rates for Training Neural Networks" (Smith, 2017)
+    and "A disciplined approach to neural network hyper-parameters" (Smith, 2018).
 
     Args:
         trainer: Any trainer instance (BaseTrainer or BaseYieldTrainer subclass)
         dataloader: Training data loader
-        start_lr: Minimum learning rate to test
-        end_lr: Maximum learning rate to test
+        start_lr: Minimum learning rate to test (should be very small)
+        end_lr: Maximum learning rate to test (conservative default for transformers)
         num_iter: Number of iterations for the test
+        is_pretraining: Whether this is pretraining or fine-tuning
 
     Returns:
-        Optimal learning rate
+        Optimal learning rate (typically 1/10th of the steepest decline point)
     """
     optimal_lr = simple_lr_finder(
         trainer, dataloader, start_lr, end_lr, num_iter, is_pretraining
     )
-    logger.info(f"optimal learning rate: {optimal_lr:.6f}")
     return optimal_lr

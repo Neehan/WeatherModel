@@ -401,8 +401,7 @@ class BaseTrainer(ABC):
             # Each rank finds optimal LR on its data subset
             optimal_lr = find_optimal_lr(self, train_loader)
 
-            if self.rank == 0:
-                self.logger.info(f"Rank {self.rank} found optimal LR: {optimal_lr:.6f}")
+            self.logger.info(f"Rank {self.rank} found optimal LR: {optimal_lr:.6f}")
 
             # Average optimal LRs across all ranks
             if self.is_distributed:
