@@ -150,7 +150,7 @@ def streaming_dataloader(
 
     if DRY_RUN:
         train_indices = DRY_RUN_TRAIN_CHUNK_IDS
-        test_indices = VALIDATION_CHUNK_IDS[:1]
+        test_indices = VALIDATION_CHUNK_IDS[:4]  # Use 4 validation chunks for 4 GPUs
     else:
         train_indices = set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
         test_indices = VALIDATION_CHUNK_IDS
