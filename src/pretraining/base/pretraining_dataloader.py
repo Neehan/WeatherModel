@@ -29,6 +29,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         masking_function: Optional[str] = None,
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
+        rank: int = 0,
     ):
 
         self.file_paths = file_paths
@@ -37,6 +38,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.shuffle = shuffle
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
+        self.rank = rank
 
         # logger.info(
         #     f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
@@ -126,8 +128,8 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 # print(f"year: {sample[2]}, interval: {sample[3]}, coords: {sample[1]}")
                 yield sample
 
-            # Only log from main process (worker_id 0 or None)
-            if (i // 3) % 5 == 0:
+            # Only log from rank 0 and only every 5 chunks to reduce spam
+            if (i // 3) % 10 == 0 and self.rank == 0:
                 worker_info = torch.utils.data.get_worker_info()
                 if worker_info is None or worker_info.id == 0:
                     logger.info(
@@ -174,11 +176,6 @@ def streaming_dataloader(
         end_idx = start_idx + indices_per_rank
         indices_list = indices_list[start_idx:end_idx]
 
-        # Log distribution for debugging
-        logger.info(
-            f"Rank {rank}: Processing {len(indices_list)} chunks out of {total_chunks_to_use} total chunks (dropped {len(list(indices)) - total_chunks_to_use} chunks)"
-        )
-
     # Create different shuffled orderings for each frequency
     monthly_indices = indices_list.copy()
     weekly_indices = indices_list.copy()
@@ -211,6 +208,7 @@ def streaming_dataloader(
         masking_function=masking_function,
         masking_prob=masking_prob,
         n_masked_features=n_masked_features,
+        rank=rank,
     )
 
     # For distributed training, we don't use DistributedSampler with IterableDataset
