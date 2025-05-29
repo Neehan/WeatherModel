@@ -151,15 +151,24 @@ def weatherformer_training_loop(args_dict):
     WeatherFormer training loop using the WeatherFormerTrainer class.
     Initializes the model internally and handles all training.
     """
+    # Get distributed training parameters
+    rank = args_dict.get("rank", 0)
+    world_size = args_dict.get("world_size", 1)
+    local_rank = args_dict.get("local_rank", 0)
+
+    # Set device for this process
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+
     # Initialize WeatherFormer model
     model = WeatherFormer(
         weather_dim=TOTAL_WEATHER_VARS,
         output_dim=TOTAL_WEATHER_VARS,
-        device=DEVICE,
+        device=device,
         **args_dict["model_size_params"],
-    ).to(DEVICE)
+    ).to(device)
 
-    logging.info(str(model))
+    if rank == 0:
+        logging.info(str(model))
 
     trainer = WeatherFormerTrainer(
         model=model,
@@ -171,6 +180,9 @@ def weatherformer_training_loop(args_dict):
         masking_function="weatherformer",
         n_masked_features=TOTAL_WEATHER_VARS - args_dict["n_input_features"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
+        rank=rank,
+        world_size=world_size,
+        local_rank=local_rank,
     )
 
     return trainer.train(args_dict["n_epochs"])

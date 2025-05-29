@@ -143,6 +143,8 @@ def streaming_dataloader(
     masking_function: Optional[str] = None,
     masking_prob: float = 0.15,
     n_masked_features: int = 1,
+    world_size: int = 1,
+    rank: int = 0,
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
@@ -156,6 +158,18 @@ def streaming_dataloader(
     # Convert to lists and create different orderings for each frequency
     indices = train_indices if split.lower() == "train" else test_indices
     indices_list = list(indices)
+
+    # For distributed training, partition the data across ranks
+    if world_size > 1:
+        # Distribute indices across ranks
+        indices_per_rank = len(indices_list) // world_size
+        start_idx = rank * indices_per_rank
+        if rank == world_size - 1:
+            # Last rank gets any remaining indices
+            end_idx = len(indices_list)
+        else:
+            end_idx = start_idx + indices_per_rank
+        indices_list = indices_list[start_idx:end_idx]
 
     # Create different shuffled orderings for each frequency
     monthly_indices = indices_list.copy()
@@ -190,6 +204,9 @@ def streaming_dataloader(
         masking_prob=masking_prob,
         n_masked_features=n_masked_features,
     )
+
+    # For distributed training, we don't use DistributedSampler with IterableDataset
+    # since we manually partition the data above
     return torch.utils.data.DataLoader(
         dataset, batch_size=batch_size, pin_memory=True, num_workers=4
     )

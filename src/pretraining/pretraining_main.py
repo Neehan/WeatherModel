@@ -1,14 +1,12 @@
 import argparse
 import logging
+import os
+import torch
+import torch.distributed as dist
 from src.pretraining.weatherformer_trainer import weatherformer_training_loop
 from src.pretraining.weatherbert_trainer import bert_training_loop
+from src.utils.utils import setup_distributed, cleanup_distributed, setup_logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -66,9 +64,14 @@ parser.add_argument(
 def parse_args():
     args = parser.parse_args()
     args_dict = vars(args)
-    logger.info("Command-line arguments:")
-    for arg, value in args_dict.items():
-        logger.info(f"{arg}: {value}")
+
+    # Only log from rank 0
+    rank = int(os.environ.get("RANK", 0))
+    if rank == 0:
+        logger = logging.getLogger(__name__)
+        logger.info("Command-line arguments:")
+        for arg, value in args_dict.items():
+            logger.info(f"{arg}: {value}")
 
     # Model size configuration
     model_size = args.model_size.lower()
@@ -85,18 +88,33 @@ def parse_args():
 
 
 def main():
-    args_dict = parse_args()
+    # Setup distributed training
+    rank, world_size, local_rank = setup_distributed()
 
-    model_type = args_dict["model"].lower()
+    # Setup logging
+    setup_logging(rank)
 
-    if model_type == "weatherformer":
-        model, losses = weatherformer_training_loop(args_dict)
-    elif model_type == "weatherbert":
-        model, losses = bert_training_loop(args_dict)
-    else:
-        raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherformer' or 'weatherbert'"
-        )
+    try:
+        args_dict = parse_args()
+
+        # Add distributed training info to args
+        args_dict["rank"] = rank
+        args_dict["world_size"] = world_size
+        args_dict["local_rank"] = local_rank
+
+        model_type = args_dict["model"].lower()
+
+        if model_type == "weatherformer":
+            model, losses = weatherformer_training_loop(args_dict)
+        elif model_type == "weatherbert":
+            model, losses = bert_training_loop(args_dict)
+        else:
+            raise ValueError(
+                f"Unknown model type: {model_type}. Choose 'weatherformer' or 'weatherbert'"
+            )
+    finally:
+        # Clean up distributed environment
+        cleanup_distributed()
 
 
 if __name__ == "__main__":
