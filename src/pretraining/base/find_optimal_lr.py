@@ -137,10 +137,6 @@ def simple_lr_finder(
         if optimal_lr < start_lr * 10:
             optimal_lr = start_lr * 10
 
-        logger.info(f"Min loss: {min_loss:.4f} at LR {lrs[min_loss_idx]:.2e}")
-        logger.info(f"Steepest decline at LR {steepest_lr:.2e}")
-        logger.info(f"Selected optimal LR: {optimal_lr:.2e} (1/10th of steepest)")
-
     else:
         optimal_lr = start_lr * 10
         logger.warning("No clear steepest decline found, using conservative default")
