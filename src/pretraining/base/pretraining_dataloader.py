@@ -14,7 +14,6 @@ from src.utils.constants import (
 from src.utils.tqdm_to_logger import TqdmToLogger
 from tqdm import tqdm
 import logging
-import os
 
 random.seed(1234)
 logger = logging.getLogger(__name__)
@@ -79,13 +78,6 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         return mask
 
     def __iter__(self):
-        # Log which rank is starting iteration
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None:
-            logger.info(
-                f"Main process starting dataloader iteration with {len(self.file_paths)} files"
-            )
-
         # Process files in groups of 3 (monthly, weekly, daily with different indices)
         for i in range(0, len(self.file_paths), 3):
             chunk_files = self.file_paths[i : i + 3]  # monthly_i, weekly_j, daily_k
@@ -93,33 +85,13 @@ class StreamingDataset(torch.utils.data.IterableDataset):
             # Load all three frequency files
             frequency_data = []
             for file_path in chunk_files:
-                logger.info(f"Rank attempting to load: {file_path}")
-                if not os.path.exists(file_path):
-                    logger.error(f"File does not exist: {file_path}")
-                    continue
-                try:
-                    data = torch.load(file_path, weights_only=False)
-                    logger.info(f"Successfully loaded: {file_path}")
-                    frequency_data.append(data)
-                except Exception as e:
-                    logger.error(f"Failed to load {file_path}: {e}")
-                    continue
+                data = torch.load(file_path, weights_only=False)
+                frequency_data.append(data)
 
             # Collect all samples from the three frequency files
             all_samples = []
-            logger.info(f"Processing {len(frequency_data)} frequency files")
-
-            for freq_idx, data in enumerate(frequency_data):
-                logger.info(
-                    f"Processing frequency file {freq_idx + 1}/{len(frequency_data)} with {len(data)} samples"
-                )
-
-                for sample_idx, (weather, coords, index) in enumerate(data):
-                    if sample_idx % 100 == 0:  # Log every 100 samples
-                        logger.info(
-                            f"Processing sample {sample_idx + 1}/{len(data)} in frequency file {freq_idx + 1}"
-                        )
-
+            for data in frequency_data:
+                for weather, coords, index in data:
                     # index is (temporal index since 1984 jan 1, temporal interval)
                     temporal_index = index[:1]
                     interval = index[1:]
@@ -144,10 +116,6 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                         )
                     else:
                         all_samples.append((weather, coords, years, interval))
-
-                logger.info(f"Completed processing frequency file {freq_idx + 1}")
-
-            logger.info(f"Collected {len(all_samples)} total samples")
 
             # Shuffle all samples from this chunk if shuffle is enabled
             if self.shuffle:
