@@ -227,11 +227,19 @@ class BaseTrainer(ABC):
             loss.backward()
             self.optimizer.step()
 
+        self.logger.info(
+            f"Rank {self.rank}: Finished training loop, processed {loader_len} batches"
+        )
+
         self.scheduler.step()
 
         # Explicit synchronization barrier to ensure all GPUs finish training epoch
         if self.is_distributed:
+            self.logger.info(f"Rank {self.rank}: About to call training dist.barrier()")
             dist.barrier()
+            self.logger.info(f"Rank {self.rank}: Passed training dist.barrier()")
+
+        self.logger.info(f"Rank {self.rank}: About to start training loss averaging")
 
         # Average losses across all processes
         if self.is_distributed:
@@ -239,16 +247,26 @@ class BaseTrainer(ABC):
                 total_loss_dict[key] = total_loss_dict[key] / loader_len
                 # Convert to tensor for all_reduce
                 loss_tensor = torch.tensor(total_loss_dict[key], device=self.device)
+                self.logger.info(
+                    f"Rank {self.rank}: About to call training all_reduce for {key}"
+                )
                 dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+                self.logger.info(
+                    f"Rank {self.rank}: Completed training all_reduce for {key}"
+                )
                 total_loss_dict[key] = loss_tensor.item() / self.world_size
         else:
             for key in total_loss_dict:
                 total_loss_dict[key] = total_loss_dict[key] / loader_len
 
+        self.logger.info(f"Rank {self.rank}: Completed training loss averaging")
+
         # Update output_json only on rank 0
         if self.rank == 0:
             for key in self.output_json["losses"]["train"]:
                 self.output_json["losses"]["train"][key] = total_loss_dict[key]
+
+        self.logger.info(f"Rank {self.rank}: Training epoch completed successfully")
 
         return total_loss_dict["total_loss"]
 
@@ -265,9 +283,6 @@ class BaseTrainer(ABC):
         self.logger.info(f"Rank {self.rank}: About to start validation loop")
 
         for weather, coords, year, interval, feature_mask in loader:
-            self.logger.info(
-                f"Rank {self.rank}: Processing validation batch {loader_len + 1}"
-            )
 
             weather = weather.to(self.device)
             coords = coords.to(self.device)
@@ -285,10 +300,6 @@ class BaseTrainer(ABC):
             # Accumulate losses and its components
             for key in loss_dict:
                 total_loss_dict[key] += loss_dict[key].item()
-
-            self.logger.info(
-                f"Rank {self.rank}: Completed validation batch {loader_len}"
-            )
 
         self.logger.info(
             f"Rank {self.rank}: Finished validation loop, processed {loader_len} batches"

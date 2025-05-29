@@ -15,6 +15,7 @@ from src.utils.tqdm_to_logger import TqdmToLogger
 from tqdm import tqdm
 import logging
 
+random.seed(1234)
 logger = logging.getLogger(__name__)
 
 
@@ -77,6 +78,13 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         return mask
 
     def __iter__(self):
+        # Log which rank is starting iteration
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            logger.info(
+                f"Main process starting dataloader iteration with {len(self.file_paths)} files"
+            )
+
         # Process files in groups of 3 (monthly, weekly, daily with different indices)
         for i in range(0, len(self.file_paths), 3):
             chunk_files = self.file_paths[i : i + 3]  # monthly_i, weekly_j, daily_k
@@ -215,5 +223,8 @@ def streaming_dataloader(
     # For distributed training, we don't use DistributedSampler with IterableDataset
     # since we manually partition the data above
     return torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, pin_memory=True, num_workers=4
+        dataset,
+        batch_size=batch_size,
+        pin_memory=True,
+        num_workers=0,  # Use main process only for distributed training
     )
