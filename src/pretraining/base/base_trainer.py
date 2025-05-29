@@ -380,45 +380,45 @@ class BaseTrainer(ABC):
         Returns:
             Tuple of (trained_model, losses_dict) - losses_dict is None for non-rank-0 processes
         """
-        # Find optimal learning rate if enabled and not resuming from checkpoint
-        if use_optimal_lr and self.start_epoch == 0:
-            if self.rank == 0:
-                self.logger.info("Finding optimal learning rate...")
-                train_loader = streaming_dataloader(
-                    self.batch_size,
-                    split="train",
-                    shuffle=True,
-                    masking_function=self.masking_function,
-                    masking_prob=self.masking_prob,
-                    n_masked_features=self.n_masked_features,
-                    world_size=1,  # Use full dataset for optimal LR finding
-                    rank=0,  # Always rank 0 for full dataset
-                )
-                optimal_lr = find_optimal_lr(self, train_loader)
-                self.logger.info(f"Found optimal learning rate: {optimal_lr:.6f}")
-            else:
-                # Other ranks wait and will receive the optimal LR via broadcast
-                optimal_lr = self.init_lr  # Placeholder value
+        # # Find optimal learning rate if enabled and not resuming from checkpoint
+        # if use_optimal_lr and self.start_epoch == 0:
+        #     if self.rank == 0:
+        #         self.logger.info("Finding optimal learning rate...")
+        #         train_loader = streaming_dataloader(
+        #             self.batch_size,
+        #             split="train",
+        #             shuffle=True,
+        #             masking_function=self.masking_function,
+        #             masking_prob=self.masking_prob,
+        #             n_masked_features=self.n_masked_features,
+        #             world_size=1,  # Use full dataset for optimal LR finding
+        #             rank=0,  # Always rank 0 for full dataset
+        #         )
+        #         optimal_lr = find_optimal_lr(self, train_loader)
+        #         self.logger.info(f"Found optimal learning rate: {optimal_lr:.6f}")
+        #     else:
+        #         # Other ranks wait and will receive the optimal LR via broadcast
+        #         optimal_lr = self.init_lr  # Placeholder value
 
-            # Synchronize all ranks before broadcasting
-            if self.is_distributed:
-                dist.barrier()
+        #     # Synchronize all ranks before broadcasting
+        #     if self.is_distributed:
+        #         dist.barrier()
 
-                # Broadcast optimal learning rate from rank 0 to all other ranks
-                optimal_lr_tensor = torch.tensor(optimal_lr, device=self.device)
-                dist.broadcast(optimal_lr_tensor, src=0)
-                optimal_lr = optimal_lr_tensor.item()
+        #         # Broadcast optimal learning rate from rank 0 to all other ranks
+        #         optimal_lr_tensor = torch.tensor(optimal_lr, device=self.device)
+        #         dist.broadcast(optimal_lr_tensor, src=0)
+        #         optimal_lr = optimal_lr_tensor.item()
 
-            # Update optimizer with optimal learning rate on all ranks
-            for param_group in self.optimizer.param_groups:
-                param_group["lr"] = optimal_lr
+        #     # Update optimizer with optimal learning rate on all ranks
+        #     for param_group in self.optimizer.param_groups:
+        #         param_group["lr"] = optimal_lr
 
-            if self.rank != 0:
-                self.logger.info(f"Received optimal learning rate: {optimal_lr:.6f}")
-            else:
-                self.logger.info(
-                    f"Updated learning rate to optimal value: {optimal_lr:.6f}"
-                )
+        #     if self.rank != 0:
+        #         self.logger.info(f"Received optimal learning rate: {optimal_lr:.6f}")
+        #     else:
+        #         self.logger.info(
+        #             f"Updated learning rate to optimal value: {optimal_lr:.6f}"
+        #         )
 
         for epoch in range(self.start_epoch, num_epochs):
             train_loader = streaming_dataloader(
