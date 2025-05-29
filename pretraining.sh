@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p mit_preemptable              # Use GPU partition with longer runtime
+#SBATCH -p mit_normal_gpu              # Use GPU partition with longer runtime
 #SBATCH --job-name=ddp_single_node
 #SBATCH -N 1                            # Single node
 #SBATCH --ntasks=1                      # One task (master launcher)
