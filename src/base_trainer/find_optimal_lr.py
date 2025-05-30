@@ -6,6 +6,7 @@ import torch.optim as optim
 import torch.nn as nn
 import logging
 import numpy as np
+from src.utils.constants import DRY_RUN
 
 if TYPE_CHECKING:
     from src.base_trainer.base_trainer import BaseTrainer
@@ -18,7 +19,7 @@ def find_optimal_lr(
     dataloader: DataLoader,
     start_lr: float = 1e-6,
     end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed
-    num_iter: int = 100,
+    num_iter: int = 100 if not DRY_RUN else 5,
 ):
     """
     Find optimal learning rate using Leslie Smith's LR range test methodology.

@@ -36,7 +36,7 @@ class WeatherBertTrainer(BaseTrainer):
         **kwargs,
     ):
         super().__init__(model, **kwargs)
-        self.mse_loss = nn.MSELoss()
+        self.criterion = nn.MSELoss(reduction="mean")
         self.masking_function = "weatherbert"
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
@@ -44,41 +44,6 @@ class WeatherBertTrainer(BaseTrainer):
         self.output_json["model_config"]["masking_function"] = self.masking_function
         self.output_json["model_config"]["masking_prob"] = masking_prob
         self.output_json["model_config"]["n_masked_features"] = n_masked_features
-
-    def get_model_name(self) -> str:
-        return "weatherbert"
-
-    def create_feature_mask(
-        self, batch_size: int, seq_len: int, n_features: int
-    ) -> torch.Tensor:
-        """
-        Create a BERT-like MLM mask for the weather features.
-        Randomly mask individual tokens across batch×seq_len×features space.
-        """
-        # Calculate the total number of elements across all dimensions
-        total_elements = batch_size * seq_len * n_features
-
-        # Calculate the number of elements to mask
-        num_mask = int(self.masking_prob * total_elements)
-
-        # Generate random indices for masking within the entire flattened tensor
-        mask_indices = torch.randperm(total_elements)[:num_mask]
-
-        # Convert flat indices to multi-dimensional indices
-        batch_indices = mask_indices // (seq_len * n_features)
-        remaining = mask_indices % (seq_len * n_features)
-        seq_indices = remaining // n_features
-        feature_indices = remaining % n_features
-
-        # Create the mask tensor filled with False
-        weather_feature_mask = torch.zeros(
-            batch_size, seq_len, n_features, dtype=torch.bool, device=self.device
-        )
-
-        # Set the randomly selected indices to True
-        weather_feature_mask[batch_indices, seq_indices, feature_indices] = True
-
-        return weather_feature_mask
 
     def compute_train_loss(
         self,
@@ -94,7 +59,7 @@ class WeatherBertTrainer(BaseTrainer):
         output = self.model(
             data, coords, year, interval, weather_feature_mask=feature_mask
         )[feature_mask]
-        loss = self.mse_loss(target_tokens, output)
+        loss = self.criterion(target_tokens, output)
 
         return {"total_loss": loss}
 
@@ -112,16 +77,13 @@ class WeatherBertTrainer(BaseTrainer):
         output = self.model(
             data, coords, year, interval, weather_feature_mask=feature_mask
         )[feature_mask]
-        loss = F.mse_loss(target_tokens, output)
+        # Use consistent loss function (self.mse_loss instead of F.mse_loss)
+        loss = self.criterion(target_tokens, output)
 
         return {"total_loss": loss}
 
-    def get_dataloaders(
-        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
-    ) -> Tuple[DataLoader, DataLoader]:
+    def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation."""
-        if cross_validation_k is not None:
-            raise ValueError("Cross validation not supported during pretraining")
 
         train_loader = streaming_dataloader(
             self.batch_size,

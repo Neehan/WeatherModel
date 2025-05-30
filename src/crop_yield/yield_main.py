@@ -72,7 +72,7 @@ parser.add_argument(
 parser.add_argument(
     "--beta",
     help="beta parameter for WeatherFormer variational loss (sigma_y_squared)",
-    default=1.0,
+    default=1e-4,
     type=float,
 )
 
@@ -88,9 +88,9 @@ def main():
         model_type = args_dict["model"].lower()
 
         if model_type == "weatherbert":
-            avg_rmse = weatherbert_yield_training_loop(args_dict)
+            avg_best_rmse = weatherbert_yield_training_loop(args_dict)
         elif model_type == "weatherformer":
-            avg_rmse = weatherformer_yield_training_loop(args_dict)
+            avg_best_rmse = weatherformer_yield_training_loop(args_dict)
         else:
             raise ValueError(
                 f"Unknown model type: {model_type}. Choose 'weatherbert' or 'weatherformer'"
@@ -98,7 +98,7 @@ def main():
 
         logger = logging.getLogger(__name__)
         logger.info("Training completed successfully!")
-        logger.info(f"Final average RMSE: {avg_rmse:.3f}")
+        logger.info(f"Final average best RMSE: {avg_best_rmse:.3f}")
 
     except Exception as e:
         logger = logging.getLogger(__name__)

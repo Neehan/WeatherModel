@@ -46,7 +46,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.n_past_years = n_past_years
 
         # Override criterion for yield prediction
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.MSELoss(reduction="mean")
 
         # Override model directory for yield prediction
         if self.rank == 0:
@@ -54,27 +54,23 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
 
+        self.test_states = np.random.choice(
+            np.array(sorted(list(self.available_states))),
+            size=2,
+            replace=False,
+        ).tolist()
+        self.logger.info(f"Testing on states: {','.join(self.test_states)}")
+
     # =============================================================================
     # ABSTRACT METHOD IMPLEMENTATIONS (required by BaseTrainer)
     # =============================================================================
 
-    def get_dataloaders(
-        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
-    ) -> Tuple[DataLoader, DataLoader]:
+    def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation - IMPLEMENTATION OF ABSTRACT METHOD."""
-        if cross_validation_k is None:
-            test_states = ["south dakota", "iowa"]
-        else:
-            test_states = np.random.choice(
-                np.array(sorted(list(self.available_states))),
-                size=2,
-                replace=False,
-            ).tolist()
-        self.logger.info(f"Testing on states: {','.join(test_states)}")
 
         train_loader, test_loader = get_train_test_loaders(
             self.crop_df,
-            test_states,
+            self.test_states,
             self.n_past_years,
             self.batch_size,
             shuffle,
@@ -137,9 +133,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         with torch.no_grad():
             predicted_yield = self.model(input_data)
 
-        loss = F.mse_loss(
-            predicted_yield.squeeze(), target_yield.squeeze(), reduction="mean"
-        )
+        # Use consistent loss function (self.criterion instead of F.mse_loss)
+        loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
         return {"total_loss": loss}
 
 
@@ -159,16 +154,7 @@ def weatherbert_yield_training_loop(args_dict):
     # Set device for this process
     device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
-    # Initialize WeatherBERT model
-    model = WeatherBERTYieldModel(
-        weather_dim=TOTAL_WEATHER_VARS,
-        output_dim=TOTAL_WEATHER_VARS,
-        device=device,
-        **args_dict["model_size_params"],
-    ).to(device)
-
-    if rank == 0:
-        logging.info(str(model))
+    mlp_input_dim = TOTAL_WEATHER_VARS * 52 * (args_dict["n_past_years"] + 1)
 
     crop_df = read_soybean_dataset(DATA_DIR)
 
@@ -177,9 +163,17 @@ def weatherbert_yield_training_loop(args_dict):
     if cross_validation_k is None or cross_validation_k <= 1:
         raise ValueError("Cross validation k must be greater than 1")
 
+    model_kwargs = {
+        "name": "weatherbert_yield",
+        "mlp_input_dim": mlp_input_dim,
+        "weather_dim": TOTAL_WEATHER_VARS,
+        "output_dim": TOTAL_WEATHER_VARS,
+        "device": device,
+        **args_dict["model_size_params"],
+    }
+
     # Use CrossValidator for k-fold cross validation
     trainer_kwargs = {
-        "model": model,
         "crop_df": crop_df,
         "n_past_years": args_dict["n_past_years"],
         "batch_size": args_dict["batch_size"],
@@ -188,8 +182,6 @@ def weatherbert_yield_training_loop(args_dict):
         "num_warmup_epochs": args_dict["n_warmup_epochs"],
         "decay_factor": args_dict["decay_factor"],
         "pretrained_model_path": args_dict["pretrained_model_path"],
-        "masking_prob": args_dict["masking_prob"],
-        "masking_n_features": args_dict["masking_n_features"],
         "resume_from_checkpoint": args_dict.get("resume_from_checkpoint"),
         "rank": rank,
         "world_size": world_size,
@@ -197,6 +189,8 @@ def weatherbert_yield_training_loop(args_dict):
     }
 
     cross_validator = CrossValidator(
+        model_class=WeatherBERTYieldModel,
+        model_kwargs=model_kwargs,
         trainer_class=WeatherBERTYieldTrainer,
         trainer_kwargs=trainer_kwargs,
         k_folds=cross_validation_k,

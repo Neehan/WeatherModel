@@ -1,7 +1,10 @@
 import numpy as np
 import logging
 from typing import Type, Dict, Any, List
+
+import torch
 from src.base_trainer.base_trainer import BaseTrainer
+from src.base_models.base_model import BaseModel
 
 
 class CrossValidator:
@@ -15,6 +18,8 @@ class CrossValidator:
 
     def __init__(
         self,
+        model_class: Type[BaseModel],
+        model_kwargs: Dict[str, Any],
         trainer_class: Type[BaseTrainer],
         trainer_kwargs: Dict[str, Any],
         k_folds: int = 5,
@@ -28,12 +33,14 @@ class CrossValidator:
             k_folds: Number of folds for cross validation
             random_seed: Random seed for reproducible fold generation
         """
+        self.model_class = model_class
+        self.model_kwargs = model_kwargs
         self.trainer_class = trainer_class
         self.trainer_kwargs = trainer_kwargs
         self.k_folds = k_folds
         self.logger = logging.getLogger(__name__)
 
-    def run_cross_validation(self, use_optimal_lr: bool = False) -> Dict[str, Any]:
+    def run_cross_validation(self, use_optimal_lr: bool = True) -> Dict[str, Any]:
         """
         Run k-fold cross validation.
 
@@ -51,11 +58,14 @@ class CrossValidator:
         for fold in range(self.k_folds):
             self.logger.info(f"Starting fold {fold + 1}/{self.k_folds}")
 
+            # Create model for this fold
+            model = self.model_class(**self.model_kwargs)
+            if fold == 0:
+                self.logger.info(str(model))
+
             # Create trainer for this fold
-            trainer = self.trainer_class(**self.trainer_kwargs)
-            best_loss = trainer.train(
-                use_optimal_lr=use_optimal_lr, cross_validation_k=self.k_folds
-            )
+            trainer = self.trainer_class(model=model, **self.trainer_kwargs)
+            best_loss = trainer.train(use_optimal_lr=use_optimal_lr)
 
             # Extract results from this fold
             fold_results.append(best_loss)

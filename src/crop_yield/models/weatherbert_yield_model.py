@@ -12,9 +12,9 @@ class WeatherBERTYieldModel(BaseModel):
         self,
         name: str,
         mlp_input_dim: int,
+        device: torch.device,
         weather_dim=TOTAL_WEATHER_VARS,
         output_dim=TOTAL_WEATHER_VARS,
-        device=DEVICE,
         **model_size_params,
     ):
         super().__init__(name)

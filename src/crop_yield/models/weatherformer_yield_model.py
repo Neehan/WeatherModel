@@ -17,14 +17,14 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
         self,
         name: str,
         mlp_input_dim: int,
+        device: torch.device,
         weather_dim=TOTAL_WEATHER_VARS,
         output_dim=TOTAL_WEATHER_VARS,
-        device=DEVICE,
         **model_size_params,
     ):
         # Call parent init but override the weather model
         super().__init__(
-            name, mlp_input_dim, weather_dim, output_dim, device, **model_size_params
+            name, mlp_input_dim, device, weather_dim, output_dim, **model_size_params
         )
 
         # Replace the WeatherBERT with WeatherFormer

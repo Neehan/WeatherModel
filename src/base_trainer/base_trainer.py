@@ -9,7 +9,7 @@ import json
 from typing import Dict, List, Tuple, Optional, Union
 from src.base_trainer.find_optimal_lr import find_optimal_lr
 from src.utils import utils
-from src.utils.constants import DATA_DIR
+from src.utils.constants import DATA_DIR, DRY_RUN
 from src.base_models.base_model import BaseModel
 from torch.utils.data import DataLoader
 
@@ -63,9 +63,7 @@ class BaseTrainer(ABC):
         name = f"{model.name}_{model.total_params_formatted()}"
         return name
 
-    def train(
-        self, use_optimal_lr: bool = True, cross_validation_k: Optional[int] = None
-    ) -> float:
+    def train(self, use_optimal_lr: bool = True) -> float:
         """
         Main training loop - PUBLIC API METHOD.
 
@@ -80,9 +78,7 @@ class BaseTrainer(ABC):
             self._find_and_set_optimal_lr()
 
         for epoch in range(self.start_epoch, self.num_epochs):
-            train_loader, val_loader = self.get_dataloaders(
-                shuffle=True, cross_validation_k=cross_validation_k
-            )
+            train_loader, val_loader = self.get_dataloaders(shuffle=True)
 
             train_loss = self._train_epoch(train_loader)
             val_loss, best_loss = self._validate_epoch(val_loader)
@@ -206,6 +202,8 @@ class BaseTrainer(ABC):
 
             loss_dict = self.compute_train_loss(*input_data)
             loss = loss_dict["total_loss"]
+            if self.rank == 0 and DRY_RUN:
+                print(f"Train loss: {loss.item()}")
 
             self._accumulate_losses(total_loss_dict, loss_dict)
             loader_len += 1

@@ -45,9 +45,6 @@ class WeatherFormerTrainer(BaseTrainer):
         }
         self.output_json["model_config"]["beta"] = self.beta
 
-    def get_model_name(self) -> str:
-        return "weatherformer"
-
     def compute_elbo_loss(
         self,
         target_features: torch.Tensor,
@@ -129,29 +126,25 @@ class WeatherFormerTrainer(BaseTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute WeatherFormer validation loss using VAE-style loss function."""
 
-        # Get model predictions (mu, sigma)
-        mu, sigma = self.model(
+        # Get model predictions (mu, sigma_squared)
+        mu, sigma_squared = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract target features and predictions for masked positions only
         target_features = weather[feature_mask]
         predicted_mu = mu[feature_mask]
-        predicted_sigma = sigma[feature_mask]
+        predicted_sigma_squared = sigma_squared[feature_mask]
 
         # Compute VAE loss
         loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu, predicted_sigma
+            target_features, predicted_mu, predicted_sigma_squared
         )
 
         return loss_dict
 
-    def get_dataloaders(
-        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
-    ) -> Tuple[DataLoader, DataLoader]:
+    def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation."""
-        if cross_validation_k is None:
-            raise ValueError("Cross validation not supported during pretraining")
 
         train_loader = streaming_dataloader(
             self.batch_size,

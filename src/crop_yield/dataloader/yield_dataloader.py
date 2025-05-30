@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS, DEVICE
+from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 
 
 class CropDataset(Dataset):
@@ -97,13 +97,13 @@ class CropDataset(Dataset):
                 )
 
             # Transpose and reshape weather data: (n_years, n_features, seq_len) -> (n_years * seq_len, n_features)
-            weather = weather.transpose(1, 2)  # (n_years, seq_len, n_features)
+            weather = weather.transpose(0, 2, 1)  # (n_years, seq_len, n_features)
             weather = weather.reshape(
                 n_years * seq_len, n_features
             )  # (n_years * seq_len, n_features)
 
             # Process coordinates - use only the first coordinate (same for all years in this location)
-            coord_processed = coord[0:1, :]  # (1, 2)
+            coord_processed = coord[0, :]  # (2,)
 
             # Expand year to match the sequence length
             # year_data is [n_years], need to repeat each year for seq_len timesteps
@@ -117,7 +117,6 @@ class CropDataset(Dataset):
             # Create padded weather with specific weather indices
             padded_weather = torch.zeros(
                 (seq_len * n_years, TOTAL_WEATHER_VARS),
-                device=DEVICE,
             )
             padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
 
@@ -125,12 +124,11 @@ class CropDataset(Dataset):
             weather_feature_mask = torch.ones(
                 TOTAL_WEATHER_VARS,
                 dtype=torch.bool,
-                device=DEVICE,
             )
             weather_feature_mask[self.weather_indices] = False
 
             # Create temporal interval (weekly data)
-            interval = torch.full((1,), 7, device=DEVICE, dtype=torch.float32)
+            interval = torch.full((1,), 7, dtype=torch.float32)
 
             self.data.append(
                 (
