@@ -8,21 +8,34 @@ import logging
 import numpy as np
 
 if TYPE_CHECKING:
-    from src.pretraining.base.base_trainer import BaseTrainer
+    from src.base_trainer.base_trainer import BaseTrainer
 
 logger = logging.getLogger(__name__)
 
 
-def simple_lr_finder(
-    trainer,
-    dataloader,
+def find_optimal_lr(
+    trainer: "BaseTrainer",
+    dataloader: DataLoader,
     start_lr: float = 1e-6,
-    end_lr: float = 0.1,  # Reduced from 1 to 0.1 for transformer safety
+    end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed
     num_iter: int = 100,
-    is_pretraining: bool = True,
 ):
     """
-    Simple learning rate finder that works with multi-input models.
+    Find optimal learning rate using Leslie Smith's LR range test methodology.
+
+    Based on "Cyclical Learning Rates for Training Neural Networks" (Smith, 2017)
+    and "A disciplined approach to neural network hyper-parameters" (Smith, 2018).
+
+    Args:
+        trainer: Any trainer instance (BaseTrainer or BaseYieldTrainer subclass)
+        dataloader: Training data loader
+        start_lr: Minimum learning rate to test (should be very small)
+        end_lr: Maximum learning rate to test (conservative default for transformers)
+        num_iter: Number of iterations for the test
+        is_pretraining: Whether this is pretraining or fine-tuning
+
+    Returns:
+        Optimal learning rate (typically 1/10th of the steepest decline point)
     """
     # Store original lr
     original_lr = trainer.optimizer.param_groups[0]["lr"]
@@ -55,30 +68,10 @@ def simple_lr_finder(
         # Zero gradients
         trainer.optimizer.zero_grad()
 
-        if is_pretraining:
-            # Pretraining format: (weather, coords, year, interval, feature_mask)
-            weather, coords, year, interval, feature_mask = batch
-            weather = weather.to(trainer.device)
-            coords = coords.to(trainer.device)
-            year = year.to(trainer.device)
-            interval = interval.to(trainer.device)
-            feature_mask = feature_mask.to(trainer.device)
-
-            # Compute loss using trainer's method
-            loss_dict = trainer.compute_train_loss(
-                weather, coords, year, interval, feature_mask
-            )
-            loss = loss_dict["total_loss"]
-        else:
-            # Yield training format: (input_data, y)
-            input_data, y = batch
-            input_data = [x.to(trainer.device) for x in input_data]
-            y = y.to(trainer.device)
-
-            # Forward pass and compute loss
-            outputs = trainer.model(input_data)
-            loss = trainer.criterion(outputs, y)
-
+        batch = [x.to(trainer.device) for x in batch]
+        # Compute loss using trainer's method
+        loss_dict = trainer.compute_train_loss(*batch)
+        loss = loss_dict["total_loss"]
         # Backward pass
         loss.backward()
         trainer.optimizer.step()
@@ -142,35 +135,4 @@ def simple_lr_finder(
     for param_group in trainer.optimizer.param_groups:
         param_group["lr"] = original_lr
 
-    return optimal_lr
-
-
-def find_optimal_lr(
-    trainer: "BaseTrainer",
-    dataloader: DataLoader,
-    start_lr: float = 1e-6,
-    end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed
-    num_iter: int = 100,
-    is_pretraining: bool = True,
-):
-    """
-    Find optimal learning rate using Leslie Smith's LR range test methodology.
-
-    Based on "Cyclical Learning Rates for Training Neural Networks" (Smith, 2017)
-    and "A disciplined approach to neural network hyper-parameters" (Smith, 2018).
-
-    Args:
-        trainer: Any trainer instance (BaseTrainer or BaseYieldTrainer subclass)
-        dataloader: Training data loader
-        start_lr: Minimum learning rate to test (should be very small)
-        end_lr: Maximum learning rate to test (conservative default for transformers)
-        num_iter: Number of iterations for the test
-        is_pretraining: Whether this is pretraining or fine-tuning
-
-    Returns:
-        Optimal learning rate (typically 1/10th of the steepest decline point)
-    """
-    optimal_lr = simple_lr_finder(
-        trainer, dataloader, start_lr, end_lr, num_iter, is_pretraining
-    )
     return optimal_lr

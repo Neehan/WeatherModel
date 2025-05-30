@@ -1,21 +1,12 @@
 import torch
-import torch.nn as nn
 import logging
-import random
-from typing import Dict
-from src.pretraining.base.base_trainer import BaseTrainer
-from src.models.weatherformer import WeatherFormer
-from src.utils.constants import TOTAL_WEATHER_VARS, DRY_RUN
-import time
-import torch.distributed as dist
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-random.seed(1234)
-torch.manual_seed(1234)
+from typing import Dict, Optional, Tuple
+from src.base_trainer.base_trainer import BaseTrainer
+from src.base_models.weatherformer import WeatherFormer
+from src.utils.constants import TOTAL_WEATHER_VARS
+from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
+from torch.utils.data import DataLoader
+from typing import Tuple
 
 
 class WeatherFormerTrainer(BaseTrainer):
@@ -26,13 +17,18 @@ class WeatherFormerTrainer(BaseTrainer):
     def __init__(
         self,
         model: WeatherFormer,
-        batch_size: int,
+        masking_prob: float,
+        n_masked_features: int,
         beta: float,
         **kwargs,
     ):
-        super().__init__(model, batch_size, **kwargs)
+        super().__init__(model, **kwargs)
         self.beta = beta  # Hyperparameter controlling reconstruction vs regularization trade-off
+        self.masking_prob = masking_prob
+        self.n_masked_features = n_masked_features
+        self.masking_function = "weatherformer"
 
+        # override the losses collected
         self.output_json["losses"] = {
             "train": {
                 "total_loss": [],
@@ -56,7 +52,7 @@ class WeatherFormerTrainer(BaseTrainer):
         self,
         target_features: torch.Tensor,
         mu: torch.Tensor,
-        sigma: torch.Tensor,
+        sigma_squared: torch.Tensor,
         log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
@@ -67,16 +63,18 @@ class WeatherFormerTrainer(BaseTrainer):
         Args:
             target_features: Ground truth values (z in the formula)
             mu: Predicted mean values
-            sigma: Predicted standard deviation values
+            sigma_squared: Predicted variance values
         """
         # Reconstruction term: (z - μ)² / σ²
-        reconstruction_term = torch.mean(((target_features - mu) ** 2) / (sigma**2))
+        reconstruction_term = torch.mean(
+            ((target_features - mu) ** 2) / (sigma_squared)
+        )
 
         # Log variance term: (1-β) log σ²
-        log_variance_term = torch.mean((1 - self.beta) * torch.log(sigma**2))
+        log_variance_term = torch.mean((1 - self.beta) * torch.log(sigma_squared))
 
         # KL regularization term: β(μ² + σ²)
-        kl_regularization_term = torch.mean(self.beta * (mu**2 + sigma**2))
+        kl_regularization_term = torch.mean(self.beta * (mu**2 + sigma_squared))
 
         if log_losses:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
@@ -105,18 +103,18 @@ class WeatherFormerTrainer(BaseTrainer):
         """Compute WeatherFormer training loss using VAE-style loss function."""
 
         # Get model predictions (mu, sigma)
-        mu, sigma = self.model(
+        mu, sigma_squared = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract target features and predictions for masked positions only
         target_features = weather[feature_mask]
         predicted_mu = mu[feature_mask]
-        predicted_sigma = sigma[feature_mask]
+        predicted_sigma_squared = sigma_squared[feature_mask]
 
         # Compute VAE loss
         loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu, predicted_sigma
+            target_features, predicted_mu, predicted_sigma_squared
         )
 
         return loss_dict
@@ -148,6 +146,35 @@ class WeatherFormerTrainer(BaseTrainer):
 
         return loss_dict
 
+    def get_dataloaders(
+        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
+    ) -> Tuple[DataLoader, DataLoader]:
+        """Get data loaders for training/validation."""
+        if cross_validation_k is None:
+            raise ValueError("Cross validation not supported during pretraining")
+
+        train_loader = streaming_dataloader(
+            self.batch_size,
+            split="train",
+            shuffle=shuffle,
+            masking_function=self.masking_function,
+            n_masked_features=self.n_masked_features,
+            world_size=self.world_size,
+            rank=self.rank,
+        )
+
+        val_loader = streaming_dataloader(
+            self.batch_size,
+            split="validation",
+            shuffle=False,
+            masking_function=self.masking_function,
+            n_masked_features=self.n_masked_features,
+            world_size=self.world_size,
+            rank=self.rank,
+        )
+
+        return train_loader, val_loader
+
 
 def weatherformer_training_loop(args_dict):
     """
@@ -176,16 +203,18 @@ def weatherformer_training_loop(args_dict):
     trainer = WeatherFormerTrainer(
         model=model,
         batch_size=args_dict["batch_size"],
+        num_epochs=args_dict["n_epochs"],
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
-        beta=args_dict["beta"],
-        masking_function="weatherformer",
-        n_masked_features=TOTAL_WEATHER_VARS - args_dict["n_input_features"],
+        pretrained_model_path=args_dict["pretrained_model_path"],
+        masking_prob=args_dict["masking_prob"],
+        n_masked_features=args_dict["n_masked_features"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
         rank=rank,
         world_size=world_size,
         local_rank=local_rank,
+        beta=args_dict["beta"],
     )
 
-    return trainer.train(args_dict["n_epochs"])
+    return trainer.train()

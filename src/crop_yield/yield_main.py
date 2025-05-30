@@ -4,8 +4,7 @@ import os
 import numpy as np
 import torch
 import random
-from typing import Optional
-from src.utils.utils import get_model_params
+from src.utils.utils import parse_args
 
 # Set up deterministic behavior
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
@@ -15,8 +14,12 @@ torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
 torch.use_deterministic_algorithms(True)
 
-from src.crop_yield.base.yield_dataloader import read_soybean_dataset
-from src.crop_yield.yield_trainer import YieldTrainer
+from src.crop_yield.trainers.weatherbert_yield_trainer import (
+    weatherbert_yield_training_loop,
+)
+from src.crop_yield.trainers.weatherformer_yield_trainer import (
+    weatherformer_yield_training_loop,
+)
 from src.utils.constants import DATA_DIR
 from src.utils.utils import setup_logging
 
@@ -40,7 +43,7 @@ parser.add_argument(
     "--init-lr", help="initial learning rate for Adam", default=0.0005, type=float
 )
 parser.add_argument(
-    "--lr_decay_factor",
+    "--decay_factor",
     help="learning rate exponential decay factor",
     default=0.98,
     type=float,
@@ -60,31 +63,18 @@ parser.add_argument(
     default="mini",
     type=str,
 )
-
 parser.add_argument(
-    "--n-cross-validation-folds",
+    "--cross-validation-k",
     help="number of cross validation folds",
     default=5,
     type=int,
 )
-
-
-def parse_args():
-    args = parser.parse_args()
-    args_dict = vars(args)
-
-    logger = logging.getLogger(__name__)
-    logger.info("Command-line arguments:")
-    for arg, value in args_dict.items():
-        logger.info(f"{arg}: {value}")
-
-    # Model size configuration
-    model_size = args.model_size.lower()
-    model_size_params = get_model_params(model_size)
-
-    args_dict["model_size_params"] = model_size_params
-
-    return args_dict
+parser.add_argument(
+    "--beta",
+    help="beta parameter for WeatherFormer variational loss (sigma_y_squared)",
+    default=1.0,
+    type=float,
+)
 
 
 def main():
@@ -92,13 +82,19 @@ def main():
     setup_logging(rank=0)  # Single GPU, rank always 0
 
     try:
-        args_dict = parse_args()
+        args_dict = parse_args(parser)
 
-        # Load the soybean dataset
-        soybean_df = read_soybean_dataset(DATA_DIR)
+        # Determine which training function to use based on model type
+        model_type = args_dict["model"].lower()
 
-        # Run cross-validation training using the trainer
-        avg_rmse = YieldTrainer.cross_validation_training_loop(soybean_df, args_dict)
+        if model_type == "weatherbert":
+            avg_rmse = weatherbert_yield_training_loop(args_dict)
+        elif model_type == "weatherformer":
+            avg_rmse = weatherformer_yield_training_loop(args_dict)
+        else:
+            raise ValueError(
+                f"Unknown model type: {model_type}. Choose 'weatherbert' or 'weatherformer'"
+            )
 
         logger = logging.getLogger(__name__)
         logger.info("Training completed successfully!")

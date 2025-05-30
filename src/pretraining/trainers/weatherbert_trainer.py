@@ -3,10 +3,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import logging
+from typing import Optional
 
-from src.pretraining.base.base_trainer import BaseTrainer
-from src.models.weatherbert import WeatherBERT
-from src.utils.constants import TOTAL_WEATHER_VARS, DEVICE
+from src.base_trainer.base_trainer import BaseTrainer
+from src.base_models.weatherbert import WeatherBERT
+from src.utils.constants import TOTAL_WEATHER_VARS
+from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
+from torch.utils.data import DataLoader
+from typing import Tuple
 
 # Configure logging
 logging.basicConfig(
@@ -24,9 +28,22 @@ class WeatherBertTrainer(BaseTrainer):
     BERT-style trainer that implements masked language modeling for weather data.
     """
 
-    def __init__(self, model: WeatherBERT, batch_size: int, **kwargs):
-        super().__init__(model, batch_size, **kwargs)
+    def __init__(
+        self,
+        model: WeatherBERT,
+        masking_prob: float,
+        n_masked_features: int,
+        **kwargs,
+    ):
+        super().__init__(model, **kwargs)
         self.mse_loss = nn.MSELoss()
+        self.masking_function = "weatherbert"
+        self.masking_prob = masking_prob
+        self.n_masked_features = n_masked_features
+
+        self.output_json["model_config"]["masking_function"] = self.masking_function
+        self.output_json["model_config"]["masking_prob"] = masking_prob
+        self.output_json["model_config"]["n_masked_features"] = n_masked_features
 
     def get_model_name(self) -> str:
         return "weatherbert"
@@ -99,8 +116,37 @@ class WeatherBertTrainer(BaseTrainer):
 
         return {"total_loss": loss}
 
+    def get_dataloaders(
+        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
+    ) -> Tuple[DataLoader, DataLoader]:
+        """Get data loaders for training/validation."""
+        if cross_validation_k is not None:
+            raise ValueError("Cross validation not supported during pretraining")
 
-def bert_training_loop(args_dict):
+        train_loader = streaming_dataloader(
+            self.batch_size,
+            split="train",
+            shuffle=shuffle,
+            masking_function=self.masking_function,
+            masking_prob=self.masking_prob,
+            world_size=self.world_size,
+            rank=self.rank,
+        )
+
+        val_loader = streaming_dataloader(
+            self.batch_size,
+            split="validation",
+            shuffle=False,
+            masking_function=self.masking_function,
+            masking_prob=self.masking_prob,
+            world_size=self.world_size,
+            rank=self.rank,
+        )
+
+        return train_loader, val_loader
+
+
+def weatherbert_training_loop(args_dict):
     """
     BERT training loop using the WeatherBertTrainer class.
     Initializes the model internally and handles all training.
@@ -127,15 +173,17 @@ def bert_training_loop(args_dict):
     trainer = WeatherBertTrainer(
         model=model,
         batch_size=args_dict["batch_size"],
+        num_epochs=args_dict["n_epochs"],
         init_lr=args_dict["init_lr"],
         num_warmup_epochs=args_dict["n_warmup_epochs"],
         decay_factor=args_dict["decay_factor"],
+        pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
-        masking_function="weatherbert",
-        resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
+        n_masked_features=args_dict["n_masked_features"],
+        resume_from_checkpoint=args_dict["resume_from_checkpoint"],
         rank=rank,
         world_size=world_size,
         local_rank=local_rank,
     )
 
-    return trainer.train(args_dict["n_epochs"])
+    return trainer.train()

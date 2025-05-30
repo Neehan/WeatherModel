@@ -1,6 +1,6 @@
-from src.models.transformer_encoder import TransformerEncoder
+from src.base_models.transformer_encoder import TransformerEncoder
 from src.utils.constants import *
-from src.crop_yield.base.soil_cnn import SoilCNN
+from src.base_models.soil_cnn import SoilCNN
 
 import torch
 import torch.nn as nn

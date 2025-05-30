@@ -4,9 +4,9 @@ import torch.nn.functional as F
 import copy
 from typing import Optional
 
-from src.models.vanilla_pos_encoding import VanillaPositionalEncoding
+from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
-from src.models.base_model import BaseModel
+from src.base_models.base_model import BaseModel
 from src.utils.utils import normalize_year_interval_coords
 
 
@@ -49,6 +49,23 @@ class WeatherBERT(BaseModel):
         )
 
         self.out_proj = nn.Linear(hidden_dim, output_dim)
+
+    def load_pretrained(self, pretrained_model: "WeatherBERT"):
+        """Load weights from a pretrained WeatherBERT model by deep copying each layer."""
+
+        if self.input_dim != pretrained_model.input_dim:
+            raise ValueError(
+                f"expected input dimension {self.input_dim} but received {pretrained_model.input_dim}"
+            )
+        if self.max_len != pretrained_model.max_len:
+            raise ValueError(
+                f"expected max length {self.max_len} but received {pretrained_model.max_len}"
+            )
+
+        self.in_proj = copy.deepcopy(pretrained_model.in_proj)
+        self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
+        self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
+        self.out_proj = copy.deepcopy(pretrained_model.out_proj)
 
     def forward(
         self,
@@ -104,20 +121,3 @@ class WeatherBERT(BaseModel):
         output = self.out_proj(input_tensor)
 
         return output
-
-    def load_pretrained(self, pretrained_model: "WeatherBERT"):
-        """Load weights from a pretrained WeatherBERT model by deep copying each layer."""
-
-        if self.input_dim != pretrained_model.input_dim:
-            raise ValueError(
-                f"expected input dimension {self.input_dim} but received {pretrained_model.input_dim}"
-            )
-        if self.max_len != pretrained_model.max_len:
-            raise ValueError(
-                f"expected max length {self.max_len} but received {pretrained_model.max_len}"
-            )
-
-        self.in_proj = copy.deepcopy(pretrained_model.in_proj)
-        self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
-        self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
-        self.out_proj = copy.deepcopy(pretrained_model.out_proj)

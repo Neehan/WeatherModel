@@ -1,5 +1,5 @@
-from src.models.weatherformer import WeatherFormer
-from src.models.vanilla_pos_encoding import VanillaPositionalEncoding
+from src.base_models.weatherformer import WeatherFormer
+from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import DEVICE
 
 import torch

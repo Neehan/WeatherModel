@@ -3,10 +3,10 @@ import logging
 import os
 import torch
 import torch.distributed as dist
-from src.pretraining.weatherformer_trainer import weatherformer_training_loop
-from src.pretraining.weatherbert_trainer import bert_training_loop
+from src.pretraining.trainers.weatherformer_trainer import weatherformer_training_loop
+from src.pretraining.trainers.weatherbert_trainer import weatherbert_training_loop
 from src.utils.utils import setup_distributed, cleanup_distributed, setup_logging
-
+from src.utils.utils import parse_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -21,11 +21,17 @@ parser.add_argument(
     default=None,
     type=str,
 )
+parser.add_argument(
+    "--pretrained-model-path",
+    help="path to pretrained model to load before training",
+    default=None,
+    type=str,
+)
 parser.add_argument("--batch-size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n-input-features",
-    help="number of input features (for weatherformer) the rest of the features are output features",
-    default=21,
+    "--n-masked-features",
+    help="number of masked features (for weatherformer) the rest of the features are input features",
+    default=10,
     type=int,
 )
 parser.add_argument(
@@ -61,32 +67,6 @@ parser.add_argument(
 )
 
 
-def parse_args():
-    args = parser.parse_args()
-    args_dict = vars(args)
-
-    # Only log from rank 0
-    rank = int(os.environ.get("RANK", 0))
-    if rank == 0:
-        logger = logging.getLogger(__name__)
-        logger.info("Command-line arguments:")
-        for arg, value in args_dict.items():
-            logger.info(f"{arg}: {value}")
-
-    # Model size configuration
-    model_size = args.model_size.lower()
-    if model_size == "mini":
-        model_size_params = {"num_heads": 4, "num_layers": 2, "hidden_dim_factor": 12}
-    elif model_size == "small":
-        model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
-    elif model_size == "medium":
-        model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
-    elif model_size == "large":
-        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 36}
-    args_dict["model_size_params"] = model_size_params
-    return args_dict
-
-
 def main():
     # Setup distributed training
     rank, world_size, local_rank = setup_distributed()
@@ -95,7 +75,7 @@ def main():
     setup_logging(rank)
 
     try:
-        args_dict = parse_args()
+        args_dict = parse_args(parser)
 
         # Add distributed training info to args
         args_dict["rank"] = rank
@@ -105,9 +85,9 @@ def main():
         model_type = args_dict["model"].lower()
 
         if model_type == "weatherformer":
-            model, losses = weatherformer_training_loop(args_dict)
+            weatherformer_training_loop(args_dict)
         elif model_type == "weatherbert":
-            model, losses = bert_training_loop(args_dict)
+            weatherbert_training_loop(args_dict)
         else:
             raise ValueError(
                 f"Unknown model type: {model_type}. Choose 'weatherformer' or 'weatherbert'"

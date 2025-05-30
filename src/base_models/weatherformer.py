@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-from src.models.weatherbert import WeatherBERT
+from src.base_models.weatherbert import WeatherBERT
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 
 """
@@ -71,9 +71,11 @@ class WeatherFormer(WeatherBERT):
         log_var = output[..., self.output_dim :]
 
         # Compute sigma from log variance: sigma = exp(0.5 * log_var)
-        sigma = torch.exp(0.5 * log_var)
+        sigma_squared = torch.exp(log_var)
 
         # Clip sigma to prevent numerical instability
-        sigma = torch.clamp(sigma, min=1e-4, max=5)  # sigma^2 is in [1e-8, 25]
+        sigma_squared = torch.clamp(
+            sigma_squared, min=1e-8, max=25
+        )  # sigma^2 is in [1e-8, 25]
 
-        return mu, sigma
+        return mu, sigma_squared

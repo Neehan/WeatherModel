@@ -1,3 +1,4 @@
+import argparse
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from src.utils.constants import DATA_DIR
@@ -6,6 +7,7 @@ import os
 import torch
 import torch.distributed as dist
 import logging
+from argparse import ArgumentParser
 
 
 def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
@@ -79,3 +81,21 @@ def get_model_params(model_size: str):
     else:
         raise ValueError(f"Unknown model size: {model_size}")
     return model_size_params
+
+
+def parse_args(parser: ArgumentParser) -> dict:
+    args = parser.parse_args()
+    args_dict = vars(args)
+
+    logger = logging.getLogger(__name__)
+    logger.info("Command-line arguments:")
+    for arg, value in args_dict.items():
+        logger.info(f"{arg}: {value}")
+
+    # Model size configuration
+    model_size = args.model_size.lower()
+    model_size_params = get_model_params(model_size)
+
+    args_dict["model_size_params"] = model_size_params
+
+    return args_dict

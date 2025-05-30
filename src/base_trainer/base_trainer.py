@@ -1,0 +1,421 @@
+import torch
+import torch.optim as optim
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from abc import ABC, abstractmethod
+import logging
+import os
+import json
+from typing import Dict, List, Tuple, Optional, Union
+from src.base_trainer.find_optimal_lr import find_optimal_lr
+from src.utils import utils
+from src.utils.constants import DATA_DIR
+from src.base_models.base_model import BaseModel
+from torch.utils.data import DataLoader
+
+
+class BaseTrainer(ABC):
+    """
+    Base trainer class that provides common training infrastructure.
+
+    PUBLIC API METHODS (for users):
+        - train(): Main entry point to train the model
+        - save_checkpoint(): Save training state
+        - load_checkpoint(): Resume from checkpoint
+
+    ABSTRACT METHODS (must be implemented by children):
+        - get_dataloaders(): Get data loaders for training/validation
+        - compute_train_loss(): Compute training loss for a batch
+        - compute_validation_loss(): Compute validation loss for a batch
+        - get_model_name(): Get model name for saving
+    """
+
+    def __init__(
+        self,
+        model: BaseModel,
+        batch_size: int,
+        num_epochs: int,
+        init_lr: float = 1e-4,
+        num_warmup_epochs: int = 5,
+        decay_factor: float = 0.95,
+        pretrained_model_path: Optional[str] = None,
+        resume_from_checkpoint: Optional[str] = None,
+        rank: int = 0,
+        world_size: int = 1,
+        local_rank: int = 0,
+    ):
+        self.model: Union[BaseModel, DDP]  # Add type annotation for model attribute
+        self._setup_distributed_training(rank, world_size, local_rank)
+        self._setup_model_and_device(model, batch_size, num_epochs)
+        self._setup_training_components(init_lr, num_warmup_epochs, decay_factor)
+        self._setup_logging_and_output()
+        self._setup_model_directory()
+        self._load_pretrained_model(pretrained_model_path)
+        self._resume_from_checkpoint(resume_from_checkpoint)
+
+    # =============================================================================
+    # PUBLIC API METHODS (for users)
+    # =============================================================================
+
+    def get_model_name(self) -> str:
+        """Get the model name for saving - MUST BE IMPLEMENTED BY CHILDREN."""
+        model = self._get_underlying_model()
+        name = f"{model.name}_{model.total_params_formatted()}"
+        return name
+
+    def train(
+        self, use_optimal_lr: bool = True, cross_validation_k: Optional[int] = None
+    ) -> float:
+        """
+        Main training loop - PUBLIC API METHOD.
+
+        Args:
+            num_epochs: Number of epochs to train
+            use_optimal_lr: Whether to find optimal learning rate before training
+
+        Returns:
+            Tuple of (trained_model, losses_dict) - losses_dict is None for non-rank-0 processes
+        """
+        if use_optimal_lr and self.start_epoch == 0:
+            self._find_and_set_optimal_lr()
+
+        for epoch in range(self.start_epoch, self.num_epochs):
+            train_loader, val_loader = self.get_dataloaders(
+                shuffle=True, cross_validation_k=cross_validation_k
+            )
+
+            train_loss = self._train_epoch(train_loader)
+            val_loss, best_loss = self._validate_epoch(val_loader)
+
+            if self.rank == 0:
+                self.logger.info(
+                    f"Epoch [{epoch+1} / {self.num_epochs}]: Train loss: {train_loss:.3f} Validation loss: {val_loss:.3f} Best Val loss: {best_loss:.3f}"
+                )
+
+                if epoch % 5 == 1 or epoch == self.num_epochs - 1:
+                    self.save_checkpoint(epoch, val_loss)
+
+                self._save_output_json()
+        return best_loss
+
+    def save_checkpoint(self, epoch: int, val_loss: float):
+        """Save a complete checkpoint - PUBLIC API METHOD."""
+        if self.rank != 0:
+            return
+
+        model_to_save = self._get_underlying_model()
+        checkpoint = {
+            "epoch": epoch + 1,
+            "model_state_dict": model_to_save.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
+            "output_json": self.output_json,
+        }
+
+        model_name = self.get_model_name()
+        # Save epoch-specific and latest checkpoints
+        checkpoint_path = self.model_dir + f"{model_name}_epoch_{epoch}_checkpoint.pth"
+        latest_checkpoint_path = self.model_dir + f"{model_name}_latest_checkpoint.pth"
+
+        torch.save(checkpoint, checkpoint_path)
+        torch.save(checkpoint, latest_checkpoint_path)
+        torch.save(model_to_save, self.model_dir + f"{model_name}_epoch_{epoch}.pth")
+        torch.save(model_to_save, self.model_dir + f"{model_name}_latest.pth")
+
+    def load_checkpoint(self, checkpoint_path: str):
+        """Load a checkpoint to resume training - PUBLIC API METHOD."""
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+
+        model_to_load = self._get_underlying_model()
+        model_to_load.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        self.start_epoch = checkpoint["epoch"]
+
+        if "output_json" in checkpoint and self.rank == 0:
+            self.output_json = checkpoint["output_json"]
+
+        if self.rank == 0:
+            self.logger.info(
+                f"Loaded checkpoint from {checkpoint_path}, resuming from epoch {self.start_epoch}"
+            )
+
+    # =============================================================================
+    # ABSTRACT METHODS (must be implemented by children)
+    # =============================================================================
+
+    @abstractmethod
+    def get_dataloaders(
+        self, shuffle: bool = True, cross_validation_k: Optional[int] = None
+    ) -> Tuple[DataLoader, DataLoader]:
+        """Get data loaders for training/validation - MUST BE IMPLEMENTED BY CHILDREN.
+
+        Args:
+            shuffle: Whether to shuffle the data
+            cross_validation_k: If provided, return the k-th fold of train/val loaders
+
+        Returns:
+            Tuple of (train_loader, val_loader)
+        """
+        pass
+
+    @abstractmethod
+    def compute_train_loss(self, *input_data: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Compute training loss for a batch - MUST BE IMPLEMENTED BY CHILDREN.
+
+        Args:
+            *input_data: Input tensors for the batch
+
+        Returns:
+            Dict containing 'total_loss' and other loss components
+        """
+        pass
+
+    @abstractmethod
+    def compute_validation_loss(
+        self, *input_data: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Compute validation loss for a batch - MUST BE IMPLEMENTED BY CHILDREN.
+
+        Args:
+            *input_data: Input tensors for the batch
+
+        Returns:
+            Dict containing 'total_loss' and other loss components
+        """
+        pass
+
+    # =============================================================================
+    # INTERNAL TRAINING METHODS
+    # =============================================================================
+
+    def _train_epoch(self, loader) -> float:
+        """Train the model for one epoch."""
+        self.model.train()
+        total_loss_dict = self._initialize_loss_dict("train")
+
+        if self.rank == 0:
+            self.logger.info("Started training epoch.")
+
+        loader_len = 0
+        for input_data in loader:
+            input_data = [input_i.to(self.device) for input_i in input_data]
+            self.optimizer.zero_grad()
+
+            loss_dict = self.compute_train_loss(*input_data)
+            loss = loss_dict["total_loss"]
+
+            self._accumulate_losses(total_loss_dict, loss_dict)
+            loader_len += 1
+
+            loss.backward()
+            self.optimizer.step()
+
+        self.scheduler.step()
+        self._sync_distributed_training()
+
+        avg_loss_dict = self._average_losses(total_loss_dict, loader_len)
+        self._update_output_json_losses("train", avg_loss_dict)
+
+        return avg_loss_dict["total_loss"]
+
+    def _validate_epoch(self, loader) -> Tuple[float, float]:
+        """Validate the model for one epoch."""
+        self.model.eval()
+        total_loss_dict = self._initialize_loss_dict("val")
+        best_loss = float("inf")
+
+        if self.rank == 0:
+            self.logger.info("Started validation epoch.")
+
+        loader_len = 0
+        for input_data in loader:
+            input_data = [input_i.to(self.device) for input_i in input_data]
+
+            with torch.no_grad():
+                loss_dict = self.compute_validation_loss(*input_data)
+                loss = loss_dict["total_loss"].item()
+                if loss < best_loss:
+                    best_loss = loss
+
+            self._accumulate_losses(total_loss_dict, loss_dict)
+            loader_len += 1
+
+        self._sync_distributed_training()
+
+        avg_loss_dict = self._average_losses(total_loss_dict, loader_len)
+        self._update_output_json_losses("val", avg_loss_dict)
+
+        return avg_loss_dict["total_loss"], best_loss
+
+    # =============================================================================
+    # HELPER/UTILITY METHODS
+    # =============================================================================
+
+    def _setup_distributed_training(self, rank: int, world_size: int, local_rank: int):
+        """Setup distributed training parameters."""
+        self.rank = rank
+        self.world_size = world_size
+        self.local_rank = local_rank
+        self.is_distributed = world_size > 1
+
+    def _setup_model_and_device(
+        self, model: BaseModel, batch_size: int, num_epochs: int
+    ):
+        """Setup model, device, and batch size."""
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
+        self.device = torch.device(
+            f"cuda:{self.local_rank}" if torch.cuda.is_available() else "cpu"
+        )
+
+        self.model = model.to(self.device)
+
+        if self.is_distributed:
+            self.model = DDP(
+                self.model, device_ids=[self.local_rank], output_device=self.local_rank
+            )
+            self.batch_size = batch_size // self.world_size
+
+    def _setup_training_components(
+        self, init_lr: float, num_warmup_epochs: int, decay_factor: float
+    ):
+        """Setup optimizer and scheduler."""
+        self.init_lr = init_lr
+        self.num_warmup_epochs = num_warmup_epochs
+        self.decay_factor = decay_factor
+
+        self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
+        self.scheduler = utils.get_scheduler(
+            self.optimizer, num_warmup_epochs, decay_factor
+        )
+
+    def _setup_logging_and_output(self):
+        """Setup logging and output JSON structure."""
+        self.logger = logging.getLogger(__name__)
+
+        if self.rank == 0:
+            model_for_params = self._get_underlying_model()
+            self.logger.info(
+                f"Total number of parameters: {model_for_params.total_params_formatted()}"
+            )
+            self.logger.info(
+                f"Distributed training: {self.is_distributed}, World size: {self.world_size}"
+            )
+            self.logger.info(f"Batch size per GPU: {self.batch_size}")
+
+        model_for_config = self._get_underlying_model()
+        self.output_json = {
+            "model_config": {
+                "total_params": model_for_config.total_params(),
+                "batch_size": self.batch_size * self.world_size,  # Original batch size
+                "batch_size_per_gpu": self.batch_size,
+                "world_size": self.world_size,
+                "init_lr": self.init_lr,
+                "num_warmup_epochs": self.num_warmup_epochs,
+                "decay_factor": self.decay_factor,
+                "model_layers": str(model_for_config),
+            },
+            "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},
+        }
+
+    def _setup_model_directory(self):
+        """Setup model directory for saving."""
+        if self.rank == 0:
+            self.model_dir = DATA_DIR + "trained_models/pretraining/"
+            if not os.path.exists(self.model_dir):
+                os.makedirs(self.model_dir)
+
+    def _load_pretrained_model(self, pretrained_model_path: Optional[str]):
+        """Load pretrained model if provided."""
+        if pretrained_model_path and os.path.exists(pretrained_model_path):
+            pretrained_model = torch.load(pretrained_model_path, weights_only=False)
+            self._get_underlying_model().load_pretrained(pretrained_model)
+
+    def _resume_from_checkpoint(self, resume_from_checkpoint: Optional[str]):
+        """Resume from checkpoint if provided."""
+        self.start_epoch = 0
+        if resume_from_checkpoint and os.path.exists(resume_from_checkpoint):
+            self.load_checkpoint(resume_from_checkpoint)
+
+    def _get_underlying_model(self) -> BaseModel:
+        """Get the underlying model, unwrapping DDP if necessary."""
+        if self.is_distributed and isinstance(self.model, DDP):
+            return self.model.module  # type: ignore
+        else:
+            return self.model  # type: ignore
+
+    def _find_and_set_optimal_lr(self):
+        """Find optimal learning rate and update optimizer."""
+        if self.rank == 0:
+            self.logger.info("Finding optimal learning rate on all GPUs...")
+
+        train_loader, _ = self.get_dataloaders(shuffle=True)
+        optimal_lr = find_optimal_lr(self, train_loader)
+
+        self.logger.info(f"Rank {self.rank} found optimal LR: {optimal_lr:.6f}")
+
+        if self.is_distributed:
+            optimal_lr_tensor = torch.tensor(optimal_lr, device=self.device)
+            dist.all_reduce(optimal_lr_tensor, op=dist.ReduceOp.SUM)
+            optimal_lr = optimal_lr_tensor.item() / self.world_size
+            dist.barrier()
+
+        if self.rank == 0:
+            self.output_json["model_config"]["init_lr"] = optimal_lr
+
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = optimal_lr
+
+        if self.rank == 0:
+            self.logger.info(f"Using averaged optimal learning rate: {optimal_lr:.6f}")
+
+    def _initialize_loss_dict(self, split: str) -> Dict[str, float]:
+        """Initialize loss dictionary for accumulation."""
+        return {key: 0.0 for key in self.output_json["losses"][split]}
+
+    def _accumulate_losses(
+        self, total_loss_dict: Dict[str, float], loss_dict: Dict[str, torch.Tensor]
+    ):
+        """Accumulate losses from a batch."""
+        for key in loss_dict:
+            total_loss_dict[key] += loss_dict[key].item()
+
+    def _sync_distributed_training(self):
+        """Synchronize all processes in distributed training."""
+        if self.is_distributed:
+            dist.barrier()
+
+    def _average_losses(
+        self, total_loss_dict: Dict[str, float], loader_len: int
+    ) -> Dict[str, float]:
+        """Average losses across batches and processes."""
+        avg_loss_dict = {}
+
+        for key in total_loss_dict:
+            avg_loss_dict[key] = total_loss_dict[key] / loader_len
+
+            if self.is_distributed:
+                loss_tensor = torch.tensor(avg_loss_dict[key], device=self.device)
+                dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+                avg_loss_dict[key] = loss_tensor.item() / self.world_size
+
+        return avg_loss_dict
+
+    def _update_output_json_losses(self, split: str, avg_loss_dict: Dict[str, float]):
+        """Update output JSON with averaged losses."""
+        if self.rank == 0:
+            for key in self.output_json["losses"][split]:
+                self.output_json["losses"][split][key].append(avg_loss_dict[key])
+
+    def _save_output_json(self):
+        """Save the output JSON containing model config and losses."""
+        if self.rank != 0:
+            return
+
+        model_name = self.get_model_name()
+        filename = f"{model_name}_output.json"
+        with open(self.model_dir + filename, "w") as f:
+            json.dump(self.output_json, f, indent=2)

@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.utils.constants import DRY_RUN
+from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS, DEVICE
 
 
 class CropDataset(Dataset):
@@ -27,6 +27,10 @@ class CropDataset(Dataset):
             for measure in soil_measurements
             for depth in soil_depths
         ]
+
+        # Define weather indices used in preprocessing
+        self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
+
         if test_dataset:  # test on missouri and kansas
             # test only final year
             candidate_data = data[
@@ -72,7 +76,7 @@ class CropDataset(Dataset):
             soil = (
                 query_data[self.soil_cols].values.astype("float32").reshape((-1, 11, 6))
             )  # 11 measurements, at 6 depths
-            year = query_data["year"].values.astype("float32")
+            year_data = query_data["year"].values.astype("float32")
             coord = torch.FloatTensor(
                 query_data[["lat", "lng"]].values.astype("float32")
             )
@@ -83,13 +87,70 @@ class CropDataset(Dataset):
             # the current year's yield is the target variable, so replace it with last year's yield
             y_past[-1] = y_past[-2]
 
-            self.data.append(((weather, practices, soil, year, coord, y_past), y))
+            # Preprocess weather data for the model
+            n_years, n_features, seq_len = weather.shape
+
+            # Check context length constraint
+            if n_years * seq_len > MAX_CONTEXT_LENGTH:
+                raise ValueError(
+                    f"n_years * seq_len = {n_years * seq_len} is greater than MAX_CONTEXT_LENGTH = {MAX_CONTEXT_LENGTH}"
+                )
+
+            # Transpose and reshape weather data: (n_years, n_features, seq_len) -> (n_years * seq_len, n_features)
+            weather = weather.transpose(1, 2)  # (n_years, seq_len, n_features)
+            weather = weather.reshape(
+                n_years * seq_len, n_features
+            )  # (n_years * seq_len, n_features)
+
+            # Process coordinates - use only the first coordinate (same for all years in this location)
+            coord_processed = coord[0:1, :]  # (1, 2)
+
+            # Expand year to match the sequence length
+            # year_data is [n_years], need to repeat each year for seq_len timesteps
+            year_expanded = (
+                torch.FloatTensor(year_data).unsqueeze(1).expand(n_years, seq_len)
+            )  # [n_years, seq_len]
+            year_expanded = year_expanded.contiguous().view(
+                n_years * seq_len
+            )  # [n_years * seq_len]
+
+            # Create padded weather with specific weather indices
+            padded_weather = torch.zeros(
+                (seq_len * n_years, TOTAL_WEATHER_VARS),
+                device=DEVICE,
+            )
+            padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
+
+            # Create weather feature mask
+            weather_feature_mask = torch.ones(
+                TOTAL_WEATHER_VARS,
+                dtype=torch.bool,
+                device=DEVICE,
+            )
+            weather_feature_mask[self.weather_indices] = False
+
+            # Create temporal interval (weekly data)
+            interval = torch.full((1,), 7, device=DEVICE, dtype=torch.float32)
+
+            self.data.append(
+                (
+                    padded_weather,  # preprocessed weather data
+                    coord_processed,  # processed coordinates
+                    year_expanded,  # expanded year data
+                    interval,  # temporal interval
+                    weather_feature_mask,  # feature mask
+                    practices,  # practices (unchanged)
+                    soil,  # soil (unchanged)
+                    y_past,  # past yields
+                    y,  # target yield
+                )
+            )
 
     def __len__(self):
         return 1000 if DRY_RUN else len(self.index)
 
     def __getitem__(self, idx):
-        return self.data[idx]  # weather, practices, soil, year, coord, y_past
+        return self.data[idx]
 
     def get_data_loader(self, batch_size=32):
         return DataLoader(self, batch_size=batch_size, shuffle=False)
@@ -142,10 +203,14 @@ def read_soybean_dataset(data_dir: str):
 
 
 def get_train_test_loaders(
-    crop_df: pd.DataFrame, test_states, n_past_years: int, batch_size: int
+    crop_df: pd.DataFrame,
+    test_states,
+    n_past_years: int,
+    batch_size: int,
+    shuffle: bool,
 ):
     train_dataset, test_dataset = split_train_test_by_year(
-        crop_df, test_states, True, n_past_years=n_past_years
+        crop_df, test_states, standardize=True, n_past_years=n_past_years
     )
 
     train_loader = train_dataset.get_data_loader(batch_size=batch_size)
