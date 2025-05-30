@@ -88,9 +88,9 @@ def main():
         model_type = args_dict["model"].lower()
 
         if model_type == "weatherbert":
-            avg_best_rmse = weatherbert_yield_training_loop(args_dict)
+            cross_validation_results = weatherbert_yield_training_loop(args_dict)
         elif model_type == "weatherformer":
-            avg_best_rmse = weatherformer_yield_training_loop(args_dict)
+            cross_validation_results = weatherformer_yield_training_loop(args_dict)
         else:
             raise ValueError(
                 f"Unknown model type: {model_type}. Choose 'weatherbert' or 'weatherformer'"
@@ -98,6 +98,9 @@ def main():
 
         logger = logging.getLogger(__name__)
         logger.info("Training completed successfully!")
+
+        # Convert MSE to RMSE for comparison with literature
+        avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) ** 0.5
         logger.info(f"Final average best RMSE: {avg_best_rmse:.3f}")
 
     except Exception as e:
