@@ -154,6 +154,7 @@ class WeatherFormerTrainer(BaseTrainer):
             n_masked_features=self.n_masked_features,
             world_size=self.world_size,
             rank=self.rank,
+            num_workers=4,  # Enable multiple workers
         )
 
         val_loader = streaming_dataloader(
@@ -164,6 +165,7 @@ class WeatherFormerTrainer(BaseTrainer):
             n_masked_features=self.n_masked_features,
             world_size=self.world_size,
             rank=self.rank,
+            num_workers=4,  # Enable multiple workers
         )
 
         return train_loader, val_loader

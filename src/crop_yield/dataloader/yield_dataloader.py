@@ -150,8 +150,14 @@ class CropDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
-    def get_data_loader(self, batch_size=32):
-        return DataLoader(self, batch_size=batch_size, shuffle=False)
+    def get_data_loader(self, batch_size=32, shuffle=False, num_workers=4):
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
 
 
 def split_train_test_by_year(
@@ -205,13 +211,18 @@ def get_train_test_loaders(
     test_states,
     n_past_years: int,
     batch_size: int,
-    shuffle: bool,
+    shuffle: bool = False,
+    num_workers: int = 4,
 ):
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df, test_states, standardize=True, n_past_years=n_past_years
     )
 
-    train_loader = train_dataset.get_data_loader(batch_size=batch_size)
-    test_loader = test_dataset.get_data_loader(batch_size=batch_size)
+    train_loader = train_dataset.get_data_loader(
+        batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
+    )
+    test_loader = test_dataset.get_data_loader(
+        batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
+    )
 
     return train_loader, test_loader

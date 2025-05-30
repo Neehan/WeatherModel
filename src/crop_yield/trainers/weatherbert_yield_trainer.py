@@ -65,7 +65,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
     # ABSTRACT METHOD IMPLEMENTATIONS (required by BaseTrainer)
     # =============================================================================
 
-    def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
+    def get_dataloaders(self, shuffle: bool = False) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation - IMPLEMENTATION OF ABSTRACT METHOD."""
 
         train_loader, test_loader = get_train_test_loaders(
@@ -74,6 +74,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             self.n_past_years,
             self.batch_size,
             shuffle,
+            num_workers=0 if self.world_size > 1 else 4,
         )
         return train_loader, test_loader
 

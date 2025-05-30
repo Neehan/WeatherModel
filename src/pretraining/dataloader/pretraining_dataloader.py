@@ -19,6 +19,28 @@ random.seed(1234)
 logger = logging.getLogger(__name__)
 
 
+def worker_init_fn(worker_id):
+    """
+    Initialize each worker process with a unique random seed.
+    This ensures reproducible but different random states across workers.
+    """
+    # Get worker info to determine the unique seed
+    worker_info = torch.utils.data.get_worker_info()
+    if worker_info is not None:
+        # Create unique seed for this worker: base_seed + worker_id + dataset_rank
+        base_seed = 1234
+        dataset_rank = getattr(worker_info.dataset, "rank", 0)  # Safe access to rank
+        unique_seed = base_seed + worker_id + (dataset_rank * 1000)
+
+        # Set seeds for this worker
+        random.seed(unique_seed)
+        torch.manual_seed(unique_seed)
+
+        # Log worker initialization (only occasionally to avoid spam)
+        if worker_id == 0:
+            logger.debug(f"Worker {worker_id} initialized with seed {unique_seed}")
+
+
 class StreamingDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
@@ -148,6 +170,7 @@ def streaming_dataloader(
     n_masked_features: int = 1,
     world_size: int = 1,
     rank: int = 0,
+    num_workers: int = 4,  # Add num_workers parameter
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
@@ -211,11 +234,26 @@ def streaming_dataloader(
         rank=rank,
     )
 
-    # For distributed training, we don't use DistributedSampler with IterableDataset
-    # since we manually partition the data above
+    # Determine optimal number of workers
+    # For distributed training, reduce workers per GPU to avoid resource contention
+    effective_num_workers = num_workers
+    if world_size > 1:
+        # Reduce workers in distributed setting to avoid overwhelming the system
+        effective_num_workers = min(num_workers, 2)
+
+    # Log worker configuration
+    if rank == 0:
+        logger.info(
+            f"Using {effective_num_workers} workers per GPU (world_size={world_size})"
+        )
+
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         pin_memory=True,
-        num_workers=0,  # Use main process only for distributed training
+        num_workers=effective_num_workers,
+        worker_init_fn=worker_init_fn,
+        persistent_workers=(
+            True if effective_num_workers > 0 else False
+        ),  # Keep workers alive between epochs
     )

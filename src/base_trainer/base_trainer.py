@@ -72,7 +72,7 @@ class BaseTrainer(ABC):
             use_optimal_lr: Whether to find optimal learning rate before training
 
         Returns:
-            Tuple of (trained_model, losses_dict) - losses_dict is None for non-rank-0 processes
+            Best validation loss achieved during training
         """
         if use_optimal_lr and self.start_epoch == 0:
             self._find_and_set_optimal_lr()
@@ -81,18 +81,22 @@ class BaseTrainer(ABC):
             train_loader, val_loader = self.get_dataloaders(shuffle=True)
 
             train_loss = self._train_epoch(train_loader)
-            val_loss, best_loss = self._validate_epoch(val_loader)
+            val_loss = self._validate_epoch(val_loader)
+
+            # Update best validation loss
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
 
             if self.rank == 0:
                 self.logger.info(
-                    f"Epoch [{epoch+1} / {self.num_epochs}]: Train loss: {train_loss:.3f} Validation loss: {val_loss:.3f} Best Val loss: {best_loss:.3f}"
+                    f"Epoch [{epoch+1} / {self.num_epochs}]: Train loss: {train_loss:.3f} Validation loss: {val_loss:.3f} Best Val loss: {self.best_val_loss:.3f}"
                 )
 
                 if epoch % 5 == 1 or epoch == self.num_epochs - 1:
                     self.save_checkpoint(epoch, val_loss)
 
                 self._save_output_json()
-        return best_loss
+        return self.best_val_loss
 
     def save_checkpoint(self, epoch: int, val_loss: float):
         """Save a complete checkpoint - PUBLIC API METHOD."""
@@ -105,6 +109,7 @@ class BaseTrainer(ABC):
             "model_state_dict": model_to_save.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
+            "best_val_loss": self.best_val_loss,
             "output_json": self.output_json,
         }
 
@@ -127,6 +132,10 @@ class BaseTrainer(ABC):
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.start_epoch = checkpoint["epoch"]
+
+        # Load best validation loss if available, otherwise keep current value
+        if "best_val_loss" in checkpoint:
+            self.best_val_loss = checkpoint["best_val_loss"]
 
         if "output_json" in checkpoint and self.rank == 0:
             self.output_json = checkpoint["output_json"]
@@ -219,11 +228,10 @@ class BaseTrainer(ABC):
 
         return avg_loss_dict["total_loss"]
 
-    def _validate_epoch(self, loader) -> Tuple[float, float]:
+    def _validate_epoch(self, loader) -> float:
         """Validate the model for one epoch."""
         self.model.eval()
         total_loss_dict = self._initialize_loss_dict("val")
-        best_loss = float("inf")
 
         if self.rank == 0:
             self.logger.info("Started validation epoch.")
@@ -234,9 +242,6 @@ class BaseTrainer(ABC):
 
             with torch.no_grad():
                 loss_dict = self.compute_validation_loss(*input_data)
-                loss = loss_dict["total_loss"].item()
-                if loss < best_loss:
-                    best_loss = loss
 
             self._accumulate_losses(total_loss_dict, loss_dict)
             loader_len += 1
@@ -246,7 +251,7 @@ class BaseTrainer(ABC):
         avg_loss_dict = self._average_losses(total_loss_dict, loader_len)
         self._update_output_json_losses("val", avg_loss_dict)
 
-        return avg_loss_dict["total_loss"], best_loss
+        return avg_loss_dict["total_loss"]
 
     # =============================================================================
     # HELPER/UTILITY METHODS
@@ -284,6 +289,9 @@ class BaseTrainer(ABC):
         self.init_lr = init_lr
         self.num_warmup_epochs = num_warmup_epochs
         self.decay_factor = decay_factor
+
+        # Initialize best validation loss tracking
+        self.best_val_loss = float("inf")
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
         self.scheduler = utils.get_scheduler(
