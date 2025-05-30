@@ -239,7 +239,7 @@ def streaming_dataloader(
     effective_num_workers = num_workers
     if world_size > 1:
         # Reduce workers in distributed setting to avoid overwhelming the system
-        effective_num_workers = min(num_workers, 2)
+        effective_num_workers = min(num_workers, 3)
 
     # Log worker configuration
     if rank == 0:
