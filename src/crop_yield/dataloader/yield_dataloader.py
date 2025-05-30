@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -213,8 +214,12 @@ def get_train_test_loaders(
     n_past_years: int,
     batch_size: int,
     shuffle: bool = False,
-    num_workers: int = 4,
+    num_workers: int = 8,
 ) -> Tuple[DataLoader, DataLoader]:
+
+    logger.info(
+        f"Creating train and test dataloaders for {len(crop_df)} locations with {num_workers} workers."
+    )
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df, test_states, standardize=True, n_past_years=n_past_years
     )
