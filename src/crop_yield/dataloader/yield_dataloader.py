@@ -2,6 +2,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
+from typing import Tuple
 
 
 class CropDataset(Dataset):
@@ -213,7 +214,7 @@ def get_train_test_loaders(
     batch_size: int,
     shuffle: bool = False,
     num_workers: int = 4,
-):
+) -> Tuple[DataLoader, DataLoader]:
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df, test_states, standardize=True, n_past_years=n_past_years
     )

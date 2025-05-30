@@ -61,12 +61,19 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         ).tolist()
         self.logger.info(f"Testing on states: {','.join(self.test_states)}")
 
+        # Cache for datasets to avoid recreation during cross-validation
+        self.train_loader: Optional[DataLoader] = None
+        self.test_loader: Optional[DataLoader] = None
+
     # =============================================================================
     # ABSTRACT METHOD IMPLEMENTATIONS (required by BaseTrainer)
     # =============================================================================
 
     def get_dataloaders(self, shuffle: bool = False) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation - IMPLEMENTATION OF ABSTRACT METHOD."""
+
+        if self.train_loader is not None and self.test_loader is not None:
+            return self.train_loader, self.test_loader
 
         train_loader, test_loader = get_train_test_loaders(
             self.crop_df,
@@ -76,6 +83,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             shuffle,
             num_workers=0 if self.world_size > 1 else 4,
         )
+        self.train_loader = train_loader
+        self.test_loader = test_loader
         return train_loader, test_loader
 
     def compute_train_loss(
