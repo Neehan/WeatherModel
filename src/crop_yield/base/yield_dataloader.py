@@ -1,9 +1,7 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
-from src.drought.constants import TQDM_OUTPUT
-from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE, DRY_RUN
+from src.utils.constants import DRY_RUN
 
 
 class CropDataset(Dataset):

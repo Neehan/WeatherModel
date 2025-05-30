@@ -19,3 +19,7 @@ conda activate weather && pip install torch torchvision torchaudio && pip instal
 
 mkdir -p data/nasa_power
 python data_downloader.py
+
+mkdir -p data/khaki_soybeans
+wget -O data/khaki_soybeans/soybean_data_soilgrid250_modified_states_9_processed.csv \
+https://huggingface.co/datasets/notadib/usa-corn-belt-soybeans-yield/resolve/main/soybean_data_soilgrid250_modified_states_9_processed.csv

@@ -322,23 +322,19 @@ class BaseTrainer(ABC):
             "output_json": self.output_json,
         }
 
+        model_name = model_to_save.name + model_to_save.total_params_formatted()
+
         # Save epoch-specific checkpoint
-        checkpoint_path = (
-            self.model_dir + f"{model_to_save.name}_epoch_{epoch}_checkpoint.pth"
-        )
+        checkpoint_path = self.model_dir + f"{model_name}_epoch_{epoch}_checkpoint.pth"
         torch.save(checkpoint, checkpoint_path)
 
         # Save latest checkpoint
-        latest_checkpoint_path = (
-            self.model_dir + f"{model_to_save.name}_latest_checkpoint.pth"
-        )
+        latest_checkpoint_path = self.model_dir + f"{model_name}_latest_checkpoint.pth"
         torch.save(checkpoint, latest_checkpoint_path)
 
         # Also save the model separately for compatibility
-        torch.save(
-            model_to_save, self.model_dir + f"{model_to_save.name}_epoch_{epoch}.pth"
-        )
-        torch.save(model_to_save, self.model_dir + f"{model_to_save.name}_latest.pth")
+        torch.save(model_to_save, self.model_dir + f"{model_name}_epoch_{epoch}.pth")
+        torch.save(model_to_save, self.model_dir + f"{model_name}_latest.pth")
 
     def load_checkpoint(self, checkpoint_path: str):
         """Load a checkpoint to resume training."""

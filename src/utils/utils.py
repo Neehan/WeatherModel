@@ -65,3 +65,17 @@ def setup_logging(rank):
         )
     else:
         logging.basicConfig(level=logging.WARNING)
+
+
+def get_model_params(model_size: str):
+    if model_size == "mini":
+        model_size_params = {"num_heads": 4, "num_layers": 2, "hidden_dim_factor": 12}
+    elif model_size == "small":
+        model_size_params = {"num_heads": 10, "num_layers": 4, "hidden_dim_factor": 20}
+    elif model_size == "medium":
+        model_size_params = {"num_heads": 12, "num_layers": 6, "hidden_dim_factor": 28}
+    elif model_size == "large":
+        model_size_params = {"num_heads": 16, "num_layers": 8, "hidden_dim_factor": 36}
+    else:
+        raise ValueError(f"Unknown model size: {model_size}")
+    return model_size_params

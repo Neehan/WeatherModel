@@ -29,7 +29,7 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--n-epochs", help="number of training epochs", default=75, type=int
+    "--n-epochs", help="number of training epochs", default=30, type=int
 )
 parser.add_argument("--init-lr", help="initial learning rate", default=1e-6, type=float)
 parser.add_argument(

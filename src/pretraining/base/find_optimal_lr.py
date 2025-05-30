@@ -9,7 +9,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from src.pretraining.base.base_trainer import BaseTrainer
-    from src.crop_yield.base.base_yield_trainer import BaseYieldTrainer
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +146,7 @@ def simple_lr_finder(
 
 
 def find_optimal_lr(
-    trainer: "Union[BaseTrainer, BaseYieldTrainer]",
+    trainer: "BaseTrainer",
     dataloader: DataLoader,
     start_lr: float = 1e-6,
     end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed

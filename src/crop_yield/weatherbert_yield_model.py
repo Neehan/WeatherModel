@@ -3,19 +3,27 @@ import torch.nn as nn
 from typing import Optional
 
 from src.models.weatherbert import WeatherBERT
-from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
+from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 from src.models.base_model import BaseModel
 
 
-class BaseYieldPredictor(BaseModel):
+class WeatherBERTYieldModel(BaseModel):
     def __init__(
         self,
         name: str,
-        weather_model: BaseModel,
         mlp_input_dim: int,
+        weather_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
+        device=DEVICE,
+        **model_size_params,
     ):
         super().__init__(name)
-        self.weather_model = weather_model
+        self.weather_model = WeatherBERT(
+            weather_dim=weather_dim,
+            output_dim=output_dim,
+            device=device,
+            **model_size_params,
+        )
         self.mlp_input_dim = mlp_input_dim
         self.mlp = nn.Sequential(
             nn.Linear(mlp_input_dim, 120),
@@ -39,7 +47,7 @@ class BaseYieldPredictor(BaseModel):
             )
 
         weather = weather.transpose(2, 3)  # transpose n_features and seq_len
-        weather = weather.view(batch_size, n_years * seq_len, n_features)
+        weather = weather.reshape(batch_size, n_years * seq_len, n_features)
 
         coord = coord[:, 0, :]
 
@@ -58,14 +66,14 @@ class BaseYieldPredictor(BaseModel):
             (
                 batch_size,
                 seq_len * n_years,
-                n_features,
+                TOTAL_WEATHER_VARS,
             ),
             device=DEVICE,
         )
         padded_weather[:, :, weather_indices] = weather
         # create feature mask
         weather_feature_mask = torch.ones(
-            n_features,
+            TOTAL_WEATHER_VARS,
             dtype=torch.bool,
             device=DEVICE,
         )
@@ -79,12 +87,13 @@ class BaseYieldPredictor(BaseModel):
         weather, coord, year, interval, weather_feature_mask = (
             self.prepare_weather_input(input_data)
         )
-
         weather = self.weather_model(
-            (weather, coord, year, interval),
+            weather,
+            coord,
+            year,
+            interval,
             weather_feature_mask=weather_feature_mask,
         )
-
-        weather = weather.view(weather.size(0), -1)
+        weather = weather.reshape(weather.size(0), -1)
         output = self.mlp(weather)
         return output
