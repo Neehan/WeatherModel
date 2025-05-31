@@ -247,6 +247,7 @@ def streaming_dataloader(
             f"Using {effective_num_workers} workers per GPU (world_size={world_size})"
         )
 
+    effective_num_workers = 0
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
