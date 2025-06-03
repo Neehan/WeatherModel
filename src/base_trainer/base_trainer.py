@@ -96,6 +96,11 @@ class BaseTrainer(ABC):
                     self.save_checkpoint(epoch, val_loss)
 
                 self._save_output_json()
+
+        # Clean up numbered checkpoints after training is complete
+        if self.rank == 0:
+            self._cleanup_numbered_checkpoints()
+
         return self.best_val_loss
 
     def save_checkpoint(self, epoch: int, val_loss: float):
@@ -117,11 +122,16 @@ class BaseTrainer(ABC):
         # Save epoch-specific and latest checkpoints
         checkpoint_path = self.model_dir + f"{model_name}_epoch_{epoch}_checkpoint.pth"
         latest_checkpoint_path = self.model_dir + f"{model_name}_latest_checkpoint.pth"
+        model_path = self.model_dir + f"{model_name}_epoch_{epoch}.pth"
+        latest_model_path = self.model_dir + f"{model_name}_latest.pth"
 
         torch.save(checkpoint, checkpoint_path)
         torch.save(checkpoint, latest_checkpoint_path)
-        torch.save(model_to_save, self.model_dir + f"{model_name}_epoch_{epoch}.pth")
-        torch.save(model_to_save, self.model_dir + f"{model_name}_latest.pth")
+        torch.save(model_to_save, model_path)
+        torch.save(model_to_save, latest_model_path)
+
+        # Track the numbered files for cleanup
+        self.saved_checkpoint_files.extend([checkpoint_path, model_path])
 
     def load_checkpoint(self, checkpoint_path: str):
         """Load a checkpoint to resume training - PUBLIC API METHOD."""
@@ -327,6 +337,9 @@ class BaseTrainer(ABC):
             "losses": {"train": {"total_loss": []}, "val": {"total_loss": []}},
         }
 
+        # Track saved checkpoint files for cleanup
+        self.saved_checkpoint_files: List[str] = []
+
     def _setup_model_directory(self):
         """Setup model directory for saving."""
         if self.rank == 0:
@@ -425,3 +438,23 @@ class BaseTrainer(ABC):
         filename = f"{model_name}_output.json"
         with open(self.model_dir + filename, "w") as f:
             json.dump(self.output_json, f, indent=2)
+
+    def _cleanup_numbered_checkpoints(self):
+        """Remove all numbered checkpoint and model files, keeping only the latest versions."""
+        if self.rank != 0:
+            return
+
+        files_to_remove = self.saved_checkpoint_files
+
+        if files_to_remove:
+            self.logger.info(
+                f"Cleaning up {len(files_to_remove)} numbered checkpoint and model files..."
+            )
+            for file_path in files_to_remove:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    self.logger.debug(f"Removed: {os.path.basename(file_path)}")
+            self.logger.info(
+                "Cleanup completed. Only latest checkpoint and model files remain."
+            )
+            self.saved_checkpoint_files.clear()

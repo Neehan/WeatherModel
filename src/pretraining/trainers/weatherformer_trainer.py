@@ -2,7 +2,7 @@ import torch
 import logging
 from typing import Dict, Optional, Tuple
 from src.base_trainer.base_trainer import BaseTrainer
-from src.base_models.weatherformer import WeatherFormer
+from src.pretraining.models.weatherformer import WeatherFormer
 from src.utils.constants import TOTAL_WEATHER_VARS
 from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
 from torch.utils.data import DataLoader
@@ -19,11 +19,9 @@ class WeatherFormerTrainer(BaseTrainer):
         model: WeatherFormer,
         masking_prob: float,
         n_masked_features: int,
-        beta: float,
         **kwargs,
     ):
         super().__init__(model, **kwargs)
-        self.beta = beta  # Hyperparameter controlling reconstruction vs regularization trade-off
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.masking_function = "weatherformer"
@@ -34,16 +32,13 @@ class WeatherFormerTrainer(BaseTrainer):
                 "total_loss": [],
                 "reconstruction": [],
                 "log_variance": [],
-                "kl_regularization": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
                 "log_variance": [],
-                "kl_regularization": [],
             },
         }
-        self.output_json["model_config"]["beta"] = self.beta
 
     def compute_elbo_loss(
         self,
@@ -55,8 +50,7 @@ class WeatherFormerTrainer(BaseTrainer):
         """
         Compute the VAE-style loss from the mathematical formula:
         L_pretrain = mean over masked features of:
-        [(z - μ)² / σ²] + (1-β)log σ² + β(μ² + σ²)
-
+        [(z - μ)² / σ²] + log σ²
         Args:
             target_features: Ground truth values (z in the formula)
             mu: Predicted mean values
@@ -67,26 +61,19 @@ class WeatherFormerTrainer(BaseTrainer):
             ((target_features - mu) ** 2) / (sigma_squared)
         )
 
-        # Log variance term: (1-β) log σ²
-        log_variance_term = torch.mean((1 - self.beta) * torch.log(sigma_squared))
-
-        # KL regularization term: β(μ² + σ²)
-        kl_regularization_term = torch.mean(self.beta * (mu**2 + sigma_squared))
+        # Log variance term: log σ²
+        log_variance_term = torch.mean(torch.log(sigma_squared))
 
         if log_losses:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
             self.logger.info(f"Log Variance Term: {log_variance_term.item():.6f}")
-            self.logger.info(
-                f"KL Regularization Term: {kl_regularization_term.item():.6f}"
-            )
 
-        total_loss = reconstruction_term + log_variance_term + kl_regularization_term
+        total_loss = reconstruction_term + log_variance_term
 
         return {
             "total_loss": total_loss,
             "reconstruction": reconstruction_term,
             "log_variance": log_variance_term,
-            "kl_regularization": kl_regularization_term,
         }
 
     def compute_train_loss(
@@ -207,7 +194,6 @@ def weatherformer_training_loop(args_dict):
         rank=rank,
         world_size=world_size,
         local_rank=local_rank,
-        beta=args_dict["beta"],
     )
 
     return trainer.train()

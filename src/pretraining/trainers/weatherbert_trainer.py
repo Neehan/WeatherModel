@@ -1,12 +1,10 @@
 from typing import Dict
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import logging
-from typing import Optional
 
 from src.base_trainer.base_trainer import BaseTrainer
-from src.base_models.weatherbert import WeatherBERT
+from src.pretraining.models.weatherbert import WeatherBERT
 from src.utils.constants import TOTAL_WEATHER_VARS
 from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
 from torch.utils.data import DataLoader

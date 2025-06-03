@@ -1,17 +1,18 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-from src.base_models.weatherbert import WeatherBERT
+from src.pretraining.models.weatherbert import WeatherBERT
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 
 """
-This class implements the WeatherFormer model.
+This class implements the WeatherAutoencoder model for baseline comparison.
 
-The output is a tuple of mu, sigma, where mu is the mean and sigma is the standard deviation of the normal distribution.
+The output is just mu (predicted values), unlike WeatherFormer which outputs (mu, sigma).
+Uses standard MSE loss for training.
 """
 
 
-class WeatherFormer(WeatherBERT):
+class WeatherAutoencoder(WeatherBERT):
     def __init__(
         self,
         weather_dim,
@@ -22,7 +23,7 @@ class WeatherFormer(WeatherBERT):
         max_len=MAX_CONTEXT_LENGTH,
         device=DEVICE,
     ):
-        super(WeatherFormer, self).__init__(
+        super(WeatherAutoencoder, self).__init__(
             weather_dim=weather_dim,
             output_dim=output_dim,
             num_heads=num_heads,
@@ -32,11 +33,7 @@ class WeatherFormer(WeatherBERT):
             device=device,
         )
         # override the name
-        self.name = "weatherformer"
-
-        # Override the output projection to be 2x the size for mu and sigma
-        hidden_dim = hidden_dim_factor * num_heads
-        self.out_proj = nn.Linear(hidden_dim, 2 * output_dim)
+        self.name = "weatherautoencoder"
 
     def forward(
         self,
@@ -48,13 +45,17 @@ class WeatherFormer(WeatherBERT):
             torch.Tensor
         ] = None,  # batch_size x seq_len x n_features,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2
-        temporal_index: batch_size x 2
+        year: batch_size x seq_len
+        interval: batch_size x 1
         weather_feature_mask: batch_size x seq_len x n_features
         src_key_padding_mask: batch_size x seq_len
+
+        Returns:
+            torch.Tensor: Predicted values (mu only, no sigma)
         """
         # Call parent WeatherBERT forward method
         output = super().forward(
@@ -66,16 +67,4 @@ class WeatherFormer(WeatherBERT):
             src_key_padding_mask=src_key_padding_mask,
         )
 
-        # Split output into mu and log_var (VAE-style parameterization)
-        mu = output[..., : self.output_dim]
-        log_var = output[..., self.output_dim :]
-
-        # Compute sigma from log variance: sigma = exp(0.5 * log_var)
-        sigma_squared = torch.exp(log_var)
-
-        # Clip sigma to prevent numerical instability
-        sigma_squared = torch.clamp(
-            sigma_squared, min=1e-8, max=25
-        )  # sigma^2 is in [1e-8, 25]
-
-        return mu, sigma_squared
+        return output

@@ -151,10 +151,12 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherbert_yield_training_loop(args_dict):
+
+
+def _create_yield_training_setup(args_dict):
     """
-    BERT training loop using the WeatherBertYieldTrainer class.
-    Initializes the model internally and handles all training.
+    Helper function to create common training setup for all yield trainers.
+    Returns common parameters needed by all yield training loops.
     """
     # Get distributed training parameters
     rank = args_dict.get("rank", 0)
@@ -164,27 +166,58 @@ def weatherbert_yield_training_loop(args_dict):
     # Set device for this process
     device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
+    # Calculate MLP input dimension
     mlp_input_dim = TOTAL_WEATHER_VARS * 52 * (args_dict["n_past_years"] + 1)
 
+    # Read dataset
     crop_df = read_soybean_dataset(DATA_DIR)
 
-    # Check if cross validation should be used
+    # Validate cross validation parameter
     cross_validation_k = args_dict["cross_validation_k"]
     if cross_validation_k is None or cross_validation_k <= 1:
         raise ValueError("Cross validation k must be greater than 1")
 
-    model_kwargs = {
-        "name": "weatherbert_yield",
+    return {
+        "rank": rank,
+        "world_size": world_size,
+        "local_rank": local_rank,
+        "device": device,
         "mlp_input_dim": mlp_input_dim,
+        "crop_df": crop_df,
+        "cross_validation_k": cross_validation_k,
+    }
+
+
+def _run_yield_cross_validation(
+    setup_params,
+    model_class,
+    trainer_class,
+    model_name,
+    args_dict,
+    extra_trainer_kwargs=None,
+):
+    """
+    Helper function to run cross-validation for yield prediction models.
+
+    Args:
+        setup_params: Dictionary from _create_yield_training_setup()
+        model_class: Model class to instantiate
+        trainer_class: Trainer class to use
+        model_name: Name for the model
+        args_dict: Original arguments dictionary
+        extra_trainer_kwargs: Additional trainer-specific kwargs (optional)
+    """
+    model_kwargs = {
+        "name": model_name,
+        "mlp_input_dim": setup_params["mlp_input_dim"],
         "weather_dim": TOTAL_WEATHER_VARS,
         "output_dim": TOTAL_WEATHER_VARS,
-        "device": device,
+        "device": setup_params["device"],
         **args_dict["model_size_params"],
     }
 
-    # Use CrossValidator for k-fold cross validation
     trainer_kwargs = {
-        "crop_df": crop_df,
+        "crop_df": setup_params["crop_df"],
         "n_past_years": args_dict["n_past_years"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
@@ -193,17 +226,37 @@ def weatherbert_yield_training_loop(args_dict):
         "decay_factor": args_dict["decay_factor"],
         "pretrained_model_path": args_dict["pretrained_model_path"],
         "resume_from_checkpoint": args_dict.get("resume_from_checkpoint"),
-        "rank": rank,
-        "world_size": world_size,
-        "local_rank": local_rank,
+        "rank": setup_params["rank"],
+        "world_size": setup_params["world_size"],
+        "local_rank": setup_params["local_rank"],
     }
 
+    # Add any extra trainer-specific kwargs
+    if extra_trainer_kwargs:
+        trainer_kwargs.update(extra_trainer_kwargs)
+
     cross_validator = CrossValidator(
-        model_class=WeatherBERTYieldModel,
+        model_class=model_class,
         model_kwargs=model_kwargs,
-        trainer_class=WeatherBERTYieldTrainer,
+        trainer_class=trainer_class,
         trainer_kwargs=trainer_kwargs,
-        k_folds=cross_validation_k,
+        k_folds=setup_params["cross_validation_k"],
     )
 
     return cross_validator.run_cross_validation()
+
+
+def weatherbert_yield_training_loop(args_dict):
+    """
+    BERT training loop using the WeatherBertYieldTrainer class.
+    Initializes the model internally and handles all training.
+    """
+    setup_params = _create_yield_training_setup(args_dict)
+
+    return _run_yield_cross_validation(
+        setup_params=setup_params,
+        model_class=WeatherBERTYieldModel,
+        trainer_class=WeatherBERTYieldTrainer,
+        model_name="weatherbert_yield",
+        args_dict=args_dict,
+    )

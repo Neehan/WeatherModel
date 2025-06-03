@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.base_models.weatherformer import WeatherFormer
+from src.pretraining.models.weatherformer import WeatherFormer
 from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
 from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 

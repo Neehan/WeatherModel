@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional
 
-from src.base_models.weatherbert import WeatherBERT
+from src.pretraining.models.weatherbert import WeatherBERT
 from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 from src.base_models.base_model import BaseModel
 

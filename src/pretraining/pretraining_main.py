@@ -59,12 +59,6 @@ parser.add_argument(
     default=0.15,
     type=float,
 )
-parser.add_argument(
-    "--beta",
-    help="beta parameter for weatherformer VAE loss",
-    default=0.1,
-    type=float,
-)
 
 
 def main():
