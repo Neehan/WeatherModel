@@ -11,34 +11,10 @@ from src.utils.constants import (
     VALIDATION_CHUNK_IDS,
     NUM_DATASET_PARTS,
 )
-from src.utils.tqdm_to_logger import TqdmToLogger
-from tqdm import tqdm
 import logging
 
 random.seed(1234)
 logger = logging.getLogger(__name__)
-
-
-def worker_init_fn(worker_id):
-    """
-    Initialize each worker process with a unique random seed.
-    This ensures reproducible but different random states across workers.
-    """
-    # Get worker info to determine the unique seed
-    worker_info = torch.utils.data.get_worker_info()
-    if worker_info is not None:
-        # Create unique seed for this worker: base_seed + worker_id + dataset_rank
-        base_seed = 1234
-        dataset_rank = getattr(worker_info.dataset, "rank", 0)  # Safe access to rank
-        unique_seed = base_seed + worker_id + (dataset_rank * 1000)
-
-        # Set seeds for this worker
-        random.seed(unique_seed)
-        torch.manual_seed(unique_seed)
-
-        # Log worker initialization (only occasionally to avoid spam)
-        if worker_id == 0:
-            logger.debug(f"Worker {worker_id} initialized with seed {unique_seed}")
 
 
 class StreamingDataset(torch.utils.data.IterableDataset):
@@ -62,6 +38,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.n_masked_features = n_masked_features
         self.rank = rank
 
+        # Set the correct device for this rank
+        self.device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
+
         # logger.info(
         #     f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
         # )
@@ -72,85 +51,142 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         else:
             raise ValueError(f"Masking function {masking_function} is not valid")
 
-    def weatherbert_masking_function(self, seq_len, n_features):
+    def weatherbert_masking_function(self, seq_len, n_features, batch_size):
         """
         BERT-style masking for weather data.
         Randomly masks features across the sequence based on masking_prob.
         """
-        # Generate random probabilities for all positions at once
-        random_probs = torch.rand(seq_len, n_features)
+        # Generate random probabilities for all positions at once on GPU
+        random_probs = torch.rand(batch_size, seq_len, n_features, device=self.device)
 
         # Create mask where random probability is less than masking probability
         mask = random_probs < self.masking_prob
-
         return mask
 
-    def weatherformer_masking_function(self, seq_len, n_features):
+    def weatherformer_masking_function(self, seq_len, n_features, batch_size):
         """
         WeatherFormer-style masking for weather data.
         Masks n_masked_features completely across all timesteps.
         """
-        # Create mask initialized to False (no masking)
-        mask = torch.zeros(seq_len, n_features, dtype=torch.bool)
+        # Generate random values and sort to get permutations: [batch_size, n_features]
+        random_vals = torch.rand(batch_size, n_features, device=self.device)
+        rand_perm = torch.argsort(random_vals, dim=-1)
 
-        # Randomly select n_masked_features to mask completely
-        masked_feature_indices = torch.randperm(n_features)[: self.n_masked_features]
+        # Create feature mask: True where perm value < n_masked_features
+        # This selects exactly n_masked_features random features per sample
+        feature_mask = rand_perm < self.n_masked_features  # [batch_size, n_features]
 
-        # Mask the selected features across all timesteps
-        mask[:, masked_feature_indices] = True
+        # Expand to all timesteps: [batch_size, seq_len, n_features]
+        mask = feature_mask.unsqueeze(1).expand(-1, seq_len, -1)
 
         return mask
 
     def __iter__(self):
+        """
+        returns:
+            weather: [batch_size, seq_len, n_features]
+            coords: [batch_size, 2]
+            year: [batch_size, seq_len]
+            interval: [batch_size]
+            mask: [batch_size, seq_len, n_features]
+        """
         # Process files in groups of 3 (monthly, weekly, daily with different indices)
         for i in range(0, len(self.file_paths), 3):
             chunk_files = self.file_paths[i : i + 3]  # monthly_i, weekly_j, daily_k
 
-            # Load all three frequency files
-            frequency_data = []
+            # Load all three frequency files directly to GPU
+            all_data = []
             for file_path in chunk_files:
-                data = torch.load(file_path, weights_only=False)
-                frequency_data.append(data)
+                data = torch.load(
+                    file_path, weights_only=False, map_location=self.device
+                )
+                all_data.extend(data)
 
-            # Collect all samples from the three frequency files
-            all_samples = []
-            for data in frequency_data:
-                for weather, coords, index in data:
-                    # index is (temporal index since 1984 jan 1, temporal interval)
-                    temporal_index = index[:1]
-                    interval = index[1:]
+            if not all_data:
+                continue
 
-                    # Calculate years for each of the 365 time points
-                    # temporal_index is the segment number (0, 1, 2, ...)
-                    # Each segment has 365 time points
-                    # absolute_time_index = segment * 365 + position_in_segment
-                    seq_len = weather.size(0)  # Should be 365
-                    time_point_indices = torch.arange(seq_len, dtype=torch.float32)
-                    absolute_time_indices = temporal_index * 365 + time_point_indices
+            # Pre-calculate total number of samples for efficient tensor allocation
+            total_samples = len(all_data)
 
-                    # Convert to years: 1984 + (absolute_time_index * interval_days) / 365
-                    years = 1984 + (absolute_time_indices * interval) / 365
+            # Get dimensions from first sample
+            first_weather, first_coords, _ = all_data[0]
+            seq_len, n_features = (
+                first_weather.shape
+            )  # seq_len=365, n_features=weather_vars
+            coord_dim = first_coords.shape[0]  # coord_dim=2 (lat, lon)
 
-                    # Apply masking function if provided
-                    if self.masking_function is not None:
-                        seq_len, n_features = weather.size()
-                        feature_mask = self.masking_function(seq_len, n_features)
-                        all_samples.append(
-                            (weather, coords, years, interval, feature_mask)
-                        )
-                    else:
-                        all_samples.append((weather, coords, years, interval))
+            # Pre-allocate tensors for all samples (much more efficient than appending)
+            weather_tensors = torch.zeros(
+                total_samples, seq_len, n_features, device=self.device
+            )
+            coords_tensors = torch.zeros(total_samples, coord_dim, device=self.device)
+            years_tensors = torch.zeros(total_samples, seq_len, device=self.device)
+            interval_tensors = torch.zeros(total_samples, 1, device=self.device)
 
-            # Shuffle all samples from this chunk if shuffle is enabled
-            if self.shuffle:
-                random.shuffle(all_samples)
+            if self.masking_function is not None:
+                mask_tensors = torch.zeros(
+                    total_samples,
+                    seq_len,
+                    n_features,
+                    dtype=torch.bool,
+                    device=self.device,
+                )
 
-            # Yield all samples
-            for sample in all_samples:
-                # print(f"year: {sample[2]}, interval: {sample[3]}, coords: {sample[1]}")
+            # Vectorized data processing - much faster than individual loops
+            for idx, (weather, coords, index) in enumerate(all_data):
+                temporal_index = index[0]  # Scalar: temporal segment index
+                interval = index[1]  # Scalar: days per timestep (1, 7, or 30)
+
+                # Store data directly in pre-allocated tensors
+                weather_tensors[idx] = weather  # [seq_len, n_features] -> [365, 20]
+                coords_tensors[idx] = coords  # [coord_dim] -> [2]
+                interval_tensors[idx, 0] = interval  # scalar -> assign to [idx, 0]
+
+                # Vectorized year calculation for entire sequence at once
+                # Shape: [seq_len] - e.g., [365] for time indices 0, 1, 2, ..., 364
+                time_point_indices = torch.arange(
+                    seq_len, dtype=torch.float32, device=self.device
+                )
+                # Shape: [seq_len] - absolute time indices since 1984
+                absolute_time_indices = temporal_index * 365 + time_point_indices
+                # Shape: [seq_len] - convert to actual years
+                years_tensors[idx] = 1984 + (absolute_time_indices * interval) / 365
+
+            if self.masking_function is not None:
+                # Use the actual masking functions with batch support
+                mask_tensors = self.masking_function(seq_len, n_features, total_samples)
+
+            # GPU-based shuffling using direct tensor indexing (much faster)
+            if self.shuffle and total_samples > 1:
+                shuffle_indices = torch.randperm(total_samples, device=self.device)
+                weather_tensors = weather_tensors[shuffle_indices]
+                coords_tensors = coords_tensors[shuffle_indices]
+                years_tensors = years_tensors[shuffle_indices]
+                interval_tensors = interval_tensors[shuffle_indices]
+
+                if self.masking_function is not None:
+                    mask_tensors = mask_tensors[shuffle_indices]
+
+            # Yield all samples (vectorized unpacking)
+            for sample_idx in range(total_samples):
+                if self.masking_function is not None:
+                    sample = (
+                        weather_tensors[sample_idx],
+                        coords_tensors[sample_idx],
+                        years_tensors[sample_idx],
+                        interval_tensors[sample_idx],
+                        mask_tensors[sample_idx],
+                    )
+                else:
+                    sample = (
+                        weather_tensors[sample_idx],
+                        coords_tensors[sample_idx],
+                        years_tensors[sample_idx],
+                        interval_tensors[sample_idx],
+                    )
                 yield sample
 
-            # Only log from rank 0 and only every 5 chunks to reduce spam
+            # Only log from rank 0 and only every 10 chunks to reduce spam
             if (i // 3) % 10 == 0 and self.rank == 0:
                 worker_info = torch.utils.data.get_worker_info()
                 if worker_info is None or worker_info.id == 0:
@@ -170,7 +206,6 @@ def streaming_dataloader(
     n_masked_features: int = 1,
     world_size: int = 1,
     rank: int = 0,
-    num_workers: int = 4,  # Add num_workers parameter
 ):
     data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
 
@@ -233,29 +268,9 @@ def streaming_dataloader(
         n_masked_features=n_masked_features,
         rank=rank,
     )
-
-    # Determine optimal number of workers
-    # For distributed training, reduce workers per GPU to avoid resource contention
-    effective_num_workers = num_workers
-    if world_size > 1:
-        # Reduce workers in distributed setting to avoid overwhelming the system
-        effective_num_workers = min(num_workers, 3)
-
-    # Log worker configuration
-    effective_num_workers = 1
-
-    if rank == 0:
-        logger.info(
-            f"Using {effective_num_workers} workers per GPU (world_size={world_size})"
-        )
-
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
-        pin_memory=True,
-        num_workers=effective_num_workers,
-        worker_init_fn=worker_init_fn,
-        persistent_workers=(
-            True if effective_num_workers > 0 else False
-        ),  # Keep workers alive between epochs
+        pin_memory=False,  # No need for pin_memory since data is already on GPU
+        num_workers=0,
     )
