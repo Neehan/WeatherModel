@@ -5,13 +5,16 @@ import torch
 import torch.distributed as dist
 from src.pretraining.trainers.weatherformer_trainer import weatherformer_training_loop
 from src.pretraining.trainers.weatherbert_trainer import weatherbert_training_loop
+from src.pretraining.trainers.weatherautoencoder_trainer import (
+    weatherautoencoder_training_loop,
+)
 from src.utils.utils import setup_distributed, cleanup_distributed, setup_logging
 from src.utils.utils import parse_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    help="model type is weatherformer or weatherbert",
+    help="model type is weatherformer, weatherbert, or weatherautoencoder",
     default="weatherformer",
     type=str,
 )
@@ -82,9 +85,11 @@ def main():
             weatherformer_training_loop(args_dict)
         elif model_type == "weatherbert":
             weatherbert_training_loop(args_dict)
+        elif model_type == "weatherautoencoder":
+            weatherautoencoder_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherformer' or 'weatherbert'"
+                f"Unknown model type: {model_type}. Choose 'weatherformer', 'weatherbert', or 'weatherautoencoder'"
             )
     finally:
         # Clean up distributed environment

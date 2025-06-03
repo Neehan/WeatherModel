@@ -7,7 +7,9 @@ from typing import Tuple
 
 
 class CropDataset(Dataset):
-    def __init__(self, data, test_states, test_dataset=False, n_past_years=5):
+    def __init__(
+        self, data, test_states, test_dataset=False, n_past_years=5, train_pct=100
+    ):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
         soil_measurements = [
@@ -34,7 +36,6 @@ class CropDataset(Dataset):
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
 
         if test_dataset:  # test on missouri and kansas
-            # test only final year
             candidate_data = data[
                 (data["State"] == test_states[0]) | (data["State"] == test_states[1])
             ]
@@ -56,6 +57,18 @@ class CropDataset(Dataset):
                 valid_indices.append((year, loc_ID))
 
         self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
+
+        # Apply train_pct limitation for training data only
+        if not test_dataset and train_pct < 100:
+            # Calculate how many samples to use based on train_pct
+            total_samples = len(self.index)
+            samples_to_use = int(total_samples * train_pct / 100.0)
+            # Shuffle indices to ensure representative sampling, then take first samples_to_use
+            shuffled_index = self.index.sample(frac=1, random_state=1234).reset_index(
+                drop=True
+            )
+            self.index = shuffled_index.iloc[:samples_to_use]
+
         self.data = []
 
         for idx in range(1000 if DRY_RUN else len(self.index)):
@@ -167,6 +180,7 @@ def split_train_test_by_year(
     test_states,
     standardize: bool = True,
     n_past_years: int = 5,
+    train_pct: int = 100,
 ):
     data = soybean_df[
         soybean_df["year"] > 1981.0
@@ -188,7 +202,11 @@ def split_train_test_by_year(
     data = data.fillna(0)
 
     train_dataset = CropDataset(
-        data.copy(), test_states, test_dataset=False, n_past_years=n_past_years
+        data.copy(),
+        test_states,
+        test_dataset=False,
+        n_past_years=n_past_years,
+        train_pct=train_pct,
     )
     test_dataset = CropDataset(
         data.copy(), test_states, test_dataset=True, n_past_years=n_past_years
@@ -215,13 +233,18 @@ def get_train_test_loaders(
     batch_size: int,
     shuffle: bool = False,
     num_workers: int = 8,
+    train_pct: int = 100,
 ) -> Tuple[DataLoader, DataLoader]:
 
     logger.info(
         f"Creating train and test dataloaders for {len(crop_df)} locations with {num_workers} workers."
     )
     train_dataset, test_dataset = split_train_test_by_year(
-        crop_df, test_states, standardize=True, n_past_years=n_past_years
+        crop_df,
+        test_states,
+        standardize=True,
+        n_past_years=n_past_years,
+        train_pct=train_pct,
     )
 
     train_loader = train_dataset.get_data_loader(

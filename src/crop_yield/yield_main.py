@@ -20,6 +20,12 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
 from src.crop_yield.trainers.weatherformer_yield_trainer import (
     weatherformer_yield_training_loop,
 )
+from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
+    weatherautoencoder_yield_training_loop,
+)
+from src.crop_yield.trainers.weathercnn_yield_trainer import (
+    weathercnn_yield_training_loop,
+)
 from src.utils.constants import DATA_DIR
 from src.utils.utils import setup_logging
 
@@ -28,7 +34,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer or weatherbert",
+    help="model name weatherformer, weatherbert, weatherautoencoder, or weathercnn",
     default="weatherformer",
     type=str,
 )
@@ -75,6 +81,12 @@ parser.add_argument(
     default=1e-4,
     type=float,
 )
+parser.add_argument(
+    "--train-pct",
+    help="percentage of training data to use (1-100)",
+    default=100,
+    type=int,
+)
 
 
 def main():
@@ -84,6 +96,12 @@ def main():
     try:
         args_dict = parse_args(parser)
 
+        # Validate train-pct parameter
+        if not 1 <= args_dict["train_pct"] <= 100:
+            raise ValueError(
+                f"train-pct must be between 1 and 100, got {args_dict['train_pct']}"
+            )
+
         # Determine which training function to use based on model type
         model_type = args_dict["model"].lower()
 
@@ -91,9 +109,13 @@ def main():
             cross_validation_results = weatherbert_yield_training_loop(args_dict)
         elif model_type == "weatherformer":
             cross_validation_results = weatherformer_yield_training_loop(args_dict)
+        elif model_type == "weatherautoencoder":
+            cross_validation_results = weatherautoencoder_yield_training_loop(args_dict)
+        elif model_type == "weathercnn":
+            cross_validation_results = weathercnn_yield_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherbert' or 'weatherformer'"
+                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherautoencoder', or 'weathercnn'"
             )
 
         logger = logging.getLogger(__name__)

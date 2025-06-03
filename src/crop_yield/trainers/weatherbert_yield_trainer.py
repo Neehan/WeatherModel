@@ -36,6 +36,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self,
         crop_df: pd.DataFrame,
         n_past_years: int,
+        train_pct: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -44,6 +45,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.crop_df = crop_df
         self.available_states = set(crop_df["State"].values)
         self.n_past_years = n_past_years
+        self.train_pct = train_pct
 
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss(reduction="mean")
@@ -82,6 +84,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             self.batch_size,
             shuffle,
             num_workers=0 if self.world_size > 1 else 8,
+            train_pct=self.train_pct,
         )
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -195,6 +198,7 @@ def _run_yield_cross_validation(
     model_name,
     args_dict,
     extra_trainer_kwargs=None,
+    extra_model_kwargs=None,
 ):
     """
     Helper function to run cross-validation for yield prediction models.
@@ -206,6 +210,7 @@ def _run_yield_cross_validation(
         model_name: Name for the model
         args_dict: Original arguments dictionary
         extra_trainer_kwargs: Additional trainer-specific kwargs (optional)
+        extra_model_kwargs: Additional model-specific kwargs (optional)
     """
     model_kwargs = {
         "name": model_name,
@@ -216,9 +221,14 @@ def _run_yield_cross_validation(
         **args_dict["model_size_params"],
     }
 
+    # Add any extra model-specific kwargs
+    if extra_model_kwargs:
+        model_kwargs.update(extra_model_kwargs)
+
     trainer_kwargs = {
         "crop_df": setup_params["crop_df"],
         "n_past_years": args_dict["n_past_years"],
+        "train_pct": args_dict["train_pct"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],
