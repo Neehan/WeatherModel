@@ -93,7 +93,6 @@ class WeatherBertTrainer(BaseTrainer):
             masking_prob=self.masking_prob,
             world_size=self.world_size,
             rank=self.rank,
-            num_workers=4,
         )
 
         val_loader = streaming_dataloader(
@@ -104,7 +103,6 @@ class WeatherBertTrainer(BaseTrainer):
             masking_prob=self.masking_prob,
             world_size=self.world_size,
             rank=self.rank,
-            num_workers=4,
         )
 
         return train_loader, val_loader

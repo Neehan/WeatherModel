@@ -1,9 +1,8 @@
 import torch
 import torch.utils.data
-from torch.utils.data import DataLoader
 import logging
 import random
-from typing import Callable, Optional
+from typing import Optional
 from src.utils.constants import (
     DATA_DIR,
     DRY_RUN,
