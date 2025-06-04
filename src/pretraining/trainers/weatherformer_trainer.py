@@ -44,7 +44,7 @@ class WeatherFormerTrainer(BaseTrainer):
         self,
         target_features: torch.Tensor,
         mu: torch.Tensor,
-        sigma_squared: torch.Tensor,
+        var_x: torch.Tensor,
         log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
@@ -54,15 +54,13 @@ class WeatherFormerTrainer(BaseTrainer):
         Args:
             target_features: Ground truth values (z in the formula)
             mu: Predicted mean values
-            sigma_squared: Predicted variance values
+            var_x: Predicted variance values
         """
         # Reconstruction term: (z - μ)² / σ²
-        reconstruction_term = torch.mean(
-            ((target_features - mu) ** 2) / (sigma_squared)
-        )
+        reconstruction_term = torch.mean(((target_features - mu) ** 2) / (var_x))
 
         # Log variance term: log σ²
-        log_variance_term = torch.mean(torch.log(sigma_squared))
+        log_variance_term = torch.mean(torch.log(var_x))
 
         if log_losses:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
@@ -87,18 +85,18 @@ class WeatherFormerTrainer(BaseTrainer):
         """Compute WeatherFormer training loss using VAE-style loss function."""
 
         # Get model predictions (mu, sigma)
-        mu, sigma_squared = self.model(
+        mu, var_x = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract target features and predictions for masked positions only
         target_features = weather[feature_mask]
         predicted_mu = mu[feature_mask]
-        predicted_sigma_squared = sigma_squared[feature_mask]
+        predicted_var_x = var_x[feature_mask]
 
         # Compute VAE loss
         loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu, predicted_sigma_squared
+            target_features, predicted_mu, predicted_var_x
         )
 
         return loss_dict
@@ -113,19 +111,19 @@ class WeatherFormerTrainer(BaseTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute WeatherFormer validation loss using VAE-style loss function."""
 
-        # Get model predictions (mu, sigma_squared)
-        mu, sigma_squared = self.model(
+        # Get model predictions (mu, var_x)
+        mu, var_x = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
         # Extract target features and predictions for masked positions only
         target_features = weather[feature_mask]
         predicted_mu = mu[feature_mask]
-        predicted_sigma_squared = sigma_squared[feature_mask]
+        predicted_var_x = var_x[feature_mask]
 
         # Compute VAE loss
         loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu, predicted_sigma_squared
+            target_features, predicted_mu, predicted_var_x
         )
 
         return loss_dict

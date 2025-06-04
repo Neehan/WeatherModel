@@ -7,7 +7,7 @@ from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 """
 This class implements the WeatherFormer model.
 
-The output is a tuple of mu, sigma, where mu is the mean and sigma is the standard deviation of the normal distribution.
+The output is a tuple of mu_x, sigma, where mu_x is the mean and sigma is the standard deviation of the normal distribution.
 """
 
 
@@ -21,6 +21,7 @@ class WeatherFormer(WeatherBERT):
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
         device=DEVICE,
+        k=8,
     ):
         super(WeatherFormer, self).__init__(
             weather_dim=weather_dim,
@@ -33,10 +34,15 @@ class WeatherFormer(WeatherBERT):
         )
         # override the name
         self.name = "weatherformer"
+        self.k = k
 
-        # Override the output projection to be 2x the size for mu and sigma
+        # Override the output projection to be 2x the size for mu_x and sigma
         hidden_dim = hidden_dim_factor * num_heads
         self.out_proj = nn.Linear(hidden_dim, 2 * output_dim)
+
+        # Initialize mixture of Gaussians prior parameters (K components)
+        self.mu_k = nn.Parameter(torch.zeros(k, max_len, output_dim))
+        self.log_var_k = nn.Parameter(torch.zeros(k, max_len, output_dim))
 
     def forward(
         self,
@@ -66,16 +72,14 @@ class WeatherFormer(WeatherBERT):
             src_key_padding_mask=src_key_padding_mask,
         )
 
-        # Split output into mu and log_var (VAE-style parameterization)
-        mu = output[..., : self.output_dim]
+        # Split output into mu_x and log_var (VAE-style parameterization)
+        mu_x = output[..., : self.output_dim]
         log_var = output[..., self.output_dim :]
 
         # Compute sigma from log variance: sigma = exp(0.5 * log_var)
-        sigma_squared = torch.exp(log_var)
+        var_x = torch.exp(log_var)
 
         # Clip sigma to prevent numerical instability
-        sigma_squared = torch.clamp(
-            sigma_squared, min=1e-8, max=25
-        )  # sigma^2 is in [1e-8, 25]
+        var_x = torch.clamp(var_x, min=1e-8, max=25)  # sigma^2 is in [1e-8, 25]
 
-        return mu, sigma_squared
+        return mu_x, var_x
