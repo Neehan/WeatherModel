@@ -91,7 +91,8 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         """
         # Process files in groups of 3 (monthly, weekly, daily with different indices)
         for i in range(0, len(self.file_paths), 3):
-            chunk_files = self.file_paths[i : i + 3]  # monthly_i, weekly_j, daily_k
+            # chunk_files = self.file_paths[i : i + 3]  # monthly_i, weekly_j, daily_k
+            chunk_files = self.file_paths[i + 1 : i + 2]  # weekly_j,
 
             # Load all three frequency files directly to GPU
             all_data = []
