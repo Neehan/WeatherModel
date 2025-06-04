@@ -73,7 +73,7 @@ class WeatherFormer(WeatherBERT):
         # Compute sigma from log variance: sigma = exp(0.5 * log_var)
         var_x = torch.exp(log_var_x)
 
-        # Clip sigma to prevent numerical instability
-        var_x = torch.clamp(var_x, min=1e-8, max=25)  # sigma^2 is in [1e-8, 25]
+        # Clip sigma to prevent numerical instability and overly negative log terms
+        var_x = torch.clamp(var_x, min=1e-4, max=25)  # sigma^2 is in [0.1, 25]
 
         return mu_x, var_x

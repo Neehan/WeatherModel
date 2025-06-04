@@ -31,12 +31,12 @@ class WeatherFormerTrainer(BaseTrainer):
             "train": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
+                "kl_divergence": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
+                "kl_divergence": [],
             },
         }
 
@@ -48,30 +48,35 @@ class WeatherFormerTrainer(BaseTrainer):
         log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
-        Compute the VAE-style loss from the mathematical formula:
-        L_pretrain = mean over masked features of:
-        [(z - μ)² / σ²] + log σ²
+        Compute the correct Gaussian negative log-likelihood loss.
+
+        The negative log-likelihood for a Gaussian is:
+        NLL = 0.5 * log(2π) + 0.5 * log(σ²) + (z-μ)²/(2σ²)
+
+        We drop the constant 0.5 * log(2π) term since it doesn't affect optimization.
+
         Args:
             target_features: Ground truth values (z in the formula)
             mu_x: Predicted mean values
-            var_x: Predicted variance values
+            var_x: Predicted variance values (σ²) - already clamped in model
         """
-        # Reconstruction term: (z - μ)² / σ²
-        reconstruction_term = torch.mean(((target_features - mu_x) ** 2) / (var_x))
+        # Reconstruction term: (z - μ)² / (2σ²)
+        reconstruction_term = torch.mean(((target_features - mu_x) ** 2) / (2 * var_x))
 
-        # Log variance term: log σ²
-        log_variance_term = torch.mean(torch.log(var_x))
+        # Log variance term: 0.5 * log(σ²)
+        log_variance_term = torch.mean(0.5 * torch.log(var_x))
 
         if log_losses:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
             self.logger.info(f"Log Variance Term: {log_variance_term.item():.6f}")
 
+        # Total loss: reconstruction + log_variance (both terms now ≥ 0)
         total_loss = reconstruction_term + log_variance_term
 
         return {
             "total_loss": total_loss,
             "reconstruction": reconstruction_term,
-            "log_variance": log_variance_term,
+            "kl_divergence": log_variance_term,
         }
 
     def compute_train_loss(
