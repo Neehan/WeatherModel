@@ -136,4 +136,5 @@ def find_optimal_lr(
     for param_group in trainer.optimizer.param_groups:
         param_group["lr"] = original_lr
 
-    return min(optimal_lr, 0.0005)
+    # return min(optimal_lr, 0.0005)
+    return 0.000010
