@@ -78,7 +78,7 @@ parser.add_argument(
 parser.add_argument(
     "--beta",
     help="beta parameter for WeatherFormer variational loss (sigma_y_squared)",
-    default=1e-2,
+    default=1e-4,
     type=float,
 )
 parser.add_argument(
