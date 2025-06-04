@@ -38,12 +38,12 @@ parser.add_argument(
     default="weatherformer",
     type=str,
 )
-parser.add_argument("--batch-size", help="batch size", default=128, type=int)
+parser.add_argument("--batch-size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n-past-years", help="number of past years to look at", default=6, type=int
+    "--n-past-years", help="number of past years to look at", default=4, type=int
 )
 parser.add_argument(
-    "--n-epochs", help="number of training epochs", default=20, type=int
+    "--n-epochs", help="number of training epochs", default=40, type=int
 )
 parser.add_argument(
     "--init-lr", help="initial learning rate for Adam", default=0.0005, type=float
@@ -51,11 +51,11 @@ parser.add_argument(
 parser.add_argument(
     "--decay_factor",
     help="learning rate exponential decay factor",
-    default=0.98,
+    default=0.95,
     type=float,
 )
 parser.add_argument(
-    "--n-warmup-epochs", help="number of warmup epochs", default=5, type=int
+    "--n-warmup-epochs", help="number of warmup epochs", default=10, type=int
 )
 parser.add_argument(
     "--pretrained-model-path",
@@ -86,6 +86,12 @@ parser.add_argument(
     help="percentage of training data to use (1-100)",
     default=100,
     type=int,
+)
+parser.add_argument(
+    "--use-optimal-lr",
+    help="whether to find and use optimal learning rate before training",
+    action="store_true",
+    default=False,
 )
 
 

@@ -259,7 +259,9 @@ def _run_yield_cross_validation(
         k_folds=setup_params["cross_validation_k"],
     )
 
-    return cross_validator.run_cross_validation()
+    return cross_validator.run_cross_validation(
+        use_optimal_lr=args_dict["use_optimal_lr"]
+    )
 
 
 def weatherbert_yield_training_loop(args_dict):
