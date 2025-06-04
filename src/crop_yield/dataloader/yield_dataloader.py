@@ -190,15 +190,20 @@ def split_train_test_by_year(
         cols_to_standardize = [
             col
             for col in data.columns
-            if col not in ["loc_ID", "year", "State", "County", "lat", "lng"]
+            if col not in ["loc_ID", "year", "State", "County", "lat", "lng", "yield"]
         ]
+
+        # standardize the data
         data = pd.merge(
-            data[["year", "State", "loc_ID", "lat", "lng"]],
+            data[["year", "State", "loc_ID", "lat", "lng", "yield"]],
             (data[cols_to_standardize] - data[cols_to_standardize].mean())
             / data[cols_to_standardize].std(),
             left_index=True,
             right_index=True,
         )
+        # for yield always use same values so RMSEs are comparable across folds
+        data["yield"] = (data["yield"] - 38.5) / 11.03
+
     data = data.fillna(0)
 
     train_dataset = CropDataset(
@@ -221,7 +226,6 @@ def read_soybean_dataset(data_dir: str):
         "khaki_soybeans/soybean_data_soilgrid250_modified_states_9_processed.csv"
     )
     soybean_df = pd.read_csv(data_dir + full_filename)
-    soybean_df["year_std"] = soybean_df["year"]
     soybean_df = soybean_df.sort_values(["loc_ID", "year"])
     return soybean_df
 

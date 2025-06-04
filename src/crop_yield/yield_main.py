@@ -129,7 +129,8 @@ def main():
 
         # Convert MSE to RMSE for comparison with literature
         avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) ** 0.5
-        logger.info(f"Final average best RMSE: {avg_best_rmse:.3f}")
+        # 11.03 is the std of the dataset yield
+        logger.info(f"Final average best RMSE: {avg_best_rmse * 11.03:.3f}")
 
     except Exception as e:
         logger = logging.getLogger(__name__)
