@@ -155,8 +155,8 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         components = self._compute_variational_loss_components(
             mu_x, sigma_squared_x, yield_pred, target_yield
         )
-        # only return the reconstruction (MSE) loss for validation
-        return {"total_loss": components["reconstruction"]}
+        # only return the reconstruction (RMSE) loss for validation
+        return {"total_loss": components["reconstruction"] ** 0.5}
 
 
 # =============================================================================
