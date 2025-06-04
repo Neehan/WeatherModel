@@ -13,9 +13,16 @@ from src.crop_yield.dataloader.yield_dataloader import (
 from src.base_trainer.cross_validator import CrossValidator
 import os
 
-# Global variable to track the how many times trainer was called in k-fold
-# we need to return a different but deterministic test set each time
 FOLD_IDX = 0
+
+TEST_STATES_MAP = [
+    ("south dakota", "iowa"),
+    ("nebraska", "minnesota"),
+    ("north dakota", "kansas"),
+    ("indiana", "missouri"),
+    ("illinois", "minnesota"),
+    ("nebraska", "iowa"),
+]
 
 
 class WeatherBERTYieldTrainer(BaseTrainer):
@@ -58,15 +65,9 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 os.makedirs(self.model_dir)
 
         global FOLD_IDX
-        start_idx = (FOLD_IDX * 2) % len(self.available_states)
-        end_idx = (start_idx + 1) % len(self.available_states)
+        self.test_states = TEST_STATES_MAP[FOLD_IDX]
 
         FOLD_IDX += 1
-
-        self.test_states = [
-            self.available_states[start_idx],
-            self.available_states[end_idx],
-        ]
         self.logger.info(f"Testing on states: {','.join(self.test_states)}")
 
         # Cache for datasets to avoid recreation during cross-validation
