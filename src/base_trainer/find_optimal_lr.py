@@ -39,11 +39,16 @@ def find_optimal_lr(
     Returns:
         Optimal learning rate (typically 1/10th of the steepest decline point)
     """
+    rank = getattr(trainer, "rank", 0)
+    logger.info(f"RANK {rank}: Starting find_optimal_lr function")
+
     # Store original lr
     original_lr = trainer.optimizer.param_groups[0]["lr"]
+    logger.info(f"RANK {rank}: Stored original LR: {original_lr}")
 
     # Create learning rate schedule
     lr_mult = (end_lr / start_lr) ** (1.0 / (num_iter - 1))
+    logger.info(f"RANK {rank}: LR multiplier: {lr_mult}")
 
     lrs = []
     losses = []
@@ -52,21 +57,32 @@ def find_optimal_lr(
     # Set starting learning rate
     for param_group in trainer.optimizer.param_groups:
         param_group["lr"] = start_lr
+    logger.info(f"RANK {rank}: Set starting LR to {start_lr}")
 
     current_lr = start_lr
 
     # Create iterator
     data_iter = iter(dataloader)
+    logger.info(f"RANK {rank}: Created data iterator")
 
     trainer.model.train()
+    logger.info(f"RANK {rank}: Set model to train mode")
 
     # Check if we're in distributed mode
     is_distributed = dist.is_initialized() if dist.is_available() else False
+    logger.info(f"RANK {rank}: Distributed mode: {is_distributed}")
 
+    logger.info(f"RANK {rank}: Starting LR search loop for {num_iter} iterations")
     for i in tqdm(range(num_iter)):
+        if i % 10 == 0:  # Log every 10 iterations
+            logger.info(f"RANK {rank}: Starting iteration {i}/{num_iter}")
+
         try:
             batch = next(data_iter)
         except StopIteration:
+            logger.info(
+                f"RANK {rank}: Data iterator exhausted, restarting at iteration {i}"
+            )
             data_iter = iter(dataloader)
             batch = next(data_iter)
 
@@ -77,6 +93,10 @@ def find_optimal_lr(
         # Compute loss using trainer's method
         loss_dict = trainer.compute_train_loss(*batch)
         loss = loss_dict["total_loss"]
+
+        if i % 10 == 0:  # Log every 10 iterations
+            logger.info(f"RANK {rank}: Iteration {i}, loss: {loss.item():.6f}")
+
         # Backward pass
         loss.backward()
         trainer.optimizer.step()
@@ -92,7 +112,9 @@ def find_optimal_lr(
 
         # Check for divergence
         if loss_val > 5 * best_loss:
-            logger.info("Stopping early due to loss divergence")
+            logger.info(
+                f"RANK {rank}: STOPPING EARLY at iteration {i} due to loss divergence! Loss: {loss_val:.6f}, Best: {best_loss:.6f}"
+            )
             break
 
         # Update learning rate
@@ -100,12 +122,16 @@ def find_optimal_lr(
         for param_group in trainer.optimizer.param_groups:
             param_group["lr"] = current_lr
 
+    logger.info(f"RANK {rank}: Finished LR search loop after {len(losses)} iterations")
+    logger.info(f"RANK {rank}: Starting optimal LR calculation...")
+
     # Find optimal learning rate using Leslie Smith's methodology
     # Leslie Smith approach: find where loss decreases fastest, then back off
 
     # First, find where loss starts diverging (loss increases significantly)
     min_loss = min(losses)
     min_loss_idx = losses.index(min_loss)
+    logger.info(f"RANK {rank}: Min loss: {min_loss:.6f} at index {min_loss_idx}")
 
     # Look for divergence point - where loss > 4 * min_loss
     diverge_idx = len(losses)  # Default to end if no divergence found
@@ -113,6 +139,7 @@ def find_optimal_lr(
         if losses[i] > 4 * min_loss:
             diverge_idx = i
             break
+    logger.info(f"RANK {rank}: Divergence index: {diverge_idx}")
 
     # Calculate gradients (rate of change of loss w.r.t. iteration)
     gradients = np.gradient(losses)
@@ -134,14 +161,22 @@ def find_optimal_lr(
 
     else:
         optimal_lr = start_lr * 10
-        logger.warning("No clear steepest decline found, using conservative default")
+        logger.warning(
+            f"RANK {rank}: No clear steepest decline found, using conservative default"
+        )
+
+    logger.info(f"RANK {rank}: Calculated optimal LR: {optimal_lr:.6f}")
 
     # Restore original learning rate
     for param_group in trainer.optimizer.param_groups:
         param_group["lr"] = original_lr
+    logger.info(f"RANK {rank}: Restored original LR: {original_lr}")
 
     # Wait for all GPUs to finish their LR search AND calculations
     if is_distributed:
+        logger.info(f"RANK {rank}: About to hit barrier...")
         dist.barrier()
+        logger.info(f"RANK {rank}: Passed barrier!")
 
+    logger.info(f"RANK {rank}: Returning optimal LR: {optimal_lr:.6f}")
     return optimal_lr

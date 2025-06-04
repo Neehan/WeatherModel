@@ -371,16 +371,29 @@ class BaseTrainer(ABC):
         if self.rank == 0:
             self.logger.info("Finding optimal learning rate on all GPUs...")
 
+        self.logger.info(f"RANK {self.rank}: Getting dataloaders...")
         train_loader, _ = self.get_dataloaders(shuffle=True)
-        optimal_lr = find_optimal_lr(self, train_loader)
 
-        self.logger.info(f"Rank {self.rank} found optimal LR: {optimal_lr:.6f}")
+        self.logger.info(f"RANK {self.rank}: About to call find_optimal_lr...")
+        optimal_lr = find_optimal_lr(self, train_loader)
+        self.logger.info(
+            f"RANK {self.rank}: find_optimal_lr returned: {optimal_lr:.6f}"
+        )
+
+        self.logger.info(f"RANK {self.rank} found optimal LR: {optimal_lr:.6f}")
 
         if self.is_distributed:
+            self.logger.info(
+                f"RANK {self.rank}: About to create tensor for all_reduce..."
+            )
             optimal_lr_tensor = torch.tensor(optimal_lr, device=self.device)
+            self.logger.info(f"RANK {self.rank}: About to call all_reduce...")
             dist.all_reduce(optimal_lr_tensor, op=dist.ReduceOp.SUM)
+            self.logger.info(f"RANK {self.rank}: all_reduce completed")
             optimal_lr = optimal_lr_tensor.item() / self.world_size
+            self.logger.info(f"RANK {self.rank}: About to hit barrier...")
             dist.barrier()
+            self.logger.info(f"RANK {self.rank}: Passed barrier!")
 
         if self.rank == 0:
             self.output_json["model_config"]["init_lr"] = optimal_lr
@@ -390,6 +403,8 @@ class BaseTrainer(ABC):
 
         if self.rank == 0:
             self.logger.info(f"Using averaged optimal learning rate: {optimal_lr:.6f}")
+
+        self.logger.info(f"RANK {self.rank}: _find_and_set_optimal_lr completed")
 
     def _initialize_loss_dict(self, split: str) -> Dict[str, float]:
         """Initialize loss dictionary for accumulation."""
