@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherbert, weatherautoencoder, or weathercnn",
+    help="model name weatherformer, weatherformermixture, weatherbert, weatherautoencoder, or weathercnn",
     default="weatherformer",
     type=str,
 )
@@ -76,6 +76,12 @@ parser.add_argument(
     default=1234,
     type=int,
 )
+parser.add_argument(
+    "--n-mixture-components",
+    help="number of gaussian mixture components for WeatherFormerMixture model",
+    default=7,
+    type=int,
+)
 
 
 def main():
@@ -105,6 +111,9 @@ def main():
         from src.crop_yield.trainers.weathercnn_yield_trainer import (
             weathercnn_yield_training_loop,
         )
+        from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
+            weatherformer_mixture_yield_training_loop,
+        )
 
         # Validate train-pct parameter
         if not 1 <= args_dict["train_pct"] <= 100:
@@ -119,13 +128,17 @@ def main():
             cross_validation_results = weatherbert_yield_training_loop(args_dict)
         elif model_type == "weatherformer":
             cross_validation_results = weatherformer_yield_training_loop(args_dict)
+        elif model_type == "weatherformermixture":
+            cross_validation_results = weatherformer_mixture_yield_training_loop(
+                args_dict
+            )
         elif model_type == "weatherautoencoder":
             cross_validation_results = weatherautoencoder_yield_training_loop(args_dict)
         elif model_type == "weathercnn":
             cross_validation_results = weathercnn_yield_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherautoencoder', or 'weathercnn'"
+                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformermixture', 'weatherautoencoder', or 'weathercnn'"
             )
 
         logger = logging.getLogger(__name__)
