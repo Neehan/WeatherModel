@@ -19,13 +19,13 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
 
     The loss function includes:
     1. Reconstruction term: (y - μ_θ(z))²
-    2. KL divergence term: beta * ∑(μ²_φ,d + sigma²_φ,d - log sigma²_φ,d)
+    2. KL divergence term: β * ∑(μ²_φ,d + sigma²_φ,d - log sigma²_φ,d)
     """
 
     def __init__(self, beta: float, **kwargs):
         super().__init__(**kwargs)
         self.criterion = nn.MSELoss(reduction="mean")
-        self.sigma_y_squared = beta
+        self.beta = beta
         # override the loss collection to match expected k
         if self.rank == 0:
             self.output_json["losses"] = {
@@ -35,9 +35,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
                     "kl_term": [],
                 },
                 "val": {
-                    "total_loss": [],
-                    "reconstruction": [],
-                    "kl_term": [],
+                    "total_loss": [],  # just MSE
                 },
             }
             self.output_json["model_config"]["beta"] = beta
@@ -56,7 +54,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         Compute the variational loss components for WeatherFormer yield prediction.
 
         Implements the exact formula from the paper:
-        L_yield = ∑_{j=1}^{N_y} [(y_j - μ_θ(z_j))² + σ_y² ∑_{d=1}^D (μ_{φ,d}²(x_j) + σ_{φ,d}²(x_j) - log σ_{φ,d}²(x_j))]
+        L_yield = ∑_{j=1}^{N_y} [(y_j - μ_θ(z_j))² + β ∑_{d=1}^D (μ_{φ,d}²(x_j) + σ_{φ,d}²(x_j) - log σ_{φ,d}²(x_j))]
 
         Args:
             yield_pred: Predicted yield values [batch_size, 1]
@@ -73,7 +71,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
             yield_pred.squeeze(), target_yield.squeeze()
         )
 
-        # 2. KL divergence term: σ_y² * mean over batch of ∑_{d=1}^D (μ_{φ,d}²(x_j) + σ_{φ,d}²(x_j) - log σ_{φ,d}²(x_j))
+        # 2. KL divergence term: β * mean over batch of ∑_{d=1}^D (μ_{φ,d}²(x_j) + σ_{φ,d}²(x_j) - log σ_{φ,d}²(x_j))
         # First, compute the KL term for each sample j and dimension d
         kl_per_sample_per_dim = mu_x**2 + sigma_squared_x - torch.log(sigma_squared_x)
 
@@ -82,8 +80,8 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
             kl_per_sample_per_dim.view(mu_x.size(0), -1), dim=1
         )  # [batch_size]
 
-        # Average over batch and multiply by σ_y²
-        kl_term = self.sigma_y_squared * torch.mean(kl_per_sample)
+        # Average over batch and multiply by β
+        kl_term = self.beta * torch.mean(kl_per_sample)
 
         # Total loss: sum of both terms
         total_loss = reconstruction_loss + kl_term
@@ -154,9 +152,10 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
             yield_pred, mu_x, sigma_squared_x = self.model(input_data)
 
         # Compute all loss components using the helper method
-        return self._compute_variational_loss_components(
+        components = self._compute_variational_loss_components(
             mu_x, sigma_squared_x, yield_pred, target_yield
         )
+        return {"total_loss": components["total_loss"]}
 
 
 # =============================================================================
