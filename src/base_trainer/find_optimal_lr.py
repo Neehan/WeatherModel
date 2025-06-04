@@ -1,5 +1,6 @@
 from typing import Union, TYPE_CHECKING
 import torch
+import torch.distributed as dist
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import torch.optim as optim
@@ -59,6 +60,9 @@ def find_optimal_lr(
 
     trainer.model.train()
 
+    # Check if we're in distributed mode
+    is_distributed = dist.is_initialized() if dist.is_available() else False
+
     for i in tqdm(range(num_iter)):
         try:
             batch = next(data_iter)
@@ -95,6 +99,10 @@ def find_optimal_lr(
         current_lr *= lr_mult
         for param_group in trainer.optimizer.param_groups:
             param_group["lr"] = current_lr
+
+    # Wait for all GPUs to finish their LR search
+    if is_distributed:
+        dist.barrier()
 
     # Find optimal learning rate using Leslie Smith's methodology
     # Leslie Smith approach: find where loss decreases fastest, then back off
