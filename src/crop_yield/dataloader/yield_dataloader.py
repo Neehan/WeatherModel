@@ -64,7 +64,9 @@ class CropDataset(Dataset):
             total_samples = len(self.index)
             samples_to_use = int(total_samples * train_pct / 100.0)
             # Shuffle indices to ensure representative sampling, then take first samples_to_use
-            shuffled_index = self.index.sample(frac=1).reset_index(drop=True)
+            shuffled_index = self.index.sample(frac=1, random_state=42).reset_index(
+                drop=True
+            )
             self.index = shuffled_index.iloc[:samples_to_use]
 
         self.data = []

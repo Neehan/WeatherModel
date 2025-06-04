@@ -1,6 +1,8 @@
 import numpy as np
 import logging
 from typing import Type, Dict, Any, List
+import os
+import random
 
 import torch
 from src.base_trainer.base_trainer import BaseTrainer
@@ -57,6 +59,14 @@ class CrossValidator:
 
         for fold in range(self.k_folds):
             self.logger.info(f"Starting fold {fold + 1}/{self.k_folds}")
+
+            # Reset all random seeds to ensure identical behavior across folds
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+            random.seed(1234)
+            np.random.seed(1234)
+            torch.manual_seed(1234)
+            torch.cuda.manual_seed(1234)
+            torch.use_deterministic_algorithms(True)
 
             # Create model for this fold
             model = self.model_class(**self.model_kwargs)
