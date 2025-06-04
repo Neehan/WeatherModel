@@ -4,12 +4,14 @@ this is nn.Module class with some basic functions
 
 import torch.nn as nn
 from abc import abstractmethod
+import logging
 
 
 class BaseModel(nn.Module):
     def __init__(self, name: str):
         super(BaseModel, self).__init__()
         self.name = name
+        logging.info(f"Initializing {self.name} model")
 
     def total_params(self):
         return sum(p.numel() for p in self.parameters())
