@@ -47,7 +47,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         # Store yield-specific parameters
         self.crop_df = crop_df
-        self.available_states = list(set(crop_df["State"].values))
+        self.available_states = list(sorted(set(crop_df["State"].values)))
         self.n_past_years = n_past_years
         self.train_pct = train_pct
 
