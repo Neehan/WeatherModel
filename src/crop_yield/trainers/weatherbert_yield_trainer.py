@@ -65,8 +65,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 os.makedirs(self.model_dir)
 
         global FOLD_IDX
-        self.test_states = TEST_STATES_MAP[FOLD_IDX]
-
+        # self.test_states = TEST_STATES_MAP[FOLD_IDX]
+        self.test_states = TEST_STATES_MAP[1]
         FOLD_IDX += 1
         self.logger.info(f"Testing on states: {','.join(self.test_states)}")
 
