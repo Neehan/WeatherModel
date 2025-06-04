@@ -100,10 +100,6 @@ def find_optimal_lr(
         for param_group in trainer.optimizer.param_groups:
             param_group["lr"] = current_lr
 
-    # Wait for all GPUs to finish their LR search
-    if is_distributed:
-        dist.barrier()
-
     # Find optimal learning rate using Leslie Smith's methodology
     # Leslie Smith approach: find where loss decreases fastest, then back off
 
@@ -143,5 +139,9 @@ def find_optimal_lr(
     # Restore original learning rate
     for param_group in trainer.optimizer.param_groups:
         param_group["lr"] = original_lr
+
+    # Wait for all GPUs to finish their LR search AND calculations
+    if is_distributed:
+        dist.barrier()
 
     return optimal_lr
