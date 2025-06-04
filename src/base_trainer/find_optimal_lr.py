@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 def find_optimal_lr(
     trainer: "BaseTrainer",
     dataloader: DataLoader,
-    start_lr: float = 1e-6,
-    end_lr: float = 0.1,  # Conservative for transformers - can be increased if needed
+    start_lr: float = 1e-5,
+    end_lr: float = 1.0,  # Conservative for transformers - can be increased if needed
     num_iter: int = 100 if not DRY_RUN else 5,
 ):
     """

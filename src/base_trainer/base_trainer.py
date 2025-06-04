@@ -372,7 +372,7 @@ class BaseTrainer(ABC):
             self.logger.info("Finding optimal learning rate on all GPUs...")
 
         train_loader, _ = self.get_dataloaders(shuffle=True)
-        optimal_lr = find_optimal_lr(self, train_loader)
+        optimal_lr = find_optimal_lr(self, train_loader, start_lr=self.init_lr)
 
         self.logger.info(f"Rank {self.rank} found optimal LR: {optimal_lr:.6f}")
 

@@ -33,7 +33,7 @@ parser.add_argument(
     default=None,
     type=str,
 )
-parser.add_argument("--batch-size", help="batch size", default=64, type=int)
+parser.add_argument("--batch-size", help="batch size", default=512, type=int)
 parser.add_argument(
     "--n-masked-features",
     help="number of masked features (for weatherformer) the rest of the features are input features",
@@ -41,9 +41,9 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--n-epochs", help="number of training epochs", default=30, type=int
+    "--n-epochs", help="number of training epochs", default=100, type=int
 )
-parser.add_argument("--init-lr", help="initial learning rate", default=1e-6, type=float)
+parser.add_argument("--init-lr", help="initial learning rate", default=1e-4, type=float)
 parser.add_argument(
     "--n-warmup-epochs", help="number of warm-up epochs", default=10, type=float
 )
@@ -56,7 +56,7 @@ parser.add_argument(
 parser.add_argument(
     "--model-size",
     help="model size mini (60k), small (2M), medium (8M), and large (56M)",
-    default="mini",
+    default="small",
     type=str,
 )
 parser.add_argument(
