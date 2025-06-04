@@ -4,30 +4,7 @@ import os
 import numpy as np
 import torch
 import random
-from src.utils.utils import parse_args
-
-# Set up deterministic behavior
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-random.seed(1234)
-np.random.seed(1234)
-torch.manual_seed(1234)
-torch.cuda.manual_seed(1234)
-torch.use_deterministic_algorithms(True)
-
-from src.crop_yield.trainers.weatherbert_yield_trainer import (
-    weatherbert_yield_training_loop,
-)
-from src.crop_yield.trainers.weatherformer_yield_trainer import (
-    weatherformer_yield_training_loop,
-)
-from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
-    weatherautoencoder_yield_training_loop,
-)
-from src.crop_yield.trainers.weathercnn_yield_trainer import (
-    weathercnn_yield_training_loop,
-)
-from src.utils.constants import DATA_DIR
-from src.utils.utils import setup_logging
+from src.utils.utils import parse_args, setup_logging
 
 
 parser = argparse.ArgumentParser()
@@ -93,6 +70,12 @@ parser.add_argument(
     action="store_true",
     default=False,
 )
+parser.add_argument(
+    "--seed",
+    help="seed for random number generator",
+    default=1234,
+    type=int,
+)
 
 
 def main():
@@ -101,6 +84,27 @@ def main():
 
     try:
         args_dict = parse_args(parser)
+        seed = args_dict["seed"]
+        # Set up deterministic behavior
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.use_deterministic_algorithms(True)
+
+        from src.crop_yield.trainers.weatherbert_yield_trainer import (
+            weatherbert_yield_training_loop,
+        )
+        from src.crop_yield.trainers.weatherformer_yield_trainer import (
+            weatherformer_yield_training_loop,
+        )
+        from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
+            weatherautoencoder_yield_training_loop,
+        )
+        from src.crop_yield.trainers.weathercnn_yield_trainer import (
+            weathercnn_yield_training_loop,
+        )
 
         # Validate train-pct parameter
         if not 1 <= args_dict["train_pct"] <= 100:
