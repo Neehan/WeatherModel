@@ -41,7 +41,7 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
 
         # WeatherFormer expects individual arguments, not a tuple
         # and returns (mu, sigma) instead of just weather embeddings
-        mu_x, sigma_squared_x = self.weather_model(
+        mu_x, var_x = self.weather_model(
             padded_weather,
             coord,
             year=year,
@@ -52,11 +52,11 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
-        weather_repr = mu_x + torch.sqrt(sigma_squared_x) * epsilon
+        weather_repr = mu_x + torch.sqrt(var_x) * epsilon
 
         # Flatten the weather representation for MLP
         weather_repr = weather_repr.reshape(weather_repr.size(0), -1)
 
         # Pass through MLP to get yield prediction
         yield_pred = self.mlp(weather_repr)
-        return yield_pred, mu_x, sigma_squared_x
+        return yield_pred, mu_x, var_x

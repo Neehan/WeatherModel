@@ -46,7 +46,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
     def _compute_variational_loss_components(
         self,
         mu_x: torch.Tensor,
-        sigma_squared_x: torch.Tensor,
+        var_x: torch.Tensor,
         yield_pred: torch.Tensor,
         target_yield: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
@@ -59,7 +59,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         Args:
             yield_pred: Predicted yield values [batch_size, 1]
             mu_x: Mean of weather representations [batch_size, seq_len, weather_dim]
-            sigma_squared_x: Variance of weather representations [batch_size, seq_len, weather_dim]
+            var_x: Variance of weather representations [batch_size, seq_len, weather_dim]
             target_yield: Ground truth yield values [batch_size, 1]
 
         Returns:
@@ -73,7 +73,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
 
         # 2. KL divergence term: β * mean over batch of ∑_{d=1}^D (μ_{φ,d}²(x_j) + σ_{φ,d}²(x_j) - log σ_{φ,d}²(x_j))
         # First, compute the KL term for each sample j and dimension d
-        kl_per_sample_per_dim = mu_x**2 + sigma_squared_x - torch.log(sigma_squared_x)
+        kl_per_sample_per_dim = mu_x**2 + var_x - torch.log(var_x)
 
         # Sum over all dimensions D (both sequence length and weather dimensions)
         kl_per_sample = torch.sum(
@@ -117,11 +117,11 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
 
         # Forward pass through WeatherFormer model
         # Returns (yield_pred, mu_x, sigma_x)
-        yield_pred, mu_x, sigma_squared_x = self.model(input_data)
+        yield_pred, mu_x, var_x = self.model(input_data)
 
         # Compute all loss components using the helper method
         return self._compute_variational_loss_components(
-            mu_x, sigma_squared_x, yield_pred, target_yield
+            mu_x, var_x, yield_pred, target_yield
         )
 
     def compute_validation_loss(
@@ -149,11 +149,11 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
 
         # Forward pass through WeatherFormer model (no gradient computation)
         with torch.no_grad():
-            yield_pred, mu_x, sigma_squared_x = self.model(input_data)
+            yield_pred, mu_x, var_x = self.model(input_data)
 
         # Compute all loss components using the helper method
         components = self._compute_variational_loss_components(
-            mu_x, sigma_squared_x, yield_pred, target_yield
+            mu_x, var_x, yield_pred, target_yield
         )
         # only return the reconstruction (RMSE) loss for validation
         return {"total_loss": components["reconstruction"] ** 0.5}

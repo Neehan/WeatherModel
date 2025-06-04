@@ -67,15 +67,13 @@ class WeatherFormer(WeatherBERT):
         )
 
         # Split output into mu and log_var (VAE-style parameterization)
-        mu = output[..., : self.output_dim]
-        log_var = output[..., self.output_dim :]
+        mu_x = output[..., : self.output_dim]
+        log_var_x = output[..., self.output_dim :]
 
         # Compute sigma from log variance: sigma = exp(0.5 * log_var)
-        sigma_squared = torch.exp(log_var)
+        var_x = torch.exp(log_var_x)
 
         # Clip sigma to prevent numerical instability
-        sigma_squared = torch.clamp(
-            sigma_squared, min=1e-8, max=25
-        )  # sigma^2 is in [1e-8, 25]
+        var_x = torch.clamp(var_x, min=1e-8, max=25)  # sigma^2 is in [1e-8, 25]
 
-        return mu, sigma_squared
+        return mu_x, var_x
