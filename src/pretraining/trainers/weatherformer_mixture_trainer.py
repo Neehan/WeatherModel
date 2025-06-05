@@ -89,7 +89,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
         mix_loss = (-logp).mean() * self.lam
 
-        total = enc_loss + mix_loss
+        total = enc_loss + mix_loss + 0.1 * var_x.mean()  # penalize large var
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")

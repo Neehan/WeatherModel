@@ -87,6 +87,6 @@ class WeatherFormerMixture(WeatherFormer):
         var_k = torch.exp(log_var_k)
 
         # Clamp var_k to prevent numerical instability
-        var_k = torch.clamp(var_k, min=0.1, max=4)  # var_k is in [0.1, 4]
+        var_k = torch.clamp(var_k, min=0.01, max=1)  # var_k is in [0.01, 1]
 
         return mu_x, var_x, mu_k, var_k
