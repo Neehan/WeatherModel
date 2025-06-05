@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import math
-from typing import Dict
+from typing import Dict, Tuple
 from src.crop_yield.trainers.weatherbert_yield_trainer import (
     WeatherBERTYieldTrainer,
     _create_yield_training_setup,
@@ -35,6 +35,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                 "train": {
                     "total_loss": [],
                     "reconstruction": [],
+                    "log_variance": [],
                     "kl_term": [],
                 },
                 "val": {
@@ -53,7 +54,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
         mu_k: torch.Tensor,  # [k, seq_len, n_features] - mixture means
         var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute KL divergence between posterior q(z|x) and mixture prior p(z).
 
@@ -65,8 +66,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         """
         # Compute log q(z|x) - posterior log-density
         # log q(z|x) = -D/2 log(2π) - 1/2 Σ_d [log σ²_φ,d + (z_d - μ_φ,d)²/σ²_φ,d]
-        log_q_z_x = -0.5 * torch.sum(
-            torch.log(var_x) + (z - mu_x) ** 2 / var_x,
+        log_variance = 0.5 * torch.sum(torch.log(var_x), dim=(1, 2))
+        log_q_z_x = -log_variance - 0.5 * torch.sum(
+            (z - mu_x) ** 2 / var_x,
             dim=(1, 2),  # sum over seq_len and n_features
         )  # [batch_size]
 
@@ -90,7 +92,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
         kl_divergence = log_q_z_x - log_p_z  # [batch_size]
 
-        return kl_divergence.mean()  # average over batch
+        return kl_divergence.mean(), log_variance.mean()  # average over batch
 
     def _compute_mixture_variational_loss_components(
         self,
@@ -128,7 +130,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         )
 
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
-        kl_term = self._compute_mixture_kl_divergence(z, mu_x, var_x, mu_k, var_k)
+        kl_term, log_variance = self._compute_mixture_kl_divergence(
+            z, mu_x, var_x, mu_k, var_k
+        )
         kl_term = self.beta * kl_term
 
         # Total loss: sum of both terms
@@ -138,6 +142,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             "total_loss": total_loss,
             "reconstruction": reconstruction_loss,
             "kl_term": kl_term,
+            "log_variance": log_variance,
         }
 
     def compute_train_loss(
