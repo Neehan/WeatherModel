@@ -43,9 +43,12 @@ class WeatherFormerMixture(WeatherFormer):
 
     def load_pretrained(self, pretrained_model: "WeatherFormerMixture"):
         # super().load_pretrained(pretrained_model)
-        self.mu_k = pretrained_model.mu_k
-        self.log_var_k = pretrained_model.log_var_k
-        self.k = pretrained_model.k
+        self.in_proj = pretrained_model.in_proj
+        self.positional_encoding = pretrained_model.positional_encoding
+        self.transformer_encoder = pretrained_model.transformer_encoder
+        # self.mu_k = pretrained_model.mu_k
+        # self.log_var_k = pretrained_model.log_var_k
+        # self.k = pretrained_model.k
 
     def forward(
         self,
