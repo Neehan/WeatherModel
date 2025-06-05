@@ -35,13 +35,15 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         self.output_json["losses"] = {
             "train": {
                 "total_loss": [],
-                "encoder_loss": [],
-                "mixture_prior_loss": [],
+                "reconstruction": [],
+                "log_variance": [],
+                "mixture_prior": [],
             },
             "val": {
                 "total_loss": [],
-                "encoder_loss": [],
-                "mixture_prior_loss": [],
+                "reconstruction": [],
+                "log_variance": [],
+                "mixture_prior": [],
             },
         }
         self.output_json["model_config"]["prior_weight"] = lam
@@ -54,7 +56,9 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
 
     def gaussian_nll(self, z, mu, var):
-        return 0.5 * (torch.log(var) + (z - mu) ** 2 / var)  # no ½ log 2π
+        reconstruction = 0.5 * (z - mu) ** 2 / var  # no ½ log 2π
+        log_variance = 0.5 * torch.log(var)
+        return reconstruction, log_variance
 
     def compute_elbo_loss(
         self,
@@ -67,9 +71,9 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         log_losses: bool = False,
     ):
         # ---------- encoder term  ----------
-        nll = self.gaussian_nll(z, mu_x, var_x)  # []
+        reconstruction, log_variance = self.gaussian_nll(z, mu_x, var_x)  # []
         enc_loss = self._masked_mean(
-            nll, feature_mask, dim=(1, 2)
+            reconstruction + log_variance, feature_mask, dim=(1, 2)
         )  # mean over masked seq_len, n_features
         enc_loss = enc_loss.mean()  # then mean over batch_size
 
@@ -78,9 +82,8 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
         var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
 
-        comp_logp = -self.gaussian_nll(
-            z, mu_k, var_k
-        )  # [K,batch_size,seq_len,n_features]
+        nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
+        comp_logp = -(nll[0] + nll[1])
         # mask out input features
         comp_logp = comp_logp * feature_mask.unsqueeze(0)
         logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
@@ -92,7 +95,10 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
             self.logger.info(f"Total Loss: {total.item():.6f}")
         return dict(
-            total_loss=total, encoder_loss=enc_loss, mixture_prior_loss=mix_loss
+            total_loss=total,
+            reconstruction=reconstruction,
+            log_variance=log_variance,
+            mixture_prior=mix_loss,
         )
 
     def compute_train_loss(
