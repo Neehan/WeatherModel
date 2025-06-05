@@ -92,10 +92,11 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         # var_reg = (
         #     0.3 * self._masked_mean(var_x, feature_mask, dim=(1, 2)).mean()
         # )  # penalize large var
+        mix_loss = torch.tensor([0.0])
         total = enc_loss * 0.0 + mse_loss  # + var_reg
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
-            # self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
+            self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
             # self.logger.info(f"Var Reg Loss: {var_reg.item():.6f}")
             self.logger.info(f"Total Loss: {total.item():.6f}")
 
