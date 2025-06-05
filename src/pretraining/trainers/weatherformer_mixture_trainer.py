@@ -60,32 +60,6 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         log_variance = 0.5 * torch.log(var)
         return reconstruction, log_variance
 
-    def compute_mixture_prior_loss(
-        self,
-        z: torch.Tensor,  # [batch_size, seq_len, n_features]
-        mu_k: torch.Tensor,  # [k, seq_len, n_features]
-        var_k: torch.Tensor,  # [k, seq_len, n_features]
-        feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features]
-    ):
-        """Compute the gaussian mixture prior log likelihood loss."""
-        # Reshape tensors for mixture computation
-        z = z.unsqueeze(0)  # [1,batch_size,seq_len,n_features]
-        mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
-        var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
-
-        # Compute negative log likelihood for each mixture component
-        nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
-        comp_logp = -(nll[0] + nll[1])
-
-        # Mask out input features
-        comp_logp = comp_logp * feature_mask.unsqueeze(0)
-
-        # Compute log-sum-exp over mixture components
-        logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
-
-        # Return weighted mixture prior loss
-        return (-logp).mean() * self.lam
-
     def compute_elbo_loss(
         self,
         z: torch.Tensor,  # [batch_size, seq_len, n_features]
@@ -97,25 +71,31 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         log_losses: bool = False,
     ):
         # ---------- encoder term  ----------
-        # reconstruction, log_variance = self.gaussian_nll(z, mu_x, var_x)  # []
-        # enc_loss = self._masked_mean(
-        #     reconstruction + log_variance, feature_mask, dim=(1, 2)
-        # )  # mean over masked seq_len, n_features
-        # enc_loss = enc_loss.mean()  # then mean over batch_size
-
-        enc_loss = (z - mu_x) ** 2
-        reconstruction = enc_loss
-        enc_loss = self._masked_mean(enc_loss, feature_mask, dim=(1, 2)).mean()
-        log_variance = 0.5 * torch.log(var_x)
-        log_variance = self._masked_mean(log_variance, feature_mask, dim=(1, 2)).mean()
+        reconstruction, log_variance = self.gaussian_nll(z, mu_x, var_x)  # []
+        enc_loss = self._masked_mean(
+            reconstruction + log_variance, feature_mask, dim=(1, 2)
+        )  # mean over masked seq_len, n_features
+        enc_loss = enc_loss.mean()  # then mean over batch_size
 
         # ---------- mixture‑prior term ----------
-        mix_loss = self.compute_mixture_prior_loss(z, mu_k, var_k, feature_mask)
+        z = z.unsqueeze(0)  # [1,batch_size,seq_len,n_features]
+        mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
+        var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
 
-        total = mix_loss + enc_loss + 0.000001 * log_variance
+        nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
+        comp_logp = -(nll[0] + nll[1])
+        # mask out input features
+        comp_logp = comp_logp * feature_mask.unsqueeze(0)
+        logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
+        mix_loss = (-logp).mean() * self.lam
+        var_reg = (
+            0.3 * self._masked_mean(var_x, feature_mask, dim=(1, 2)).mean()
+        )  # penalize large var
+        total = mix_loss + enc_loss + var_reg
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
+            self.logger.info(f"Var Reg Loss: {var_reg.item():.6f}")
             self.logger.info(f"Total Loss: {total.item():.6f}")
 
         return dict(
