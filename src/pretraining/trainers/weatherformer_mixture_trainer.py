@@ -38,12 +38,14 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
             "train": {
                 "total_loss": [],
                 "reconstruction": [],
+                "std_term": [],
                 "kl_term": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
                 "kl_term": [],
+                "std_term": [],
             },
         }
         self.output_json["model_config"]["prior_weight"] = lam
@@ -110,20 +112,25 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         log_losses: bool = False,
     ):
         """
-        Compute loss as MSE on masked features + lam * KL divergence on masked features.
+        Compute loss as Gaussian MSE on masked features + lam * KL divergence on masked features.
         """
-        # 1. MSE on masked features (like BERT)
-        target_tokens = weather[feature_mask]
-        predicted_tokens = mu_x[feature_mask]
-        reconstruction_loss = self.criterion(target_tokens, predicted_tokens)
+        # 1. Gaussian MSE on masked features: -log p(x|mu_x, var_x) for masked features
+        # Gaussian NLL: 0.5 * log(var) + 0.5 * (x - mu)^2 / var
+        gaussian_nll = 0.5 * torch.log(var_x) + 0.5 * (weather - mu_x) ** 2 / var_x
+
+        # 2. Standard deviation term: std for masked features
+        std_term = torch.sum(torch.sqrt(var_x) * feature_mask, dim=(1, 2)).mean()
+
+        # Apply feature mask and compute mean over masked features
+        masked_gaussian_nll = gaussian_nll * feature_mask
+
+        # sum over seq_len, n_features then mean over batch
+        reconstruction_loss = masked_gaussian_nll.sum(dim=(1, 2)).mean()
 
         # 2. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
         # Sample z using reparameterization trick: z = mu_x + sqrt(var_x) * epsilon
-        epsilon = torch.randn_like(mu_x)
-        z = mu_x + torch.sqrt(var_x) * epsilon
-
         kl_term = self._compute_mixture_kl_divergence(
-            z, mu_x, var_x, mu_k, var_k, feature_mask
+            weather, mu_x, var_x, mu_k, var_k, feature_mask
         )
         kl_loss = self.lam * kl_term
 
@@ -132,6 +139,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
 
         if log_losses:
             self.logger.info(f"Reconstruction Loss: {reconstruction_loss.item():.6f}")
+            self.logger.info(f"Std Term: {std_term.item():.6f}")
             self.logger.info(f"KL Loss: {kl_loss.item():.6f}")
             self.logger.info(f"Total Loss: {total_loss.item():.6f}")
 
@@ -139,6 +147,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
             total_loss=total_loss,
             reconstruction=reconstruction_loss,
             kl_term=kl_loss,
+            std_term=std_term,
         )
 
     def compute_train_loss(
