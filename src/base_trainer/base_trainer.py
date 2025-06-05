@@ -135,7 +135,9 @@ class BaseTrainer(ABC):
 
     def load_checkpoint(self, checkpoint_path: str):
         """Load a checkpoint to resume training - PUBLIC API METHOD."""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(
+            checkpoint_path, map_location=self.device, weights_only=False
+        )
 
         model_to_load = self._get_underlying_model()
         model_to_load.load_state_dict(checkpoint["model_state_dict"])
@@ -143,12 +145,9 @@ class BaseTrainer(ABC):
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.start_epoch = checkpoint["epoch"]
 
-        # Load best validation loss if available, otherwise keep current value
-        if "best_val_loss" in checkpoint:
-            self.best_val_loss = checkpoint["best_val_loss"]
-
-        if "output_json" in checkpoint and self.rank == 0:
-            self.output_json = checkpoint["output_json"]
+        # Load best validation loss and output json
+        self.best_val_loss = checkpoint["best_val_loss"]
+        self.output_json = checkpoint["output_json"]
 
         if self.rank == 0:
             self.logger.info(
