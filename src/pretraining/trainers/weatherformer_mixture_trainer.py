@@ -7,11 +7,12 @@ from src.utils.constants import TOTAL_WEATHER_VARS
 from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
 from torch.utils.data import DataLoader
 import math
+import torch.nn as nn
 
 
 class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
     """
-    WeatherFormerMixture trainer that implements Gaussian mixture prior ELBO loss.
+    WeatherFormerMixture trainer that implements MSE + KL divergence loss.
     """
 
     def __init__(
@@ -30,39 +31,77 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         )
         self.lam = lam
         self.masking_function = "weatherformer"
+        self.criterion = nn.MSELoss(reduction="mean")
 
-        # override the losses collected to include mixture prior loss
+        # override the losses collected to include KL divergence
         self.output_json["losses"] = {
             "train": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
-                "mixture_prior": [],
+                "kl_term": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
-                "mixture_prior": [],
+                "kl_term": [],
             },
         }
         self.output_json["model_config"]["prior_weight"] = lam
 
-    def _masked_mean(
-        self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
-    ):
-        """Mean over `dim`, ignoring False in `mask`."""
-        masked = tensor * mask
-        return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
-
-    def gaussian_nll(self, z, mu, var):
-        reconstruction = 0.5 * (z - mu) ** 2 / var  # no ½ log 2π
-        log_variance = 0.5 * torch.log(var)
-        return reconstruction, log_variance
-
-    def compute_elbo_loss(
+    def _compute_mixture_kl_divergence(
         self,
-        z: torch.Tensor,  # [batch_size, seq_len, n_features]
+        z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
+        mu_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior mean
+        var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
+        mu_k: torch.Tensor,  # [k, seq_len, n_features] - mixture means
+        var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
+        feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - mask for output features
+    ) -> torch.Tensor:
+        """
+        Compute KL divergence between posterior q(z|x) and mixture prior p(z) for masked features only.
+
+        KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
+
+        where:
+        - q(z|x) is a diagonal Gaussian N(mu_x, var_x)
+        - p(z) is a mixture of k diagonal Gaussians: (1/k) * Σ_i N(mu_k[i], var_k[i])
+        """
+        # Get number of mixture components
+
+        # Compute log q(z|x) - posterior log-density for masked features only
+        log_q_z_x_all = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
+        log_q_z_x_masked = log_q_z_x_all * feature_mask  # apply mask
+        log_q_z_x = torch.sum(log_q_z_x_masked, dim=(1, 2))  # [batch_size]
+
+        # Compute log p(z) - mixture prior log-density for masked features only
+        z_expanded = z.unsqueeze(0)  # [1, batch_size, seq_len, n_features]
+        mu_k_expanded = mu_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
+        var_k_expanded = var_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
+
+        # Compute log-density for each component
+        log_component_densities_all = -0.5 * (
+            torch.log(var_k_expanded)
+            + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded
+        )
+        # Apply mask to only consider masked features
+        log_component_densities_masked = (
+            log_component_densities_all * feature_mask.unsqueeze(0)
+        )
+        log_component_densities = torch.sum(
+            log_component_densities_masked, dim=(2, 3)
+        )  # [k, batch_size]
+
+        # Compute log p(z) = log(Σ_k exp(log_component_densities))
+        log_p_z = torch.logsumexp(log_component_densities, dim=0)  # [batch_size]
+
+        # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
+        kl_divergence = log_q_z_x - log_p_z  # [batch_size]
+
+        return kl_divergence.mean()  # average over batch
+
+    def compute_mixture_loss(
+        self,
+        weather: torch.Tensor,  # [batch_size, seq_len, n_features]
         mu_x: torch.Tensor,  # [batch_size, seq_len, n_features]
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features]
         mu_k: torch.Tensor,  # [k, seq_len, n_features]
@@ -70,42 +109,36 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features]
         log_losses: bool = False,
     ):
-        # ---------- encoder term  ----------
-        reconstruction, log_variance = self.gaussian_nll(z, mu_x, var_x)  # []
-        enc_loss = self._masked_mean(
-            reconstruction + log_variance, feature_mask, dim=(1, 2)
-        )  # mean over masked seq_len, n_features
-        enc_loss = enc_loss.mean()  # then mean over batch_size
-        # ---------- mixture‑prior term ----------
-        z = z.unsqueeze(0)  # [1,batch_size,seq_len,n_features]
-        mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
-        var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
+        """
+        Compute loss as MSE on masked features + lam * KL divergence on masked features.
+        """
+        # 1. MSE on masked features (like BERT)
+        target_tokens = weather[feature_mask]
+        predicted_tokens = mu_x[feature_mask]
+        reconstruction_loss = self.criterion(target_tokens, predicted_tokens)
 
-        nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
-        comp_logp = -(nll[0] + nll[1])
-        # mask out input features
-        comp_logp = comp_logp * feature_mask.unsqueeze(0)
-        logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
-        mix_loss = (-logp).mean() * self.lam
-        # var_reg = (
-        #     0.3 * self._masked_mean(var_x, feature_mask, dim=(1, 2)).mean()
-        # )  # penalize large var
-        total = mix_loss + enc_loss  # + var_reg
+        # 2. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
+        # Sample z using reparameterization trick: z = mu_x + sqrt(var_x) * epsilon
+        epsilon = torch.randn_like(mu_x)
+        z = mu_x + torch.sqrt(var_x) * epsilon
+
+        kl_term = self._compute_mixture_kl_divergence(
+            z, mu_x, var_x, mu_k, var_k, feature_mask
+        )
+        kl_loss = self.lam * kl_term
+
+        # Total loss
+        total_loss = reconstruction_loss + kl_loss
+
         if log_losses:
-            self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
-            self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
-            # self.logger.info(f"Var Reg Loss: {var_reg.item():.6f}")
-            self.logger.info(f"Total Loss: {total.item():.6f}")
+            self.logger.info(f"Reconstruction Loss: {reconstruction_loss.item():.6f}")
+            self.logger.info(f"KL Loss: {kl_loss.item():.6f}")
+            self.logger.info(f"Total Loss: {total_loss.item():.6f}")
 
         return dict(
-            total_loss=total,
-            reconstruction=self._masked_mean(
-                reconstruction, feature_mask, dim=(1, 2)
-            ).mean(),
-            log_variance=self._masked_mean(
-                log_variance, feature_mask, dim=(1, 2)
-            ).mean(),
-            mixture_prior=mix_loss,
+            total_loss=total_loss,
+            reconstruction=reconstruction_loss,
+            kl_term=kl_loss,
         )
 
     def compute_train_loss(
@@ -116,15 +149,15 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         interval: torch.Tensor,  # batch_size
         feature_mask: torch.Tensor,  # batch_size x seq_len x n_features
     ) -> Dict[str, torch.Tensor]:
-        """Compute WeatherFormerMixture training loss using Gaussian mixture prior ELBO."""
+        """Compute WeatherFormerMixture training loss using MSE + KL divergence."""
 
         # Get model predictions (mu_x, var_x, mu_k, var_k)
         mu_x, var_x, mu_k, var_k = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Compute mixture ELBO loss with full tensors and mask
-        loss_dict = self.compute_elbo_loss(
+        # Compute mixture loss
+        loss_dict = self.compute_mixture_loss(
             weather,
             mu_x,
             var_x,
@@ -143,15 +176,15 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         interval: torch.Tensor,  # batch_size
         feature_mask: torch.Tensor,  # batch_size x seq_len x n_features
     ) -> Dict[str, torch.Tensor]:
-        """Compute WeatherFormerMixture validation loss using Gaussian mixture prior ELBO."""
+        """Compute WeatherFormerMixture validation loss using MSE + KL divergence."""
 
         # Get model predictions (mu_x, var_x, mu_k, var_k)
         mu_x, var_x, mu_k, var_k = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Compute mixture ELBO loss with full tensors and mask
-        loss_dict = self.compute_elbo_loss(
+        # Compute mixture loss
+        loss_dict = self.compute_mixture_loss(
             weather,
             mu_x,
             var_x,
