@@ -91,7 +91,8 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         var_reg = (
             0.3 * self._masked_mean(var_x, feature_mask, dim=(1, 2)).mean()
         )  # penalize large var
-        total = enc_loss + mix_loss + var_reg
+        # total = enc_loss + mix_loss + var_reg
+        total = mix_loss
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
