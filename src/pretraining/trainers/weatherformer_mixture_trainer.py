@@ -78,22 +78,21 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         enc_loss = enc_loss.mean()  # then mean over batch_size
         mse_loss = self._masked_mean((z - mu_x) ** 2, feature_mask, dim=(1, 2)).mean()
 
-        # # ---------- mixture‑prior term ----------
-        # z = z.unsqueeze(0)  # [1,batch_size,seq_len,n_features]
-        # mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
-        # var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
+        # ---------- mixture‑prior term ----------
+        z = z.unsqueeze(0)  # [1,batch_size,seq_len,n_features]
+        mu_k = mu_k.unsqueeze(1)  # [K,1,seq_len,n_features]
+        var_k = var_k.unsqueeze(1)  # [K,1,seq_len,n_features]
 
-        # nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
-        # comp_logp = -(nll[0] + nll[1])
-        # # mask out input features
-        # comp_logp = comp_logp * feature_mask.unsqueeze(0)
-        # logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
-        # mix_loss = (-logp).mean() * self.lam
+        nll = self.gaussian_nll(z, mu_k, var_k)  # [K,batch_size,seq_len,n_features]
+        comp_logp = -(nll[0] + nll[1])
+        # mask out input features
+        comp_logp = comp_logp * feature_mask.unsqueeze(0)
+        logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
+        mix_loss = (-logp).mean() * self.lam
         # var_reg = (
         #     0.3 * self._masked_mean(var_x, feature_mask, dim=(1, 2)).mean()
         # )  # penalize large var
-        mix_loss = torch.tensor([0.0])
-        total = enc_loss * 0.0 + mse_loss  # + var_reg
+        total = mix_loss * 0.0 + enc_loss * 0.0 + mse_loss  # + var_reg
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
