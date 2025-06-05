@@ -97,7 +97,9 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         return dict(
             total_loss=total,
             reconstruction=reconstruction,
-            log_variance=log_variance,
+            log_variance=self._masked_mean(
+                log_variance, feature_mask, dim=(1, 2)
+            ).mean(),
             mixture_prior=mix_loss,
         )
 
