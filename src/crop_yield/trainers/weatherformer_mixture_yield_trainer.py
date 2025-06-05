@@ -66,9 +66,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         """
         # Compute log q(z|x) - posterior log-density
         # log q(z|x) = -D/2 log(2π) - 1/2 Σ_d [log σ²_φ,d + (z_d - μ_φ,d)²/σ²_φ,d]
-        log_variance = 0.5 * torch.sum(torch.log(var_x), dim=(1, 2))
-        log_q_z_x = -log_variance - 0.5 * torch.sum(
-            (z - mu_x) ** 2 / var_x,
+        log_variance = torch.log(var_x)
+        log_q_z_x = -0.5 * torch.sum(
+            log_variance + (z - mu_x) ** 2 / var_x,
             dim=(1, 2),  # sum over seq_len and n_features
         )  # [batch_size]
 
