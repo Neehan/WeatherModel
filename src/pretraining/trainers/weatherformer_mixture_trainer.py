@@ -44,6 +44,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
                 "mixture_prior_loss": [],
             },
         }
+        self.output_json["model_config"]["prior_weight"] = lam
 
     def _masked_mean(
         self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
