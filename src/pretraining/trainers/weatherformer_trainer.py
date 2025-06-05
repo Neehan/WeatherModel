@@ -31,12 +31,12 @@ class WeatherFormerTrainer(BaseTrainer):
             "train": {
                 "total_loss": [],
                 "reconstruction": [],
-                "kl_divergence": [],
+                "log_variance": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
-                "kl_divergence": [],
+                "log_variance": [],
             },
         }
 
@@ -76,7 +76,7 @@ class WeatherFormerTrainer(BaseTrainer):
         return {
             "total_loss": total_loss,
             "reconstruction": reconstruction_term,
-            "kl_divergence": log_variance_term,
+            "log_variance": log_variance_term,
         }
 
     def compute_train_loss(
