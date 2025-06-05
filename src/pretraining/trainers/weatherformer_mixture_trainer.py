@@ -88,15 +88,19 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         comp_logp = comp_logp * feature_mask.unsqueeze(0)
         logp = torch.logsumexp(comp_logp.sum(dim=(2, 3)), dim=0)  # [batch_size,]
         mix_loss = (-logp).mean() * self.lam
-
-        total = enc_loss + mix_loss + 0.1 * var_x.mean()  # penalize large var
+        var_reg = 0.1 * var_x.mean()  # penalize large var
+        total = enc_loss + mix_loss + var_reg
         if log_losses:
             self.logger.info(f"Encoder Loss: {enc_loss.item():.6f}")
             self.logger.info(f"Mixture Prior Loss: {mix_loss.item():.6f}")
+            self.logger.info(f"Var Reg Loss: {var_reg.item():.6f}")
             self.logger.info(f"Total Loss: {total.item():.6f}")
+
         return dict(
             total_loss=total,
-            reconstruction=reconstruction,
+            reconstruction=self._masked_mean(
+                reconstruction, feature_mask, dim=(1, 2)
+            ).mean(),
             log_variance=self._masked_mean(
                 log_variance, feature_mask, dim=(1, 2)
             ).mean(),
