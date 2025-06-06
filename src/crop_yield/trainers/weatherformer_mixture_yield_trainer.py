@@ -35,8 +35,8 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                 "train": {
                     "total_loss": [],
                     "reconstruction": [],
-                    # "log_variance": [],
-                    # "kl_term": [],
+                    "log_variance": [],
+                    "kl_term": [],
                 },
                 "val": {
                     "total_loss": [],  # just MSE
@@ -130,19 +130,19 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         )
 
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
-        # kl_term, log_variance = self._compute_mixture_kl_divergence(
-        #     z, mu_x, var_x, mu_k, var_k
-        # )
-        # kl_term = self.beta * kl_term
+        kl_term, log_variance = self._compute_mixture_kl_divergence(
+            z, mu_x, var_x, mu_k, var_k
+        )
+        kl_term = self.beta * kl_term
 
         # Total loss: sum of both terms
-        total_loss = reconstruction_loss  # + kl_term
+        total_loss = reconstruction_loss + kl_term
 
         return {
             "total_loss": total_loss,
             "reconstruction": reconstruction_loss,
-            # "kl_term": kl_term,
-            # "log_variance": log_variance,
+            "kl_term": kl_term,
+            "log_variance": log_variance,
         }
 
     def compute_train_loss(
