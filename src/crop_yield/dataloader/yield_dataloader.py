@@ -5,6 +5,8 @@ from torch.utils.data import Dataset, DataLoader
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 from typing import Tuple
 
+SHOW_WARNING = False
+
 
 class CropDataset(Dataset):
     def __init__(
@@ -70,6 +72,7 @@ class CropDataset(Dataset):
             self.index = shuffled_index.iloc[:samples_to_use]
 
         self.data = []
+        global SHOW_WARNING
 
         for idx in range(1000 if DRY_RUN else len(self.index)):
             year, loc_ID = self.index.iloc[idx].values.astype("int")
@@ -100,7 +103,12 @@ class CropDataset(Dataset):
             y = query_data.iloc[-1:]["yield"].values.astype("float32").copy()
             y_past = query_data["yield"].values.astype("float32")
             # the current year's yield is the target variable, so replace it with last year's yield
-            y_past[-1] = y_past[-2]
+            y_past[-1] = y_past[-2] if len(y_past) > 1 else -5
+            if len(y_past) <= 1 and not SHOW_WARNING:
+                logger.warning(
+                    f"Only 1 year of yield data for location {loc_ID} in year {year}. y_past value set to -5."
+                )
+                SHOW_WARNING = True
 
             # Preprocess weather data for the model
             n_years, n_features, seq_len = weather.shape
