@@ -101,6 +101,13 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
 
         return kl_divergence.mean()  # average over batch
 
+    def _masked_mean(
+        self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
+    ):
+        """Mean over `dim`, ignoring False in `mask`."""
+        masked = tensor * mask
+        return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
+
     def compute_mixture_loss(
         self,
         weather: torch.Tensor,  # [batch_size, seq_len, n_features]
@@ -119,18 +126,23 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         gaussian_nll = 0.5 * torch.log(var_x) + 0.5 * (weather - mu_x) ** 2 / var_x
 
         # 2. Standard deviation term: std for masked features
-        std_term = torch.sqrt(var_x * feature_mask).mean()
+        std_term = self._masked_mean(torch.sqrt(var_x), feature_mask, dim=(1, 2)).mean()
 
         # Apply feature mask and compute mean over masked features
         masked_gaussian_nll = gaussian_nll * feature_mask
 
         # mean over all dimensions (batch_size, seq_len, n_features)
-        reconstruction_loss = masked_gaussian_nll.mean()
+        reconstruction_loss = self._masked_mean(
+            masked_gaussian_nll, feature_mask, dim=(1, 2)
+        ).mean()
 
         # 2. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
         # Sample z using reparameterization trick: z = mu_x + sqrt(var_x) * epsilon
+        epsilon = torch.randn_like(mu_x)
+        z = mu_x + torch.sqrt(var_x) * epsilon
+
         kl_term = self._compute_mixture_kl_divergence(
-            weather, mu_x, var_x, mu_k, var_k, feature_mask
+            z, mu_x, var_x, mu_k, var_k, feature_mask
         )
         kl_loss = self.lam * kl_term
 
