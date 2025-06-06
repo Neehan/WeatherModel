@@ -119,7 +119,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         gaussian_nll = 0.5 * torch.log(var_x) + 0.5 * (weather - mu_x) ** 2 / var_x
 
         # 2. Standard deviation term: std for masked features
-        std_term = torch.sum(torch.sqrt(var_x) * feature_mask, dim=(1, 2)).mean()
+        std_term = torch.sqrt(var_x).mean()
 
         # Apply feature mask and compute mean over masked features
         masked_gaussian_nll = gaussian_nll * feature_mask
