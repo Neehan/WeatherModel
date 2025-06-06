@@ -40,9 +40,6 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
             }
             self.output_json["model_config"]["beta"] = beta
 
-    def get_model_name(self) -> str:
-        return "weatherformer_yield"
-
     def _compute_variational_loss_components(
         self,
         mu_x: torch.Tensor,

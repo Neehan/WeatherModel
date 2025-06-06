@@ -114,6 +114,9 @@ def main():
         from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
             weatherformer_mixture_yield_training_loop,
         )
+        from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
+            weatherautoencoder_mixture_yield_training_loop,
+        )
 
         # Validate train-pct parameter
         if not 1 <= args_dict["train_pct"] <= 100:
@@ -132,13 +135,17 @@ def main():
             cross_validation_results = weatherformer_mixture_yield_training_loop(
                 args_dict
             )
+        elif model_type == "weatherautoencodermixture":
+            cross_validation_results = weatherautoencoder_mixture_yield_training_loop(
+                args_dict
+            )
         elif model_type == "weatherautoencoder":
             cross_validation_results = weatherautoencoder_yield_training_loop(args_dict)
         elif model_type == "weathercnn":
             cross_validation_results = weathercnn_yield_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformermixture', 'weatherautoencoder', or 'weathercnn'"
+                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', or 'weathercnn'"
             )
 
         logger = logging.getLogger(__name__)

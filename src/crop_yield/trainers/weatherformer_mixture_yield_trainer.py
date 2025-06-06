@@ -44,9 +44,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             }
             self.output_json["model_config"]["beta"] = beta
 
-    def get_model_name(self) -> str:
-        return "weatherformer_mixture_yield"
-
     def _compute_mixture_kl_divergence(
         self,
         z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
