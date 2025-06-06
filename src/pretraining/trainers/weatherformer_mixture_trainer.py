@@ -21,14 +21,12 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         masking_prob: float,
         n_masked_features: int,
         lam: float,
-        use_optimal_lr: bool,
         **kwargs,
     ):
         super().__init__(
             model=model,
             masking_prob=masking_prob,
             n_masked_features=n_masked_features,
-            use_optimal_lr=use_optimal_lr,
             **kwargs,
         )
         self.lam = lam
@@ -253,7 +251,6 @@ def weatherformer_mixture_training_loop(args_dict):
         pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
         n_masked_features=args_dict["n_masked_features"],
-        use_optimal_lr=args_dict["use_optimal_lr"],
         lam=args_dict["prior_weight"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
         rank=rank,
@@ -261,4 +258,4 @@ def weatherformer_mixture_training_loop(args_dict):
         local_rank=local_rank,
     )
 
-    return trainer.train()
+    return trainer.train(use_optimal_lr=args_dict["use_optimal_lr"])

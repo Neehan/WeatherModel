@@ -63,7 +63,7 @@ class BaseTrainer(ABC):
         name = f"{model.name}_{model.total_params_formatted()}"
         return name
 
-    def train(self, use_optimal_lr: bool = True) -> float:
+    def train(self, use_optimal_lr: bool = False) -> float:
         """
         Main training loop - PUBLIC API METHOD.
 

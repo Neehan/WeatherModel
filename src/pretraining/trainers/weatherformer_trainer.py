@@ -19,14 +19,12 @@ class WeatherFormerTrainer(BaseTrainer):
         model: WeatherFormer,
         masking_prob: float,
         n_masked_features: int,
-        use_optimal_lr: bool,
         **kwargs,
     ):
         super().__init__(model, **kwargs)
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.masking_function = "weatherformer"
-        self.use_optimal_lr = use_optimal_lr
 
         # override the losses collected
         self.output_json["losses"] = {
@@ -195,11 +193,10 @@ def weatherformer_training_loop(args_dict):
         pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
         n_masked_features=args_dict["n_masked_features"],
-        use_optimal_lr=args_dict["use_optimal_lr"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
         rank=rank,
         world_size=world_size,
         local_rank=local_rank,
     )
 
-    return trainer.train()
+    return trainer.train(use_optimal_lr=args_dict["use_optimal_lr"])

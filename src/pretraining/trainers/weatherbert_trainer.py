@@ -31,7 +31,6 @@ class WeatherBertTrainer(BaseTrainer):
         model: WeatherBERT,
         masking_prob: float,
         n_masked_features: int,
-        use_optimal_lr: bool,
         **kwargs,
     ):
         super().__init__(model, **kwargs)
@@ -39,7 +38,6 @@ class WeatherBertTrainer(BaseTrainer):
         self.masking_function = "weatherbert"
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
-        self.use_optimal_lr = use_optimal_lr
 
         self.output_json["model_config"]["masking_function"] = self.masking_function
         self.output_json["model_config"]["masking_prob"] = masking_prob
@@ -142,11 +140,10 @@ def weatherbert_training_loop(args_dict):
         pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
         n_masked_features=args_dict["n_masked_features"],
-        use_optimal_lr=args_dict["use_optimal_lr"],
         resume_from_checkpoint=args_dict["resume_from_checkpoint"],
         rank=rank,
         world_size=world_size,
         local_rank=local_rank,
     )
 
-    return trainer.train()
+    return trainer.train(use_optimal_lr=args_dict["use_optimal_lr"])
