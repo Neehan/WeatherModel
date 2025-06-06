@@ -119,13 +119,13 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         gaussian_nll = 0.5 * torch.log(var_x) + 0.5 * (weather - mu_x) ** 2 / var_x
 
         # 2. Standard deviation term: std for masked features
-        std_term = torch.sqrt(var_x).mean()
+        std_term = torch.sqrt(var_x * feature_mask).mean()
 
         # Apply feature mask and compute mean over masked features
         masked_gaussian_nll = gaussian_nll * feature_mask
 
-        # sum over seq_len, n_features then mean over batch
-        reconstruction_loss = masked_gaussian_nll.sum(dim=(1, 2)).mean()
+        # mean over all dimensions (batch_size, seq_len, n_features)
+        reconstruction_loss = masked_gaussian_nll.mean()
 
         # 2. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
         # Sample z using reparameterization trick: z = mu_x + sqrt(var_x) * epsilon
