@@ -138,11 +138,11 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
 
         # 2. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
         # Sample z using reparameterization trick: z = mu_x + sqrt(var_x) * epsilon
-        epsilon = torch.randn_like(mu_x)
-        z = mu_x + torch.sqrt(var_x) * epsilon
+        # epsilon = torch.randn_like(mu_x)
+        # z = mu_x + torch.sqrt(var_x) * epsilon
 
         kl_term = self._compute_mixture_kl_divergence(
-            z, mu_x, var_x, mu_k, var_k, feature_mask
+            weather, mu_x, var_x, mu_k, var_k, feature_mask
         )
         kl_loss = self.lam * kl_term
 
