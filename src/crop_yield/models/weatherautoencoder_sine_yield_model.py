@@ -40,9 +40,11 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         )
 
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
+        self.positions = torch.arange(
+            self.weather_model.max_len, dtype=torch.float, device=device
+        ).unsqueeze(1)
         self.theta_p = nn.Parameter(
             torch.randn(self.weather_model.max_len, output_dim) * 0.1
-            + 2 * torch.pi / 52
         )
         self.A_p = nn.Parameter(
             torch.randn(self.weather_model.max_len, output_dim) * 0.1
@@ -82,12 +84,14 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
 
-        mu_p = self.A_p * torch.sin(self.theta_p)
-        var_p = torch.exp(self.log_var_p)
-
         seq_len = padded_weather.shape[1]
-        mu_p = mu_p[:seq_len, :]
-        var_p = var_p[:seq_len, :]
+
+        period = 2 * torch.pi * interval / self.weather_model.max_len
+
+        mu_p = self.A_p[:seq_len, :] * torch.sin(
+            self.positions[:seq_len, :] * period * self.theta_p[:seq_len, :]
+        )
+        var_p = torch.exp(self.log_var_p[:seq_len, :])
 
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)
