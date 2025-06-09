@@ -40,17 +40,19 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         )
 
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
-        self.positions = torch.arange(
-            self.weather_model.max_len, dtype=torch.float, device=device
-        ).unsqueeze(1)
+        self.positions = (
+            torch.arange(self.weather_model.max_len, dtype=torch.float, device=device)
+            .unsqueeze(0)
+            .unsqueeze(2)
+        )
         self.theta_p = nn.Parameter(
-            torch.randn(self.weather_model.max_len, output_dim) * 0.1
+            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1
         )
         self.A_p = nn.Parameter(
-            torch.randn(self.weather_model.max_len, output_dim) * 0.1
+            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1
         )
         self.log_var_p = nn.Parameter(
-            torch.randn(self.weather_model.max_len, output_dim) * 0.1 - 1
+            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1 - 1
         )
 
         log_var_x_dim = output_dim + weather_dim
@@ -64,7 +66,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         # Prepare weather input using inherited method
         padded_weather, coord, year, interval, weather_feature_mask = input_data
 
-        seq_len = padded_weather.shape[1]
+        batch_size, seq_len = padded_weather.shape[:2]
 
         # WeatherFormerMixture expects individual arguments, not a tuple
         # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
@@ -84,14 +86,21 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
 
-        seq_len = padded_weather.shape[1]
+        # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
+        # period: (batch_size, 1, 1)
+        period = (
+            2 * torch.pi * interval.unsqueeze(1) / self.weather_model.max_len
+        ).unsqueeze(2)
 
-        period = 2 * torch.pi * interval / self.weather_model.max_len
+        # Slice parameters to match sequence length before computation
+        positions_seq = self.positions[:, :seq_len, :]  # (1, seq_len, 1)
+        theta_p_seq = self.theta_p[:, :seq_len, :]  # (1, seq_len, output_dim)
+        A_p_seq = self.A_p[:, :seq_len, :]  # (1, seq_len, output_dim)
+        log_var_p_seq = self.log_var_p[:, :seq_len, :]  # (1, seq_len, output_dim)
 
-        mu_p = self.A_p[:seq_len, :] * torch.sin(
-            self.positions[:seq_len, :] * period * self.theta_p[:seq_len, :]
-        )
-        var_p = torch.exp(self.log_var_p[:seq_len, :])
+        # Compute mean and variance of prior: (batch_size, seq_len, output_dim)
+        mu_p = A_p_seq * torch.sin(positions_seq * period * theta_p_seq)
+        var_p = torch.exp(log_var_p_seq)
 
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)
