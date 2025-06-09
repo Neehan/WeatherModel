@@ -22,10 +22,9 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
     2. KL divergence term: β * ∑(μ²_φ,d + sigma²_φ,d - log sigma²_φ,d)
     """
 
-    def __init__(self, beta: float, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.criterion = nn.MSELoss(reduction="mean")
-        self.beta = beta
         # override the loss collection to match expected k
         if self.rank == 0:
             self.output_json["losses"] = {
@@ -38,7 +37,6 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
                     "total_loss": [],  # just MSE
                 },
             }
-            self.output_json["model_config"]["beta"] = beta
 
     def _compute_variational_loss_components(
         self,
@@ -78,16 +76,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         )  # [batch_size]
 
         # Average over batch and multiply by β
-        num_epochs = self.get_num_epochs()
-        current_epoch = self.get_current_epoch()
-        if current_epoch is None:
-            raise ValueError("Current epoch is not set")
-
-        beta_multiplier = (
-            0.0 if current_epoch < 5 else min(current_epoch / num_epochs * 5, 1.0)
-        )  # starts with zero, linearly increase to 1.0
-
-        beta = self.beta * beta_multiplier
+        beta = self._current_beta()
         kl_term = beta * torch.mean(kl_per_sample)
 
         # Total loss: sum of both terms

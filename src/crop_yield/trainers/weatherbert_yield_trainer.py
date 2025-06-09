@@ -45,6 +45,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         crop_df: pd.DataFrame,
         n_past_years: int,
         train_pct: int,
+        beta: float,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -54,7 +55,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.available_states = list(sorted(set(crop_df["State"].values)))
         self.n_past_years = n_past_years
         self.train_pct = train_pct
-
+        self.beta = beta
+        self.output_json["model_config"]["beta"] = beta
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss(reduction="mean")
 
@@ -155,6 +157,14 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         # Return RMSE for validation since that's standard for comparision
         loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
         return {"total_loss": loss**0.5}
+
+    def _current_beta(self):
+        num_epochs = self.get_num_epochs()
+        current_epoch = self.get_current_epoch()
+        if current_epoch is None:
+            raise ValueError("Current epoch is not set")
+        beta_multiplier = 0.0 if current_epoch < 10 else 1.0
+        return self.beta * beta_multiplier
 
 
 # =============================================================================

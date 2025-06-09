@@ -82,9 +82,12 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             dim=(2, 3),  # sum over seq_len and n_features
         )  # [k, batch_size]
 
-        # Compute log p(z) = -log K + log(Σ_k exp(log_component_densities))
-        # ignore -log K constant
-        log_p_z = torch.logsumexp(log_component_densities, dim=0)  # [batch_size]
+        # Compute log p(z) = log(1/K * Σ_k exp(log_component_densities))
+        # = -log K + log(Σ_k exp(log_component_densities))
+        k = mu_k.shape[0]  # number of mixture components
+        log_p_z = torch.logsumexp(log_component_densities, dim=0) - math.log(
+            k
+        )  # [batch_size]
 
         # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
         kl_divergence = log_q_z_x - log_p_z  # [batch_size]
