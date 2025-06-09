@@ -38,10 +38,11 @@ class WeatherAutoencoderMixtureYieldModel(WeatherBERTYieldModel):
             **model_size_params,
         )
         self.k = k
+        # Initialize mu_k to give var_k around (-0.2, 0.2) range
         self.mu_k = nn.Parameter(
             torch.randn(k, self.weather_model.max_len, output_dim) * 0.1
         )
-        # Initialize log_var_k to give var_k around 0.1-1.0 range instead of exactly 1.0
+        # Initialize log_var_k to give var_k around (-1.2, -0.8) range
         self.log_var_k = nn.Parameter(
             torch.randn(k, self.weather_model.max_len, output_dim) * 0.1 - 1.0
         )
@@ -82,8 +83,8 @@ class WeatherAutoencoderMixtureYieldModel(WeatherBERTYieldModel):
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)
 
-        var_x = torch.clamp(var_x, min=0.01, max=1)
-        var_k = torch.clamp(var_k, min=0.01, max=1)
+        var_x = torch.clamp(var_x, min=1e-4, max=1)
+        var_k = torch.clamp(var_k, min=1e-4, max=1)
 
         # Pass through MLP to get yield prediction
         yield_pred = self.mlp(weather_repr_flat)
