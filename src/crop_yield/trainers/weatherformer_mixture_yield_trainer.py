@@ -130,7 +130,18 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         kl_term, log_variance = self._compute_mixture_kl_divergence(
             z, mu_x, var_x, mu_k, var_k
         )
-        kl_term = self.beta * kl_term
+        # Average over batch and multiply by β
+        num_epochs = self.get_num_epochs()
+        current_epoch = self.get_current_epoch()
+        if current_epoch is None:
+            raise ValueError("Current epoch is not set")
+
+        beta_multiplier = (
+            0.0 if current_epoch < 5 else min(current_epoch / num_epochs * 5, 1.0)
+        )  # starts with zero, linearly increase to 1.0
+
+        beta = self.beta * beta_multiplier
+        kl_term = beta * kl_term
 
         # Total loss: sum of both terms
         total_loss = reconstruction_loss + kl_term
