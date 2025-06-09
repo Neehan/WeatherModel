@@ -78,7 +78,17 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         )  # [batch_size]
 
         # Average over batch and multiply by β
-        kl_term = self.beta * torch.mean(kl_per_sample)
+        num_epochs = self.get_num_epochs()
+        current_epoch = self.get_current_epoch()
+        if current_epoch is None:
+            raise ValueError("Current epoch is not set")
+
+        beta_multiplier = (
+            0.0 if current_epoch < 5 else min(current_epoch / num_epochs * 5, 1.0)
+        )  # starts with zero, linearly increase to 1.0
+
+        beta = self.beta * beta_multiplier
+        kl_term = beta * torch.mean(kl_per_sample)
 
         # Total loss: sum of both terms
         total_loss = reconstruction_loss + kl_term

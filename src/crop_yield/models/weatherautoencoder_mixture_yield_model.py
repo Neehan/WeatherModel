@@ -1,11 +1,13 @@
 import torch
 import torch.nn as nn
 from src.pretraining.models.weatherautoencoder import WeatherAutoencoder
-from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
+from src.crop_yield.models.weatherautoencoder_yield_model import (
+    WeatherAutoencoderYieldModel,
+)
 from src.utils.constants import TOTAL_WEATHER_VARS
 
 
-class WeatherAutoencoderMixtureYieldModel(WeatherBERTYieldModel):
+class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
     """
     WeatherAutoencoderMixture-based yield prediction model that handles probabilistic weather representations
     with Gaussian mixture priors.

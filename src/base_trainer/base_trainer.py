@@ -63,6 +63,14 @@ class BaseTrainer(ABC):
         name = f"{model.name}_{model.total_params_formatted()}"
         return name
 
+    def get_current_epoch(self) -> Optional[int]:
+        """Get the current epoch - PUBLIC API METHOD."""
+        return self.current_epoch
+
+    def get_num_epochs(self) -> int:
+        """Get the number of epochs to train - PUBLIC API METHOD."""
+        return self.num_epochs
+
     def train(self, use_optimal_lr: bool = False) -> float:
         """
         Main training loop - PUBLIC API METHOD.
@@ -79,6 +87,8 @@ class BaseTrainer(ABC):
 
         for epoch in range(self.start_epoch, self.num_epochs):
             train_loader, val_loader = self.get_dataloaders(shuffle=True)
+
+            self.current_epoch = epoch
 
             train_loss = self._train_epoch(train_loader)
             val_loss = self._validate_epoch(val_loader)
@@ -279,6 +289,7 @@ class BaseTrainer(ABC):
         """Setup model, device, and batch size."""
         self.batch_size = batch_size
         self.num_epochs = num_epochs
+        self.current_epoch = None
         self.device = torch.device(
             f"cuda:{self.local_rank}" if torch.cuda.is_available() else "cpu"
         )
