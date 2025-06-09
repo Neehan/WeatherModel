@@ -80,13 +80,13 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
-        z = mu_x + torch.sqrt(var_x) * epsilon
+        z = mu_x + torch.sqrt(var_x) * epsilon * 0.01
 
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)
 
-        var_x = torch.clamp(var_x, min=1e-4, max=1)
-        var_k = torch.clamp(var_k, min=1e-4, max=1)
+        var_x = torch.clamp(var_x, min=1e-8, max=1)
+        var_k = torch.clamp(var_k, min=1e-8, max=1)
 
         # Pass through MLP to get yield prediction
         yield_pred = self.mlp(weather_repr_flat)
