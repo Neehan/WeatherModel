@@ -159,12 +159,13 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         return {"total_loss": loss**0.5}
 
     def _current_beta(self):
-        num_epochs = self.get_num_epochs()
-        current_epoch = self.get_current_epoch()
-        if current_epoch is None:
-            raise ValueError("Current epoch is not set")
-        beta_multiplier = 0.0 if current_epoch < 10 else 1.0
-        return self.beta * beta_multiplier
+        # num_epochs = self.get_num_epochs()
+        # current_epoch = self.get_current_epoch()
+        # if current_epoch is None:
+        #     raise ValueError("Current epoch is not set")
+        # beta_multiplier = 0.0 if current_epoch < 10 else 1.0
+        # return self.beta * beta_multiplier
+        return self.beta
 
 
 # =============================================================================
