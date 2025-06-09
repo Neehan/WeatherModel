@@ -168,14 +168,29 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             weather_feature_mask,
         )
 
-        # Forward pass through WeatherFormerMixture model
-        # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
-        yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
+        # Do 4 samples and average the losses
+        n_samples = 4
+        loss_components_list = []
 
-        # Compute all loss components using the helper method
-        return self._compute_mixture_variational_loss_components(
-            z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield
-        )
+        for _ in range(n_samples):
+            # Forward pass through WeatherFormerMixture model
+            # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
+            yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
+
+            # Compute all loss components using the helper method
+            loss_components = self._compute_mixture_variational_loss_components(
+                z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield
+            )
+            loss_components_list.append(loss_components)
+
+        # Average all loss components across samples
+        averaged_losses = {}
+        for key in loss_components_list[0].keys():
+            averaged_losses[key] = torch.stack(
+                [lc[key] for lc in loss_components_list]
+            ).mean()
+
+        return averaged_losses
 
     def compute_validation_loss(
         self,
