@@ -204,6 +204,7 @@ def _create_yield_training_setup(args_dict):
         "mlp_input_dim": mlp_input_dim,
         "crop_df": crop_df,
         "cross_validation_k": cross_validation_k,
+        "beta": args_dict["beta"],
     }
 
 

@@ -25,10 +25,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
     2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is the Gaussian mixture prior
     """
 
-    def __init__(self, beta: float, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.criterion = nn.MSELoss(reduction="mean")
-        self.beta = beta
         # override the loss collection to match expected keys
         if self.rank == 0:
             self.output_json["losses"] = {
@@ -42,7 +41,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                     "total_loss": [],  # just MSE
                 },
             }
-            self.output_json["model_config"]["beta"] = beta
 
     def _compute_mixture_kl_divergence(
         self,
@@ -134,16 +132,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             z, mu_x, var_x, mu_k, var_k
         )
         # Average over batch and multiply by β
-        num_epochs = self.get_num_epochs()
-        current_epoch = self.get_current_epoch()
-        if current_epoch is None:
-            raise ValueError("Current epoch is not set")
-
-        beta_multiplier = (
-            0.0 if current_epoch < 5 else min(current_epoch / num_epochs * 5, 1.0)
-        )  # starts with zero, linearly increase to 1.0
-
-        beta = self.beta * beta_multiplier
+        beta = self._current_beta()
         kl_term = beta * kl_term
 
         # Total loss: sum of both terms
