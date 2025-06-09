@@ -45,9 +45,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             .unsqueeze(0)
             .unsqueeze(2)
         )
-        self.theta_p = nn.Parameter(
-            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1
-        )
+        self.theta_p = nn.Linear(1, output_dim)
         self.A_p = nn.Parameter(
             torch.randn(1, self.weather_model.max_len, output_dim) * 0.1
         )
@@ -94,12 +92,14 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
 
         # Slice parameters to match sequence length before computation
         positions_seq = self.positions[:, :seq_len, :]  # (1, seq_len, 1)
-        theta_p_seq = self.theta_p[:, :seq_len, :]  # (1, seq_len, output_dim)
+        theta_p_seq = self.theta_p(
+            positions_seq * period
+        )  # (batch_size, seq_len, output_dim)
         A_p_seq = self.A_p[:, :seq_len, :]  # (1, seq_len, output_dim)
         log_var_p_seq = self.log_var_p[:, :seq_len, :]  # (1, seq_len, output_dim)
 
         # Compute mean and variance of prior: (batch_size, seq_len, output_dim)
-        mu_p = A_p_seq * torch.sin(positions_seq * period * theta_p_seq)
+        mu_p = A_p_seq * torch.sin(theta_p_seq)
         var_p = torch.exp(log_var_p_seq)
 
         # Flatten the weather representation for MLP
