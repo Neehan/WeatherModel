@@ -75,12 +75,12 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         var_x = torch.exp(log_var_x)
 
         mu_k = self.mu_k[:, :seq_len, :]
-        var_k = torch.exp(self.log_var_k[:, :seq_len, :])
+        var_k = torch.exp(self.log_var_k[:, :seq_len, :]) * 0.01
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
-        z = mu_x + torch.sqrt(var_x) * epsilon * 0.01
+        z = mu_x + torch.sqrt(var_x) * epsilon
 
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)
