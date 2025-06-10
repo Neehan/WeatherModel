@@ -57,64 +57,52 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
         mu_k: torch.Tensor,  # [k, seq_len, n_features] - mixture means
         var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - mask of predicted positions
+        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - weather feature mask
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute KL divergence between posterior q(z|x) and mixture prior p(z) only on masked features.
+        Compute KL divergence between posterior q(z|x) and mixture prior p(z) for masked features only.
 
         KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
 
         where:
-        - log q(z|x) = -D/2 log(2π) - 1/2 Σ_d [log σ²_φ,d(x) + (z_d - μ_φ,d(x))²/σ²_φ,d(x)]
-        - log p(z) = -log K - D/2 log(2π) + log(Σ_k exp(-1/2 Σ_d [log σ²_k,d + (z_d - μ_k,d)²/σ²_k,d]))
+        - q(z|x) is a diagonal Gaussian N(mu_x, var_x)
+        - p(z) is a mixture of k diagonal Gaussians: (1/k) * Σ_i N(mu_k[i], var_k[i])
         """
-        # Compute log q(z|x) - posterior log-density
-        # log q(z|x) = -1/2 * [log(2π) + log(σ²) + (z - μ)²/σ²]
-        # We drop the constant log(2π) term
-        log_q_z_x_pointwise = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
+        # Compute log q(z|x) - posterior log-density for masked features only
+        log_q_z_x_all = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
+        log_q_z_x_masked = log_q_z_x_all  # * weather_feature_mask  # apply mask
+        log_q_z_x = torch.sum(log_q_z_x_masked, dim=(1, 2))  # [batch_size]
 
-        # Sum over seq_len and n_features dimensions, only for masked positions
-        log_q_z_x = (log_q_z_x_pointwise * weather_feature_mask.float()).sum(
-            dim=(1, 2)
-        )  # [batch_size]
-
-        # Compute log p(z) - mixture prior log-density
-        # First compute log-density for each mixture component
+        # Compute log p(z) - mixture prior log-density for masked features only
         z_expanded = z.unsqueeze(0)  # [1, batch_size, seq_len, n_features]
         mu_k_expanded = mu_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
         var_k_expanded = var_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
 
         # Compute log-density for each component
-        log_component_densities_pointwise = -0.5 * (
+        log_component_densities_all = -0.5 * (
             torch.log(var_k_expanded)
             + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded
-        )  # [k, batch_size, seq_len, n_features]
-
-        k = mu_k.shape[0]  # number of mixture components
-        # Sum over seq_len and n_features dimensions, only for masked positions
-        # Expand mask to match mixture dimensions: [k, batch_size, seq_len, n_features]
-        mask_expanded = weather_feature_mask.unsqueeze(0).expand(k, -1, -1, -1)
-        log_component_densities = (
-            log_component_densities_pointwise * mask_expanded.float()
-        ).sum(
-            dim=(2, 3)
+        )
+        # Apply mask to only consider masked features
+        log_component_densities_masked = (
+            log_component_densities_all  # * weather_feature_mask.unsqueeze(0)
+        )
+        log_component_densities = torch.sum(
+            log_component_densities_masked, dim=(2, 3)
         )  # [k, batch_size]
 
-        # Compute log p(z) = log(1/K * Σ_k exp(log_component_densities))
-        log_p_z = torch.logsumexp(log_component_densities, dim=0) - math.log(
-            k
-        )  # [batch_size]
+        # Compute log p(z) = log(Σ_k exp(log_component_densities))
+        log_p_z = torch.logsumexp(log_component_densities, dim=0)  # [batch_size]
 
         # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
         kl_divergence = log_q_z_x - log_p_z  # [batch_size]
 
-        # Compute log variance for logging (only masked positions)
+        # Compute log variance for monitoring (preserve original return type)
         log_variance = self._masked_mean(
-            torch.log(var_x), weather_feature_mask.float(), dim=(1, 2)
-        )  # [batch_size]
+            torch.log(var_x), weather_feature_mask, dim=(1, 2)
+        )
 
-        # Return mean over batch
-        return kl_divergence.mean(), log_variance.mean()
+        return kl_divergence.mean(), log_variance.mean()  # average over batch
 
     def _compute_mixture_variational_loss_components(
         self,
