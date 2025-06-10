@@ -69,6 +69,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         year,
         interval,
         weather_feature_mask,
+        y_past,
     ):
         # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
         mu_p, var_p = self._compute_sinusoidal_prior()
@@ -100,6 +101,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             year,
             interval,
             weather_feature_mask=None,
+            y_past=y_past,
         )
 
         # Clamp variances for numerical stability before returning

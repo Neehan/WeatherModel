@@ -118,6 +118,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             year_expanded,
             interval,
             weather_feature_mask,
+            y_past,
         )
 
         # Compute MSE loss
@@ -146,6 +147,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 year_expanded,
                 interval,
                 weather_feature_mask,
+                y_past,
             )
 
         # Return RMSE for validation since that's standard for comparision

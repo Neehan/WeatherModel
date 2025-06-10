@@ -28,9 +28,8 @@ class WeatherCNNYieldModel(BaseModel):
 
         # MLP for yield prediction (copied from WeatherBERTYieldModel)
         self.mlp = nn.Sequential(
-            nn.Linear(output_dim, 120),
-            nn.GELU(),
-            nn.Linear(120, 1),
+            nn.ReLU(),
+            nn.Linear(output_dim + n_past_years + 1, 1),
         )
 
     def load_pretrained(self, pretrained_model: WeatherCNN):
@@ -46,6 +45,7 @@ class WeatherCNNYieldModel(BaseModel):
         year,
         interval,
         weather_feature_mask,
+        y_past,
     ):
         # dont pass the mask
         weather = self.weather_model(
@@ -55,6 +55,7 @@ class WeatherCNNYieldModel(BaseModel):
             interval,
             weather_feature_mask=None,
         )
+        mlp_input = torch.cat([weather, y_past], dim=1)
         # Apply MLP
-        output = self.mlp(weather)
+        output = self.mlp(mlp_input)
         return output

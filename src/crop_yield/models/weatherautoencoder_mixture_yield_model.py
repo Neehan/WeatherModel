@@ -51,7 +51,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             nn.Linear(4 * weather_dim, weather_dim),
         )
 
-    def forward(self, weather, coord, year, interval, weather_feature_mask):
+    def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
         # Prepare weather input using inherited method
 
         seq_len = weather.shape[1]
@@ -91,5 +91,6 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             year,
             interval,
             weather_feature_mask=None,
+            y_past=y_past,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k

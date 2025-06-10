@@ -72,5 +72,6 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
             year,
             interval,
             weather_feature_mask=None,
+            y_past=y_past,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k

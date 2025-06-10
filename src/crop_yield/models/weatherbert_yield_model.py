@@ -25,7 +25,7 @@ class WeatherBERTYieldModel(BaseModel):
             **model_size_params,
         )
         self.yield_model = WeatherCNNYieldModel(
-            name=f"{name}_yield",
+            name=f"{name}_cnn",
             device=device,
             weather_dim=weather_dim,
             n_past_years=n_past_years,
@@ -51,7 +51,7 @@ class WeatherBERTYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(self, weather, coord, year, interval, weather_feature_mask):
+    def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2 (lat, lon) UNNORMALIZED
@@ -72,6 +72,6 @@ class WeatherBERTYieldModel(BaseModel):
         weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
         # we imputed weather, the mask is not necessary
         output = self.yield_model(
-            weather, coord, year, interval, weather_feature_mask=None
+            weather, coord, year, interval, weather_feature_mask=None, y_past=y_past
         )
         return output

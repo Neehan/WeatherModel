@@ -188,6 +188,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             year_expanded,
             interval,
             weather_feature_mask,
+            y_past,
         )
 
         # Compute all loss components using the helper method
@@ -217,6 +218,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                 year_expanded,
                 interval,
                 weather_feature_mask,
+                y_past,
             )
 
         # Compute all loss components using the helper method
