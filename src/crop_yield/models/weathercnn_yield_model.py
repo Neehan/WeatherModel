@@ -47,12 +47,13 @@ class WeatherCNNYieldModel(BaseModel):
         interval,
         weather_feature_mask,
     ):
+        # dont pass the mask
         weather = self.weather_model(
             padded_weather,
             coord,
             year,
             interval,
-            weather_feature_mask=weather_feature_mask,
+            weather_feature_mask=None,
         )
         # Apply MLP
         output = self.mlp(weather)
