@@ -158,15 +158,15 @@ class CropDataset(Dataset):
 
             self.data.append(
                 (
-                    padded_weather,  # preprocessed weather data
-                    coord_processed,  # processed coordinates
-                    year_expanded,  # expanded year data
-                    interval,  # temporal interval
-                    weather_feature_mask,  # feature mask
-                    practices,  # practices (unchanged)
-                    soil,  # soil (unchanged)
-                    y_past,  # past yields
-                    y,  # target yield
+                    padded_weather,  # (n_years * 52, TOTAL_WEATHER_VARS)
+                    coord_processed,  # (2,)
+                    year_expanded,  # (n_years * 52,)
+                    interval,  # (1,)
+                    weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
+                    practices,  # (n_years, 14)
+                    soil,  # (n_years, 11, 6)
+                    y_past,  # (n_years,)
+                    y,  # (1,)
                 )
             )
 

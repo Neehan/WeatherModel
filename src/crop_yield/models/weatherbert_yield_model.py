@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing import Optional
 
 from src.pretraining.models.weatherbert import WeatherBERT
+from src.crop_yield.models.weathercnn_yield_model import WeatherCNNYieldModel
 from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 from src.base_models.base_model import BaseModel
 
@@ -11,24 +12,37 @@ class WeatherBERTYieldModel(BaseModel):
     def __init__(
         self,
         name: str,
-        mlp_input_dim: int,
         device: torch.device,
-        weather_dim=TOTAL_WEATHER_VARS,
-        output_dim=TOTAL_WEATHER_VARS,
+        weather_dim: int,
+        n_past_years: int,
         **model_size_params,
     ):
         super().__init__(name)
         self.weather_model = WeatherBERT(
             weather_dim=weather_dim,
-            output_dim=output_dim,
+            output_dim=weather_dim,
             device=device,
             **model_size_params,
         )
-        self.mlp_input_dim = mlp_input_dim
-        self.mlp = nn.Sequential(
-            nn.Linear(mlp_input_dim, 120),
-            nn.GELU(),
-            nn.Linear(120, 1),
+        self.yield_model = WeatherCNNYieldModel(
+            name=f"{name}_yield",
+            device=device,
+            weather_dim=weather_dim,
+            n_past_years=n_past_years,
+            **model_size_params,
+        )
+
+    def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
+        """
+        Fast combination using element-wise ops instead of torch.where:
+        - original_weather: batch_size x seq_len x weather_dim
+        - imputed_weather: batch_size x seq_len x weather_dim
+        - weather_feature_mask: batch_size x seq_len x weather_dim
+        """
+        return (
+            original_weather
+            * (~weather_feature_mask)  # keep original where mask is False
+            + imputed_weather * weather_feature_mask
         )
 
     def load_pretrained(self, pretrained_model: WeatherBERT):
@@ -37,17 +51,27 @@ class WeatherBERTYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(self, input_data):
-        # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask, practices, soil, y_past, y)
-        padded_weather, coord, year, interval, weather_feature_mask = input_data
+    def forward(self, weather, coord, year, interval, weather_feature_mask):
+        """
+        weather: batch_size x seq_len x n_features
+        coords: batch_size x 2 (lat, lon) UNNORMALIZED
+        year: batch_size x seq_len (UNNORMALIZED, time-varying years)
+        interval: batch_size x 1 (UNNORMALIZED in days)
+        weather_feature_mask: batch_size x seq_len x n_features
+        """
 
-        weather = self.weather_model(
-            padded_weather,
+        predicted_weather = self.weather_model(
+            weather,
             coord,
             year,
             interval,
             weather_feature_mask=weather_feature_mask,
         )
-        weather = weather.reshape(weather.size(0), -1)
-        output = self.mlp(weather)
+
+        # Fast combination using element-wise ops
+        weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
+        # we imputed weather, the mask is not necessary
+        output = self.yield_model(
+            weather, coord, year, interval, weather_feature_mask=None
+        )
         return output
