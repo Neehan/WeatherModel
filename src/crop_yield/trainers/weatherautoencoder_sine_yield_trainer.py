@@ -162,9 +162,6 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
             year_expanded,
             interval,
             weather_feature_mask,
-            practices,
-            soil,
-            y_past,
         )
 
         # Compute all loss components using the helper method
@@ -194,9 +191,6 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
                 year_expanded,
                 interval,
                 weather_feature_mask,
-                practices,
-                soil,
-                y_past,
             )
 
         # Compute all loss components using the helper method
