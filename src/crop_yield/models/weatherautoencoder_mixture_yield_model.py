@@ -66,7 +66,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             weather_feature_mask=weather_feature_mask,
         )
         # keep original weather and predict only missing ones
-        mu_x = self._impute_weather(weather, mu_x, weather_feature_mask)
+        # mu_x = self._impute_weather(weather, mu_x, weather_feature_mask)
         log_var_x = self.log_var_x(mu_x)
         var_x = torch.exp(log_var_x)
 
@@ -78,7 +78,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
         # keep original weather and predict only missing ones
-        z = self._impute_weather(weather, z, weather_feature_mask)
+        # z = self._impute_weather(weather, z, weather_feature_mask)
 
         # Clamp variances for numerical stability before returning
         var_x = torch.clamp(var_x, min=1e-8, max=1)
