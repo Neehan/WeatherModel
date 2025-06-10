@@ -93,13 +93,13 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         z = mu_x + torch.sqrt(var_x) * epsilon
         # predict missing only and keep original weather for rest
         z = self._impute_weather(padded_weather, z, weather_feature_mask)
-        # Pass through MLP to get yield prediction
+        # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(
             z,
             coord,
             year,
             interval,
-            weather_feature_mask,
+            weather_feature_mask=None,
         )
 
         # Clamp variances for numerical stability before returning

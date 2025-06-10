@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Optional
+import copy
 
 from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
@@ -60,10 +61,10 @@ class WeatherBERT(BaseModel):
                 f"expected max length {self.max_len} but received {pretrained_model.max_len}"
             )
 
-        self.in_proj = pretrained_model.in_proj
-        self.positional_encoding = pretrained_model.positional_encoding
-        self.transformer_encoder = pretrained_model.transformer_encoder
-        self.out_proj = pretrained_model.out_proj
+        self.in_proj = copy.deepcopy(pretrained_model.in_proj)
+        self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
+        self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
+        self.out_proj = copy.deepcopy(pretrained_model.out_proj)
 
     def forward(
         self,

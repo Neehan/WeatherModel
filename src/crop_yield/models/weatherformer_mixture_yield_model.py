@@ -65,11 +65,12 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
 
         z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
+        # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(
             z,
             coord,
             year,
             interval,
-            weather_feature_mask,
+            weather_feature_mask=None,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k

@@ -70,5 +70,8 @@ class WeatherBERTYieldModel(BaseModel):
 
         # Fast combination using element-wise ops
         weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
-        output = self.yield_model(weather, coord, year, interval, weather_feature_mask)
+        # we imputed weather, the mask is not necessary
+        output = self.yield_model(
+            weather, coord, year, interval, weather_feature_mask=None
+        )
         return output

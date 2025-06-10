@@ -62,15 +62,12 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
 
         z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
-        # Pass through MLP to get yield prediction
+        # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(
             z,
             coord,
             year,
             interval,
-            weather_feature_mask,
-            practices,
-            soil,
-            y_past,
+            weather_feature_mask=None,
         )
         return yield_pred, mu_x, var_x

@@ -84,12 +84,12 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         var_x = torch.clamp(var_x, min=1e-8, max=1)
         var_k = torch.clamp(var_k, min=1e-8, max=1)
 
-        # Pass through MLP to get yield prediction
+        # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(
             z,
             coord,
             year,
             interval,
-            weather_feature_mask,
+            weather_feature_mask=None,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k
