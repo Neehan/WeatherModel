@@ -86,10 +86,15 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
 
         # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
         # period: (batch_size, 1, 1)
+        period = (
+            2 * torch.pi * interval.unsqueeze(1) / self.weather_model.max_len
+        ).unsqueeze(2)
 
         # Slice parameters to match sequence length before computation
         positions_seq = self.positions[:, :seq_len, :]  # (1, seq_len, 1)
-        theta_p_seq = self.theta_p(positions_seq)  # (batch_size, seq_len, output_dim)
+        theta_p_seq = self.theta_p(
+            positions_seq * period
+        )  # (batch_size, seq_len, output_dim)
         A_p_seq = self.A_p[:, :seq_len, :]  # (1, seq_len, output_dim)
         log_var_p_seq = self.log_var_p[:, :seq_len, :]  # (1, seq_len, output_dim)
 
