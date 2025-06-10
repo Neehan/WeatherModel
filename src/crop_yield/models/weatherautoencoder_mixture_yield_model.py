@@ -48,11 +48,10 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         self.log_var_k = nn.Parameter(
             torch.randn(k, self.weather_model.max_len, output_dim) * 0.1 - 1.0
         )
-        log_var_x_dim = output_dim + weather_dim
         self.log_var_x = nn.Sequential(
-            nn.Linear(log_var_x_dim, 2 * log_var_x_dim),
-            nn.GELU(),
-            nn.Linear(2 * log_var_x_dim, output_dim),
+            nn.Linear(weather_dim, 2 * weather_dim),
+            nn.ReLU(),
+            nn.Linear(2 * weather_dim, output_dim),
         )
 
     def forward(self, input_data):
@@ -70,8 +69,10 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             interval,
             weather_feature_mask=weather_feature_mask,
         )
+        # impute weather on missing features
+        mu_x = self._impute_weather(padded_weather, mu_x, weather_feature_mask)
         # batch size x seq_len x (2 n features)
-        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
+        log_var_x = self.log_var_x(mu_x)
         var_x = torch.exp(log_var_x)
 
         mu_k = self.mu_k[:, :seq_len, :]
@@ -81,6 +82,8 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         # where epsilon ~ N(0, 1)
         epsilon = 0  # torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
+        # impute weather on missing features
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # Flatten the weather representation for MLP
         weather_repr_flat = z.reshape(z.size(0), -1)

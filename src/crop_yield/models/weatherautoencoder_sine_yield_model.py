@@ -53,11 +53,10 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             torch.randn(1, self.weather_model.max_len, output_dim) * 0.1 - 1
         )
 
-        log_var_x_dim = output_dim + weather_dim
         self.log_var_x = nn.Sequential(
-            nn.Linear(log_var_x_dim, 2 * log_var_x_dim),
+            nn.Linear(weather_dim, 2 * weather_dim),
             nn.GELU(),
-            nn.Linear(2 * log_var_x_dim, output_dim),
+            nn.Linear(2 * weather_dim, output_dim),
         )
 
     def forward(self, input_data):
@@ -75,15 +74,16 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             interval=interval,
             weather_feature_mask=weather_feature_mask,
         )
+        mu_x = self._impute_weather(padded_weather, mu_x, weather_feature_mask)
         # batch size x seq_len x (2 n features)
-        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
+        log_var_x = self.log_var_x(mu_x)
         var_x = torch.exp(log_var_x)
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
         # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
         # period: (batch_size, 1, 1)
 
