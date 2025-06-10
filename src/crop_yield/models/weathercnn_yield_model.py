@@ -36,10 +36,14 @@ class WeatherCNNYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(self, input_data):
-        # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask)
-        padded_weather, coord, year, interval, weather_feature_mask = input_data
-
+    def forward(
+        self,
+        padded_weather,
+        coord,
+        year,
+        interval,
+        weather_feature_mask,
+    ):
         weather = self.weather_model(
             padded_weather,
             coord,
