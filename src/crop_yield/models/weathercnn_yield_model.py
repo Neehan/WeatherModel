@@ -11,11 +11,11 @@ class WeatherCNNYieldModel(BaseModel):
     def __init__(
         self,
         name: str,
-        mlp_input_dim: int,
         device: torch.device,
+        weather_dim: int,
         max_len: int,
-        weather_dim=TOTAL_WEATHER_VARS,
-        output_dim=60,  # Set to 60 as specified in khaki et al 2020
+        n_past_years: int,
+        output_dim: int = 60,  # Set to 60 as specified in khaki et al 2020
         **model_size_params,
     ):
         super().__init__(name)
@@ -26,9 +26,12 @@ class WeatherCNNYieldModel(BaseModel):
             device=device,
         )
 
-        # ReLU followed by final yield layer
-        self.relu = nn.ReLU()
-        self.final_yield_layer = nn.Linear(output_dim, 1)
+        # MLP for yield prediction (copied from WeatherBERTYieldModel)
+        self.mlp = nn.Sequential(
+            nn.Linear(output_dim + n_past_years + 1, 120),
+            nn.GELU(),
+            nn.Linear(120, 1),
+        )
 
     def load_pretrained(self, pretrained_model: WeatherCNN):
         """
@@ -36,10 +39,18 @@ class WeatherCNNYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(self, input_data):
+    def forward(
+        self,
+        padded_weather,
+        coord,
+        year,
+        interval,
+        weather_feature_mask,
+        practices,
+        soil,
+        y_past,
+    ):
         # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask)
-        padded_weather, coord, year, interval, weather_feature_mask = input_data
-
         weather = self.weather_model(
             padded_weather,
             coord,
@@ -47,7 +58,7 @@ class WeatherCNNYieldModel(BaseModel):
             interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # Apply ReLU then final yield layer
-        weather = self.relu(weather)
-        output = self.final_yield_layer(weather)
+        mlp_input = torch.cat([weather, y_past], dim=1)
+        # Apply MLP
+        output = self.mlp(mlp_input)
         return output

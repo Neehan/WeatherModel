@@ -159,18 +159,18 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute mixture variational training loss for WeatherFormerMixture yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
+        # Forward pass through WeatherFormerMixture model
+        # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
+        yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(
             padded_weather,
             coord_processed,
             year_expanded,
             interval,
             weather_feature_mask,
+            practices,
+            soil,
+            y_past,
         )
-
-        # Forward pass through WeatherFormerMixture model
-        # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
-        yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
 
         # Compute all loss components using the helper method
         return self._compute_mixture_variational_loss_components(
@@ -191,18 +191,18 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute mixture variational validation loss for WeatherFormerMixture yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
-            padded_weather,
-            coord_processed,
-            year_expanded,
-            interval,
-            weather_feature_mask,
-        )
-
         # Forward pass through WeatherFormerMixture model (no gradient computation)
         with torch.no_grad():
-            yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
+            yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(
+                padded_weather,
+                coord_processed,
+                year_expanded,
+                interval,
+                weather_feature_mask,
+                practices,
+                soil,
+                y_past,
+            )
 
         # Compute all loss components using the helper method
         components = self._compute_mixture_variational_loss_components(

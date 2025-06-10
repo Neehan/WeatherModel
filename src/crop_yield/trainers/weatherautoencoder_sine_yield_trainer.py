@@ -142,18 +142,18 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute sinusoidal variational training loss for WeatherAutoencoderSine yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
+        # Forward pass through WeatherAutoencoderSine model
+        # Returns (yield_pred, z, mu_x, var_x, mu_p, var_p)
+        yield_pred, z, mu_x, var_x, mu_p, var_p = self.model(
             padded_weather,
             coord_processed,
             year_expanded,
             interval,
             weather_feature_mask,
+            practices,
+            soil,
+            y_past,
         )
-
-        # Forward pass through WeatherAutoencoderSine model
-        # Returns (yield_pred, z, mu_x, var_x, mu_p, var_p)
-        yield_pred, z, mu_x, var_x, mu_p, var_p = self.model(input_data)
 
         # Compute all loss components using the helper method
         return self._compute_sine_variational_loss_components(
@@ -174,18 +174,18 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute sinusoidal variational validation loss for WeatherAutoencoderSine yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
-            padded_weather,
-            coord_processed,
-            year_expanded,
-            interval,
-            weather_feature_mask,
-        )
-
         # Forward pass through WeatherAutoencoderSine model (no gradient computation)
         with torch.no_grad():
-            yield_pred, z, mu_x, var_x, mu_p, var_p = self.model(input_data)
+            yield_pred, z, mu_x, var_x, mu_p, var_p = self.model(
+                padded_weather,
+                coord_processed,
+                year_expanded,
+                interval,
+                weather_feature_mask,
+                practices,
+                soil,
+                y_past,
+            )
 
         # Compute all loss components using the helper method
         components = self._compute_sine_variational_loss_components(

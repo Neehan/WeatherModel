@@ -102,18 +102,18 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute variational training loss for WeatherFormer yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
+        # Forward pass through WeatherFormer model
+        # Returns (yield_pred, mu_x, sigma_x)
+        yield_pred, mu_x, var_x = self.model(
             padded_weather,
             coord_processed,
             year_expanded,
             interval,
             weather_feature_mask,
+            practices,
+            soil,
+            y_past,
         )
-
-        # Forward pass through WeatherFormer model
-        # Returns (yield_pred, mu_x, sigma_x)
-        yield_pred, mu_x, var_x = self.model(input_data)
 
         # Compute all loss components using the helper method
         return self._compute_variational_loss_components(
@@ -134,18 +134,18 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute variational validation loss for WeatherFormer yield prediction."""
 
-        # Prepare input data for the model
-        input_data = (
-            padded_weather,
-            coord_processed,
-            year_expanded,
-            interval,
-            weather_feature_mask,
-        )
-
         # Forward pass through WeatherFormer model (no gradient computation)
         with torch.no_grad():
-            yield_pred, mu_x, var_x = self.model(input_data)
+            yield_pred, mu_x, var_x = self.model(
+                padded_weather,
+                coord_processed,
+                year_expanded,
+                interval,
+                weather_feature_mask,
+                practices,
+                soil,
+                y_past,
+            )
 
         # Compute all loss components using the helper method
         components = self._compute_variational_loss_components(
