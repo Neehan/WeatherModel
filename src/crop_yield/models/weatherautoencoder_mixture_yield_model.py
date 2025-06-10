@@ -89,6 +89,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
+        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # Clamp variances for numerical stability before returning
         var_x = torch.clamp(var_x, min=1e-8, max=1)
@@ -96,7 +97,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
 
         # Pass through MLP to get yield prediction
         yield_pred = self.yield_model(
-            z,
+            final_weather,
             coord,
             year,
             interval,

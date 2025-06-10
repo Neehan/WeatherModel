@@ -96,9 +96,11 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
         mu_p, var_p = self._compute_sinusoidal_prior()
 
+        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
+
         # Pass through MLP to get yield prediction
         yield_pred = self.yield_model(
-            z,
+            final_weather,
             coord,
             year,
             interval,

@@ -34,6 +34,18 @@ class WeatherBERTYieldModel(BaseModel):
             **model_size_params,
         )
 
+    def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
+        """
+        Fast combination using element-wise ops instead of torch.where:
+        - original_weather * (~mask) keeps original where mask is False, zeros where True
+        - imputed_weather * mask keeps imputed where mask is True, zeros where False
+        - Add them together for final result
+        """
+        return (
+            original_weather * (~weather_feature_mask)
+            + imputed_weather * weather_feature_mask
+        )
+
     def load_pretrained(self, pretrained_model: WeatherBERT):
         """
         override the load_pretrained method from BaseModel to load the weather model
@@ -60,8 +72,14 @@ class WeatherBERTYieldModel(BaseModel):
             interval,
             weather_feature_mask=weather_feature_mask,
         )
+
+        # Fast combination using element-wise ops
+        final_weather = self._impute_weather(
+            padded_weather, imputed_weather, weather_feature_mask
+        )
+
         output = self.yield_model(
-            imputed_weather,
+            final_weather,
             coord,
             year,
             interval,

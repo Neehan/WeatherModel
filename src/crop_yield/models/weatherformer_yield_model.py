@@ -63,9 +63,11 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
 
+        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
+
         # Pass through MLP to get yield prediction
         yield_pred = self.yield_model(
-            z,
+            final_weather,
             coord,
             year,
             interval,
