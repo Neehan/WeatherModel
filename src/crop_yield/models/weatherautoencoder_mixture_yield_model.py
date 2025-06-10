@@ -49,9 +49,9 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             torch.randn(k, self.weather_model.max_len, output_dim) * 0.1 - 1.0
         )
         self.log_var_x = nn.Sequential(
-            nn.Linear(weather_dim, 2 * weather_dim),
-            nn.ReLU(),
-            nn.Linear(2 * weather_dim, output_dim),
+            nn.Linear(2 * weather_dim, 4 * weather_dim),
+            nn.GELU(),
+            nn.Linear(4 * weather_dim, output_dim),
         )
 
     def forward(self, input_data):
@@ -72,7 +72,7 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         # impute weather on missing features
         mu_x = self._impute_weather(padded_weather, mu_x, weather_feature_mask)
         # batch size x seq_len x (2 n features)
-        log_var_x = self.log_var_x(mu_x)
+        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=-1))
         var_x = torch.exp(log_var_x)
 
         mu_k = self.mu_k[:, :seq_len, :]
