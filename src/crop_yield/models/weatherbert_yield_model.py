@@ -26,9 +26,9 @@ class WeatherBERTYieldModel(BaseModel):
         )
         self.mlp_input_dim = mlp_input_dim
         self.mlp = nn.Sequential(
-            nn.Linear(mlp_input_dim, 60),
-            nn.ReLU(),
-            nn.Linear(60, 1),
+            nn.Linear(mlp_input_dim, 120),
+            nn.GELU(),
+            nn.Linear(120, 1),
         )
 
     def load_pretrained(self, pretrained_model: WeatherBERT):
@@ -37,33 +37,16 @@ class WeatherBERTYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
-        """
-        Fast combination using element-wise ops instead of torch.where:
-        - original_weather: batch_size x seq_len x weather_dim
-        - imputed_weather: batch_size x seq_len x weather_dim
-        - weather_feature_mask: batch_size x seq_len x weather_dim
-        """
-        # return (
-        #     original_weather
-        #     * (~weather_feature_mask)  # keep original where mask is False
-        #     + imputed_weather * weather_feature_mask
-        # )
-        return imputed_weather
-
     def forward(self, input_data):
         # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask, practices, soil, y_past, y)
         padded_weather, coord, year, interval, weather_feature_mask = input_data
 
-        imputed_weather = self.weather_model(
+        weather = self.weather_model(
             padded_weather,
             coord,
             year,
             interval,
             weather_feature_mask=weather_feature_mask,
-        )
-        weather = self._impute_weather(
-            padded_weather, imputed_weather, weather_feature_mask
         )
         weather = weather.reshape(weather.size(0), -1)
         output = self.mlp(weather)

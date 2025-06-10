@@ -49,7 +49,6 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
         mu_p: torch.Tensor,  # [batch_size, seq_len, n_features] - sinusoidal prior means
         var_p: torch.Tensor,  # [batch_size, seq_len, n_features] - sinusoidal prior variances
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - weather feature mask
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute KL divergence between posterior q(z|x) and sinusoidal prior p(z).
@@ -65,22 +64,14 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
         log_variance_x = torch.log(var_x)
         log_variance_p = torch.log(var_p)
 
-        kl_divergence = (
+        kl_divergence = 0.5 * torch.sum(
             log_variance_p
             - log_variance_x  # log(σ_p/σ_x)
             + var_x / var_p  # σ_x²/σ_p²
             + (mu_x - mu_p) ** 2 / var_p  # (μ_x - μ_p)²/σ_p²
-            - 1  # -1
-        )
-        # apply mask
-        kl_divergence = kl_divergence * weather_feature_mask
-        kl_divergence = 0.5 * torch.sum(
-            kl_divergence,
+            - 1,  # -1
             dim=(1, 2),  # sum over seq_len and n_features
         )  # [batch_size]
-        log_variance_x = self._masked_mean(
-            log_variance_x, weather_feature_mask, dim=(1, 2)
-        )
 
         return kl_divergence.mean(), log_variance_x.mean()  # average over batch
 
@@ -93,7 +84,6 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
         var_p: torch.Tensor,  # [batch_size, seq_len, n_features] - sinusoidal prior variances
         yield_pred: torch.Tensor,  # [batch_size, 1]
         target_yield: torch.Tensor,  # [batch_size, 1]
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - weather feature mask
     ) -> Dict[str, torch.Tensor]:
         """
         Compute the sinusoidal variational loss components for WeatherAutoencoderSine yield prediction.
@@ -122,7 +112,7 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
 
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is sinusoidal prior
         kl_term, log_variance = self._compute_sine_kl_divergence(
-            z, mu_x, var_x, mu_p, var_p, weather_feature_mask
+            z, mu_x, var_x, mu_p, var_p
         )
         # Average over batch and multiply by β
         beta = self._current_beta()
@@ -167,14 +157,7 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
 
         # Compute all loss components using the helper method
         return self._compute_sine_variational_loss_components(
-            z,
-            mu_x,
-            var_x,
-            mu_p,
-            var_p,
-            yield_pred,
-            target_yield,
-            weather_feature_mask,
+            z, mu_x, var_x, mu_p, var_p, yield_pred, target_yield
         )
 
     def compute_validation_loss(
@@ -206,14 +189,7 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
 
         # Compute all loss components using the helper method
         components = self._compute_sine_variational_loss_components(
-            z,
-            mu_x,
-            var_x,
-            mu_p,
-            var_p,
-            yield_pred,
-            target_yield,
-            weather_feature_mask,
+            z, mu_x, var_x, mu_p, var_p, yield_pred, target_yield
         )
         # only return the reconstruction (RMSE) loss for validation
         return {"total_loss": components["reconstruction"] ** 0.5}
