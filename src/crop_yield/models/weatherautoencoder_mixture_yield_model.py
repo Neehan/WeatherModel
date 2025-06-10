@@ -19,55 +19,59 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
     def __init__(
         self,
         name: str,
+        mlp_input_dim: int,
         device: torch.device,
         k: int,
-        weather_dim: int,
-        n_past_years: int,
+        weather_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
+        super().__init__(
+            name, mlp_input_dim, device, weather_dim, output_dim, **model_size_params
+        )
         self.name = "weatherautoencoder_mixture_yield"
 
         # Replace the WeatherBERT with WeatherAutoencoder
         self.weather_model = WeatherAutoencoder(
             weather_dim=weather_dim,
-            output_dim=weather_dim,
+            output_dim=output_dim,
             device=device,
             **model_size_params,
         )
         self.k = k
         # Initialize mu_k to give var_k around (-0.2, 0.2) range
         self.mu_k = nn.Parameter(
-            torch.randn(k, self.weather_model.max_len, weather_dim) * 0.1
+            torch.randn(k, self.weather_model.max_len, output_dim) * 0.1
         )
         # Initialize log_var_k to give var_k around (-1.2, -0.8) range
         self.log_var_k = nn.Parameter(
-            torch.randn(k, self.weather_model.max_len, weather_dim) * 0.1 - 1.0
+            torch.randn(k, self.weather_model.max_len, output_dim) * 0.1 - 1.0
         )
+        log_var_x_dim = output_dim + weather_dim
         self.log_var_x = nn.Sequential(
-            nn.Linear(weather_dim, 4 * weather_dim),
+            nn.Linear(log_var_x_dim, 2 * log_var_x_dim),
             nn.GELU(),
-            nn.Linear(4 * weather_dim, weather_dim),
+            nn.Linear(2 * log_var_x_dim, output_dim),
         )
 
-    def forward(self, weather, coord, year, interval, weather_feature_mask):
+    def forward(self, input_data):
         # Prepare weather input using inherited method
+        padded_weather, coord, year, interval, weather_feature_mask = input_data
 
-        seq_len = weather.shape[1]
+        seq_len = padded_weather.shape[1]
 
         # WeatherFormerMixture expects individual arguments, not a tuple
         # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
         mu_x = self.weather_model(
-            weather,
+            padded_weather,
             coord,
             year,
             interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # keep original weather and predict only missing ones
-        # mu_x = self._impute_weather(weather, mu_x, weather_feature_mask)
-        log_var_x = self.log_var_x(mu_x)
+        # batch size x seq_len x (2 n features)
+        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
         var_x = torch.exp(log_var_x)
 
         mu_k = self.mu_k[:, :seq_len, :]
@@ -75,21 +79,16 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
-        epsilon = torch.randn_like(mu_x)
+        epsilon = 0  # torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-        # keep original weather and predict only missing ones
-        # z = self._impute_weather(weather, z, weather_feature_mask)
+
+        # Flatten the weather representation for MLP
+        weather_repr_flat = z.reshape(z.size(0), -1)
 
         # Clamp variances for numerical stability before returning
         var_x = torch.clamp(var_x, min=1e-8, max=1)
         var_k = torch.clamp(var_k, min=1e-8, max=1)
 
-        # we imputed weather, the mask is not necessary
-        yield_pred = self.yield_model(
-            z,
-            coord,
-            year,
-            interval,
-            weather_feature_mask=None,
-        )
+        # Pass through MLP to get yield prediction
+        yield_pred = self.mlp(weather_repr_flat)
         return yield_pred, z, mu_x, var_x, mu_k, var_k

@@ -11,27 +11,24 @@ class WeatherCNNYieldModel(BaseModel):
     def __init__(
         self,
         name: str,
+        mlp_input_dim: int,
         device: torch.device,
-        weather_dim: int,
-        n_past_years: int,
-        output_dim: int = 60,  # Set to 60 as specified in khaki et al 2020
+        max_len: int,
+        weather_dim=TOTAL_WEATHER_VARS,
+        output_dim=60,  # Set to 60 as specified in khaki et al 2020
         **model_size_params,
     ):
         super().__init__(name)
-        self.max_len = (n_past_years + 1) * 52
         self.weather_model = WeatherCNN(
             weather_dim=weather_dim,
             output_dim=output_dim,
-            max_len=self.max_len,
+            max_len=max_len,
             device=device,
         )
 
-        # MLP for yield prediction (copied from WeatherBERTYieldModel)
-        self.mlp = nn.Sequential(
-            nn.Linear(output_dim, 120),
-            nn.GELU(),
-            nn.Linear(120, 1),
-        )
+        # ReLU followed by final yield layer
+        self.relu = nn.ReLU()
+        self.final_yield_layer = nn.Linear(output_dim, 1)
 
     def load_pretrained(self, pretrained_model: WeatherCNN):
         """
@@ -39,22 +36,18 @@ class WeatherCNNYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(
-        self,
-        padded_weather,
-        coord,
-        year,
-        interval,
-        weather_feature_mask,
-    ):
-        # dont pass the mask
+    def forward(self, input_data):
+        # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask)
+        padded_weather, coord, year, interval, weather_feature_mask = input_data
+
         weather = self.weather_model(
             padded_weather,
             coord,
             year,
             interval,
-            weather_feature_mask=None,
+            weather_feature_mask=weather_feature_mask,
         )
-        # Apply MLP
-        output = self.mlp(weather)
+        # Apply ReLU then final yield layer
+        weather = self.relu(weather)
+        output = self.final_yield_layer(weather)
         return output

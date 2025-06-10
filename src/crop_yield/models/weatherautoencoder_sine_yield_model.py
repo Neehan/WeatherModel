@@ -19,59 +19,52 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
     def __init__(
         self,
         name: str,
+        mlp_input_dim: int,
         device: torch.device,
-        weather_dim: int,
-        n_past_years: int,
+        weather_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
+        super().__init__(
+            name, mlp_input_dim, device, weather_dim, output_dim, **model_size_params
+        )
         self.name = "weatherautoencoder_sine_yield"
 
+        # Replace the WeatherBERT with WeatherAutoencoder
+        self.weather_model = WeatherAutoencoder(
+            weather_dim=weather_dim,
+            output_dim=output_dim,
+            device=device,
+            **model_size_params,
+        )
+
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
-        max_len = self.yield_model.max_len
         self.positions = (
-            torch.arange(max_len, dtype=torch.float, device=device)
+            torch.arange(self.weather_model.max_len, dtype=torch.float, device=device)
             .unsqueeze(0)
             .unsqueeze(2)
         )
-        self.theta_p = nn.Linear(1, weather_dim)
-        self.A_p = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1)
-        self.log_var_p = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1 - 1)
-
-        self.log_var_x = nn.Sequential(
-            nn.Linear(weather_dim, 4 * weather_dim),
-            nn.GELU(),
-            nn.Linear(4 * weather_dim, weather_dim),
+        self.theta_p = nn.Linear(1, output_dim)
+        self.A_p = nn.Parameter(
+            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1
+        )
+        self.log_var_p = nn.Parameter(
+            torch.randn(1, self.weather_model.max_len, output_dim) * 0.1 - 1
         )
 
-    def _compute_sinusoidal_prior(self):
-        """
-        Compute sinusoidal prior parameters: p(z) ~ N(A_p * sin(theta * pos), sigma^2_p)
+        log_var_x_dim = output_dim + weather_dim
+        self.log_var_x = nn.Sequential(
+            nn.Linear(log_var_x_dim, 2 * log_var_x_dim),
+            nn.GELU(),
+            nn.Linear(2 * log_var_x_dim, output_dim),
+        )
 
-        Args:
-            seq_len: Sequence length to slice parameters to
+    def forward(self, input_data):
+        # Prepare weather input using inherited method
+        padded_weather, coord, year, interval, weather_feature_mask = input_data
 
-        Returns:
-            tuple: (mu_p, var_p) - mean and variance of the sinusoidal prior
-        """
-
-        # Compute mean and variance of prior: (batch_size, seq_len, output_dim)
-        mu_p = self.A_p * torch.sin(self.theta_p(self.positions))
-        var_p = torch.exp(self.log_var_p)
-
-        return mu_p, var_p
-
-    def forward(
-        self,
-        padded_weather,
-        coord,
-        year,
-        interval,
-        weather_feature_mask,
-    ):
-        # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
-        mu_p, var_p = self._compute_sinusoidal_prior()
+        batch_size, seq_len = padded_weather.shape[:2]
 
         # WeatherFormerMixture expects individual arguments, not a tuple
         # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
@@ -82,28 +75,35 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             interval=interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # predict missing only and keep original weather for rest
-        mu_x = self._impute_weather(padded_weather, mu_x, weather_feature_mask)
-        log_var_x = self.log_var_x(mu_x)
+        # batch size x seq_len x (2 n features)
+        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
         var_x = torch.exp(log_var_x)
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-        # predict missing only and keep original weather for rest
-        z = self._impute_weather(padded_weather, z, weather_feature_mask)
-        # we imputed weather, the mask is not necessary
-        yield_pred = self.yield_model(
-            z,
-            coord,
-            year,
-            interval,
-            weather_feature_mask=None,
-        )
+
+        # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
+        # period: (batch_size, 1, 1)
+
+        # Slice parameters to match sequence length before computation
+        positions_seq = self.positions[:, :seq_len, :]  # (1, seq_len, 1)
+        theta_p_seq = self.theta_p(positions_seq)  # (batch_size, seq_len, output_dim)
+        A_p_seq = self.A_p[:, :seq_len, :]  # (1, seq_len, output_dim)
+        log_var_p_seq = self.log_var_p[:, :seq_len, :]  # (1, seq_len, output_dim)
+
+        # Compute mean and variance of prior: (batch_size, seq_len, output_dim)
+        mu_p = A_p_seq * torch.sin(theta_p_seq)
+        var_p = torch.exp(log_var_p_seq)
+
+        # Flatten the weather representation for MLP
+        weather_repr_flat = z.reshape(z.size(0), -1)
 
         # Clamp variances for numerical stability before returning
         var_x = torch.clamp(var_x, min=1e-8, max=1)
         var_p = torch.clamp(var_p, min=1e-8, max=1)
 
+        # Pass through MLP to get yield prediction
+        yield_pred = self.mlp(weather_repr_flat)
         return yield_pred, z, mu_x, var_x, mu_p, var_p

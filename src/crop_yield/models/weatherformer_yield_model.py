@@ -16,34 +16,28 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
     def __init__(
         self,
         name: str,
+        mlp_input_dim: int,
         device: torch.device,
-        weather_dim: int,
-        n_past_years: int,
+        weather_dim=TOTAL_WEATHER_VARS,
+        output_dim=TOTAL_WEATHER_VARS,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
+        super().__init__(
+            name, mlp_input_dim, device, weather_dim, output_dim, **model_size_params
+        )
 
         # Replace the WeatherBERT with WeatherFormer
         self.weather_model = WeatherFormer(
             weather_dim=weather_dim,
-            output_dim=weather_dim,
+            output_dim=output_dim,
             device=device,
             **model_size_params,
         )
 
-    def forward(
-        self,
-        padded_weather,
-        coord,
-        year,
-        interval,
-        weather_feature_mask,
-        practices,
-        soil,
-        y_past,
-    ):
+    def forward(self, input_data):
         # Prepare weather input using inherited method
+        padded_weather, coord, year, interval, weather_feature_mask = input_data
 
         # WeatherFormer expects individual arguments, not a tuple
         # and returns (mu, sigma) instead of just weather embeddings
@@ -58,16 +52,11 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
-        z = mu_x + torch.sqrt(var_x) * epsilon
+        weather_repr = mu_x + torch.sqrt(var_x) * epsilon
 
-        z = self._impute_weather(padded_weather, z, weather_feature_mask)
+        # Flatten the weather representation for MLP
+        weather_repr = weather_repr.reshape(weather_repr.size(0), -1)
 
-        # we imputed weather, the mask is not necessary
-        yield_pred = self.yield_model(
-            z,
-            coord,
-            year,
-            interval,
-            weather_feature_mask=None,
-        )
+        # Pass through MLP to get yield prediction
+        yield_pred = self.mlp(weather_repr)
         return yield_pred, mu_x, var_x

@@ -41,7 +41,9 @@ class WeatherAutoencoder(WeatherBERT):
         coords: torch.Tensor,
         year: torch.Tensor,
         interval: torch.Tensor,
-        weather_feature_mask: torch.Tensor,
+        weather_feature_mask: Optional[
+            torch.Tensor
+        ] = None,  # batch_size x seq_len x n_features,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
     ) -> torch.Tensor:
         """

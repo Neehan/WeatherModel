@@ -215,13 +215,6 @@ class BaseTrainer(ABC):
     # INTERNAL TRAINING METHODS
     # =============================================================================
 
-    def _masked_mean(
-        self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
-    ):
-        """Mean over `dim`, ignoring False in `mask`."""
-        masked = tensor * mask
-        return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
-
     def _train_epoch(self, loader) -> float:
         """Train the model for one epoch."""
         self.model.train()

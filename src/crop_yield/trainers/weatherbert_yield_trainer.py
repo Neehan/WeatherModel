@@ -111,14 +111,18 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         target_yield,
     ) -> Dict[str, torch.Tensor]:
         """Compute training loss for a batch - IMPLEMENTATION OF ABSTRACT METHOD."""
-        # Forward pass through the model
-        predicted_yield = self.model(
+
+        # Prepare input data for the model (first 5 elements are what the model expects)
+        input_data = (
             padded_weather,
             coord_processed,
             year_expanded,
             interval,
             weather_feature_mask,
         )
+
+        # Forward pass through the model
+        predicted_yield = self.model(input_data)
 
         # Compute MSE loss
         loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
@@ -137,16 +141,18 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         target_yield,
     ) -> Dict[str, torch.Tensor]:
         """Compute validation loss for a batch - IMPLEMENTATION OF ABSTRACT METHOD."""
+        # Prepare input data for the model (first 5 elements are what the model expects)
+        input_data = (
+            padded_weather,
+            coord_processed,
+            year_expanded,
+            interval,
+            weather_feature_mask,
+        )
 
         # Forward pass through the model (no gradient computation needed for validation)
         with torch.no_grad():
-            predicted_yield = self.model(
-                padded_weather,
-                coord_processed,
-                year_expanded,
-                interval,
-                weather_feature_mask,
-            )
+            predicted_yield = self.model(input_data)
 
         # Return RMSE for validation since that's standard for comparision
         loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
@@ -178,9 +184,10 @@ def _create_yield_training_setup(args_dict):
     local_rank = args_dict.get("local_rank", 0)
 
     # Set device for this process
-    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
     # Calculate MLP input dimension
+    mlp_input_dim = TOTAL_WEATHER_VARS * 52 * (args_dict["n_past_years"] + 1)
 
     # Read dataset
     crop_df = read_soybean_dataset(DATA_DIR)
@@ -195,6 +202,7 @@ def _create_yield_training_setup(args_dict):
         "world_size": world_size,
         "local_rank": local_rank,
         "device": device,
+        "mlp_input_dim": mlp_input_dim,
         "crop_df": crop_df,
         "cross_validation_k": cross_validation_k,
         "beta": args_dict["beta"],
@@ -224,9 +232,10 @@ def _run_yield_cross_validation(
     """
     model_kwargs = {
         "name": model_name,
-        "device": setup_params["device"],
+        "mlp_input_dim": setup_params["mlp_input_dim"],
         "weather_dim": TOTAL_WEATHER_VARS,
-        "n_past_years": args_dict["n_past_years"],
+        "output_dim": TOTAL_WEATHER_VARS,
+        "device": setup_params["device"],
         **args_dict["model_size_params"],
     }
 

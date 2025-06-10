@@ -3,7 +3,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 import math
 from typing import Dict, Tuple
-from src.utils.constants import DRY_RUN
 from src.crop_yield.trainers.weatherbert_yield_trainer import (
     WeatherBERTYieldTrainer,
     _create_yield_training_setup,
@@ -43,13 +42,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                 },
             }
 
-    def _masked_mean(
-        self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
-    ):
-        """Mean over `dim`, ignoring False in `mask`."""
-        masked = tensor * mask
-        return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
-
     def _compute_mixture_kl_divergence(
         self,
         z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
@@ -57,10 +49,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
         mu_k: torch.Tensor,  # [k, seq_len, n_features] - mixture means
         var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - mask of predicted positions
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute KL divergence between posterior q(z|x) and mixture prior p(z) only on masked features.
+        Compute KL divergence between posterior q(z|x) and mixture prior p(z).
 
         KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
 
@@ -69,13 +60,11 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         - log p(z) = -log K - D/2 log(2π) + log(Σ_k exp(-1/2 Σ_d [log σ²_k,d + (z_d - μ_k,d)²/σ²_k,d]))
         """
         # Compute log q(z|x) - posterior log-density
-        # log q(z|x) = -1/2 * [log(2π) + log(σ²) + (z - μ)²/σ²]
-        # We drop the constant log(2π) term
-        log_q_z_x_pointwise = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
-
-        # Sum over seq_len and n_features dimensions, only for masked positions
-        log_q_z_x = (log_q_z_x_pointwise * weather_feature_mask.float()).sum(
-            dim=(1, 2)
+        # log q(z|x) = -D/2 log(2π) - 1/2 Σ_d [log σ²_φ,d + (z_d - μ_φ,d)²/σ²_φ,d]
+        log_variance = torch.log(var_x)
+        log_q_z_x = -0.5 * torch.sum(
+            log_variance + (z - mu_x) ** 2 / var_x,
+            dim=(1, 2),  # sum over seq_len and n_features
         )  # [batch_size]
 
         # Compute log p(z) - mixture prior log-density
@@ -84,23 +73,16 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         mu_k_expanded = mu_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
         var_k_expanded = var_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
 
-        # Compute log-density for each component
-        log_component_densities_pointwise = -0.5 * (
+        # Compute log-density for each component: [k, batch_size]
+        log_component_densities = -0.5 * torch.sum(
             torch.log(var_k_expanded)
-            + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded
-        )  # [k, batch_size, seq_len, n_features]
-
-        k = mu_k.shape[0]  # number of mixture components
-        # Sum over seq_len and n_features dimensions, only for masked positions
-        # Expand mask to match mixture dimensions: [k, batch_size, seq_len, n_features]
-        mask_expanded = weather_feature_mask.unsqueeze(0).expand(k, -1, -1, -1)
-        log_component_densities = (
-            log_component_densities_pointwise * mask_expanded.float()
-        ).sum(
-            dim=(2, 3)
+            + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded,
+            dim=(2, 3),  # sum over seq_len and n_features
         )  # [k, batch_size]
 
         # Compute log p(z) = log(1/K * Σ_k exp(log_component_densities))
+        # = -log K + log(Σ_k exp(log_component_densities))
+        k = mu_k.shape[0]  # number of mixture components
         log_p_z = torch.logsumexp(log_component_densities, dim=0) - math.log(
             k
         )  # [batch_size]
@@ -108,13 +90,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
         kl_divergence = log_q_z_x - log_p_z  # [batch_size]
 
-        # Compute log variance for logging (only masked positions)
-        log_variance = self._masked_mean(
-            torch.log(var_x), weather_feature_mask.float(), dim=(1, 2)
-        )  # [batch_size]
-
-        # Return mean over batch
-        return kl_divergence.mean(), log_variance.mean()
+        return kl_divergence.mean(), log_variance.mean()  # average over batch
 
     def _compute_mixture_variational_loss_components(
         self,
@@ -125,8 +101,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
         yield_pred: torch.Tensor,  # [batch_size, 1]
         target_yield: torch.Tensor,  # [batch_size, 1]
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - mask of predicted positions
-        log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
         Compute the mixture variational loss components for WeatherFormerMixture yield prediction.
@@ -134,7 +108,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         Implements the mixture ELBO loss:
         L_yield = ||y_j - μ_θ(z_j)||² + β · KL(q(z_j|x_j) || p(z_j))
 
-        where p(z_j) is the Gaussian mixture prior and KL divergence is computed only on masked features.
+        where p(z_j) is the Gaussian mixture prior.
 
         Args:
             z: Sampled latent representations [batch_size, seq_len, n_features]
@@ -144,7 +118,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             var_k: Mixture component variances [k, seq_len, n_features]
             yield_pred: Predicted yield values [batch_size, 1]
             target_yield: Ground truth yield values [batch_size, 1]
-            weather_feature_mask: Boolean mask indicating predicted positions
 
         Returns:
             Dictionary containing all loss components
@@ -156,7 +129,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
 
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
         kl_term, log_variance = self._compute_mixture_kl_divergence(
-            z, mu_x, var_x, mu_k, var_k, weather_feature_mask
+            z, mu_x, var_x, mu_k, var_k
         )
         # Average over batch and multiply by β
         beta = self._current_beta()
@@ -164,12 +137,6 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
 
         # Total loss: sum of both terms
         total_loss = reconstruction_loss + kl_term
-
-        if log_losses or DRY_RUN:
-            print(f"Reconstruction loss: {reconstruction_loss.item()}")
-            print(f"KL term: {kl_term.item()}")
-            print(f"Log variance: {log_variance.item()}")
-            print(f"Total loss: {total_loss.item()}")
 
         return {
             "total_loss": total_loss,
@@ -192,9 +159,8 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute mixture variational training loss for WeatherFormerMixture yield prediction."""
 
-        # Forward pass through WeatherFormerMixture model
-        # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
-        yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(
+        # Prepare input data for the model
+        input_data = (
             padded_weather,
             coord_processed,
             year_expanded,
@@ -202,9 +168,13 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             weather_feature_mask,
         )
 
+        # Forward pass through WeatherFormerMixture model
+        # Returns (yield_pred, z, mu_x, var_x, mu_k, var_k)
+        yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
+
         # Compute all loss components using the helper method
         return self._compute_mixture_variational_loss_components(
-            z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield, weather_feature_mask
+            z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield
         )
 
     def compute_validation_loss(
@@ -221,19 +191,22 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute mixture variational validation loss for WeatherFormerMixture yield prediction."""
 
+        # Prepare input data for the model
+        input_data = (
+            padded_weather,
+            coord_processed,
+            year_expanded,
+            interval,
+            weather_feature_mask,
+        )
+
         # Forward pass through WeatherFormerMixture model (no gradient computation)
         with torch.no_grad():
-            yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(
-                padded_weather,
-                coord_processed,
-                year_expanded,
-                interval,
-                weather_feature_mask,
-            )
+            yield_pred, z, mu_x, var_x, mu_k, var_k = self.model(input_data)
 
         # Compute all loss components using the helper method
         components = self._compute_mixture_variational_loss_components(
-            z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield, weather_feature_mask
+            z, mu_x, var_x, mu_k, var_k, yield_pred, target_yield
         )
         # only return the reconstruction (RMSE) loss for validation
         return {"total_loss": components["reconstruction"] ** 0.5}

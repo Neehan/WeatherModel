@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-import copy
 
 from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
@@ -61,10 +60,10 @@ class WeatherBERT(BaseModel):
                 f"expected max length {self.max_len} but received {pretrained_model.max_len}"
             )
 
-        self.in_proj = copy.deepcopy(pretrained_model.in_proj)
-        self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
-        self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
-        self.out_proj = copy.deepcopy(pretrained_model.out_proj)
+        self.in_proj = pretrained_model.in_proj
+        self.positional_encoding = pretrained_model.positional_encoding
+        self.transformer_encoder = pretrained_model.transformer_encoder
+        self.out_proj = pretrained_model.out_proj
 
     def forward(
         self,
@@ -72,7 +71,9 @@ class WeatherBERT(BaseModel):
         coords: torch.Tensor,
         year: torch.Tensor,
         interval: torch.Tensor,
-        weather_feature_mask: torch.Tensor,
+        weather_feature_mask: Optional[
+            torch.Tensor
+        ] = None,  # batch_size x seq_len x n_features,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
     ) -> torch.Tensor:
         """
@@ -85,13 +86,10 @@ class WeatherBERT(BaseModel):
         """
         batch_size, seq_len, n_features = weather.shape
 
-        assert (
-            n_features == self.weather_dim
-        ), f"expected {self.weather_dim} weather features but received {n_features} features"
-
-        assert (
-            weather_feature_mask.shape == weather.shape
-        ), f"expected weather_feature_mask shape {weather.shape} but received {weather_feature_mask.shape}"
+        if n_features != self.weather_dim:
+            raise ValueError(
+                f"expected {self.weather_dim} weather features but received {n_features} features"
+            )
 
         # normalize year, interval, and coords
         year, interval, coords = normalize_year_interval_coords(year, interval, coords)
@@ -106,7 +104,11 @@ class WeatherBERT(BaseModel):
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
         # mask the masked dimensions
-        weather = weather * (~weather_feature_mask)
+        if (
+            weather_feature_mask is not None
+            and weather_feature_mask.shape == weather.shape
+        ):
+            weather = weather * (~weather_feature_mask)
 
         input_tensor = torch.cat([weather, coords, year, interval], dim=2)
         input_tensor = self.in_proj(input_tensor)
