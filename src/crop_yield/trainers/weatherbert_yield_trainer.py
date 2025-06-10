@@ -126,7 +126,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         # Compute MSE loss
         loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
-        return {"total_loss": loss**0.5}
+        return {"total_loss": loss}
 
     def compute_validation_loss(
         self,
