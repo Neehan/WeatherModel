@@ -247,6 +247,7 @@ def _run_yield_cross_validation(
         "crop_df": setup_params["crop_df"],
         "n_past_years": args_dict["n_past_years"],
         "train_pct": args_dict["train_pct"],
+        "beta": setup_params["beta"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],
