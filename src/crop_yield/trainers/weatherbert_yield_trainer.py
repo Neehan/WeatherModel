@@ -227,7 +227,6 @@ def _run_yield_cross_validation(
         "device": setup_params["device"],
         "weather_dim": TOTAL_WEATHER_VARS,
         "n_past_years": args_dict["n_past_years"],
-        "max_len": 52 * (args_dict["n_past_years"] + 1),
         **args_dict["model_size_params"],
     }
 
