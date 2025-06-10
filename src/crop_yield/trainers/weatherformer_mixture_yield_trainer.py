@@ -62,14 +62,16 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         """
         # Compute log q(z|x) - posterior log-density
         # log q(z|x) = -D/2 log(2π) - 1/2 Σ_d [log σ²_φ,d + (z_d - μ_φ,d)²/σ²_φ,d]
+        D = weather_feature_mask.sum(dim=(1, 2))  # number of active dimensions
         log_variance = torch.log(var_x)
-        log_q_z_x = log_variance + (z - mu_x) ** 2 / var_x
+        log_q_z_x = -0.5 * (log_variance + (z - mu_x) ** 2 / var_x)
         # apply mask (keep only for masked out indices)
         log_q_z_x = log_q_z_x * weather_feature_mask
-        log_q_z_x = -0.5 * torch.sum(
+        log_q_z_x = torch.sum(
             log_q_z_x,
             dim=(1, 2),  # sum over seq_len and n_features
         )  # [batch_size]
+        log_q_z_x = log_q_z_x - 0.5 * D * math.log(2 * math.pi)
 
         # Compute log p(z) - mixture prior log-density
         # First compute log-density for each mixture component
@@ -81,13 +83,13 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         )  # [1, batch_size, seq_len, n_features]
 
         # Compute log-density for each component: [k, batch_size]
-        log_component_densities = (
+        log_component_densities = -0.5 * (
             torch.log(var_k_expanded)
             + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded
         )
         # apply mask
         log_component_densities = log_component_densities * mask_expanded
-        log_component_densities = -0.5 * torch.sum(
+        log_component_densities = torch.sum(
             log_component_densities,
             dim=(2, 3),  # sum over seq_len and n_features
         )  # [k, batch_size]
