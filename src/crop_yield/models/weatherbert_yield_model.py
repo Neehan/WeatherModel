@@ -37,10 +37,11 @@ class WeatherBERTYieldModel(BaseModel):
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
         """
         Fast combination using element-wise ops instead of torch.where:
-        - original_weather * (~mask) keeps original where mask is False, zeros where True
-        - imputed_weather * mask keeps imputed where mask is True, zeros where False
-        - Add them together for final result
+        - original_weather: batch_size x seq_len x weather_dim
+        - imputed_weather: batch_size x seq_len x weather_dim
+        - weather_feature_mask: batch_size x weather_dim
         """
+        weather_feature_mask = weather_feature_mask.unsqueeze(1)
         return (
             original_weather * (~weather_feature_mask)
             + imputed_weather * weather_feature_mask
