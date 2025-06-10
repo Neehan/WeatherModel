@@ -22,16 +22,14 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         device: torch.device,
         weather_dim: int,
         n_past_years: int,
-        max_len: int,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(
-            name, device, weather_dim, n_past_years, max_len, **model_size_params
-        )
+        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
         self.name = "weatherautoencoder_sine_yield"
 
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
+        max_len = self.yield_model.max_len
         self.positions = (
             torch.arange(max_len, dtype=torch.float, device=device)
             .unsqueeze(0)
@@ -42,7 +40,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         self.log_var_p = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1 - 1)
 
         self.log_var_x = nn.Sequential(
-            nn.Linear(2 * weather_dim, 4 * weather_dim),
+            nn.Linear(weather_dim, 4 * weather_dim),
             nn.GELU(),
             nn.Linear(4 * weather_dim, weather_dim),
         )
@@ -71,10 +69,10 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         year,
         interval,
         weather_feature_mask,
-        practices,
-        soil,
-        y_past,
     ):
+        # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
+        mu_p, var_p = self._compute_sinusoidal_prior()
+
         # WeatherFormerMixture expects individual arguments, not a tuple
         # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
         mu_x = self.weather_model(
@@ -84,30 +82,24 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             interval=interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # batch size x seq_len x (2 n features)
-        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
+        # predict missing only and keep original weather for rest
+        mu_x = self._impute_weather(padded_weather, mu_x, weather_feature_mask)
+        log_var_x = self.log_var_x(mu_x)
         var_x = torch.exp(log_var_x)
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-
-        # Compute sinusoidal prior: p(z) ~ N(A_p * sin(theta * pos * period), sigma^2_p)
-        mu_p, var_p = self._compute_sinusoidal_prior()
-
-        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
-
+        # predict missing only and keep original weather for rest
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
         # Pass through MLP to get yield prediction
         yield_pred = self.yield_model(
-            final_weather,
+            z,
             coord,
             year,
             interval,
             weather_feature_mask,
-            practices,
-            soil,
-            y_past,
         )
 
         # Clamp variances for numerical stability before returning

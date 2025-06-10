@@ -15,7 +15,6 @@ class WeatherBERTYieldModel(BaseModel):
         device: torch.device,
         weather_dim: int,
         n_past_years: int,
-        max_len: int,
         **model_size_params,
     ):
         super().__init__(name)
@@ -28,7 +27,6 @@ class WeatherBERTYieldModel(BaseModel):
         self.yield_model = WeatherCNNYieldModel(
             name=f"{name}_yield",
             device=device,
-            max_len=max_len,
             weather_dim=weather_dim,
             n_past_years=n_past_years,
             **model_size_params,
@@ -39,11 +37,11 @@ class WeatherBERTYieldModel(BaseModel):
         Fast combination using element-wise ops instead of torch.where:
         - original_weather: batch_size x seq_len x weather_dim
         - imputed_weather: batch_size x seq_len x weather_dim
-        - weather_feature_mask: batch_size x weather_dim
+        - weather_feature_mask: batch_size x seq_len x weather_dim
         """
-        weather_feature_mask = weather_feature_mask.unsqueeze(1)
         return (
-            original_weather * (~weather_feature_mask)
+            original_weather
+            * (~weather_feature_mask)  # keep original where mask is False
             + imputed_weather * weather_feature_mask
         )
 
@@ -53,21 +51,17 @@ class WeatherBERTYieldModel(BaseModel):
         """
         self.weather_model.load_pretrained(pretrained_model)
 
-    def forward(
-        self,
-        padded_weather,
-        coord,
-        year,
-        interval,
-        weather_feature_mask,
-        practices,
-        soil,
-        y_past,
-    ):
-        # (padded_weather, coord_processed, year_expanded, interval, weather_feature_mask, practices, soil, y_past, y)
+    def forward(self, weather, coord, year, interval, weather_feature_mask):
+        """
+        weather: batch_size x seq_len x n_features
+        coords: batch_size x 2 (lat, lon) UNNORMALIZED
+        year: batch_size x seq_len (UNNORMALIZED, time-varying years)
+        interval: batch_size x 1 (UNNORMALIZED in days)
+        weather_feature_mask: batch_size x seq_len x n_features
+        """
 
-        imputed_weather = self.weather_model(
-            padded_weather,
+        predicted_weather = self.weather_model(
+            weather,
             coord,
             year,
             interval,
@@ -75,18 +69,6 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         # Fast combination using element-wise ops
-        final_weather = self._impute_weather(
-            padded_weather, imputed_weather, weather_feature_mask
-        )
-
-        output = self.yield_model(
-            final_weather,
-            coord,
-            year,
-            interval,
-            weather_feature_mask,
-            practices,
-            soil,
-            y_past,
-        )
+        weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
+        output = self.yield_model(weather, coord, year, interval, weather_feature_mask)
         return output

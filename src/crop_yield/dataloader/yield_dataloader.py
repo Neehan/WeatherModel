@@ -149,6 +149,9 @@ class CropDataset(Dataset):
                 dtype=torch.bool,
             )
             weather_feature_mask[self.weather_indices] = False
+            weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
+                n_years * seq_len, -1
+            )
 
             # Create temporal interval (weekly data)
             interval = torch.full((1,), 7, dtype=torch.float32)
@@ -159,7 +162,7 @@ class CropDataset(Dataset):
                     coord_processed,  # (2,)
                     year_expanded,  # (n_years * 52,)
                     interval,  # (1,)
-                    weather_feature_mask,  # (TOTAL_WEATHER_VARS,)
+                    weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
                     practices,  # (n_years, 14)
                     soil,  # (n_years, 11, 6)
                     y_past,  # (n_years,)

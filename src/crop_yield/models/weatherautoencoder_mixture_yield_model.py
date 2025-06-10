@@ -23,13 +23,10 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         k: int,
         weather_dim: int,
         n_past_years: int,
-        max_len: int,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(
-            name, device, weather_dim, n_past_years, max_len, **model_size_params
-        )
+        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
         self.name = "weatherautoencoder_mixture_yield"
 
         # Replace the WeatherBERT with WeatherAutoencoder
@@ -49,37 +46,28 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
             torch.randn(k, self.weather_model.max_len, weather_dim) * 0.1 - 1.0
         )
         self.log_var_x = nn.Sequential(
-            nn.Linear(2 * weather_dim, 4 * weather_dim),
+            nn.Linear(weather_dim, 4 * weather_dim),
             nn.GELU(),
             nn.Linear(4 * weather_dim, weather_dim),
         )
 
-    def forward(
-        self,
-        padded_weather,
-        coord,
-        year,
-        interval,
-        weather_feature_mask,
-        practices,
-        soil,
-        y_past,
-    ):
+    def forward(self, weather, coord, year, interval, weather_feature_mask):
         # Prepare weather input using inherited method
 
-        seq_len = padded_weather.shape[1]
+        seq_len = weather.shape[1]
 
         # WeatherFormerMixture expects individual arguments, not a tuple
         # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
         mu_x = self.weather_model(
-            padded_weather,
+            weather,
             coord,
             year,
             interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # batch size x seq_len x (2 n features)
-        log_var_x = self.log_var_x(torch.cat([mu_x, padded_weather], dim=2))
+        # keep original weather and predict only missing ones
+        mu_x = self._impute_weather(weather, mu_x, weather_feature_mask)
+        log_var_x = self.log_var_x(mu_x)
         var_x = torch.exp(log_var_x)
 
         mu_k = self.mu_k[:, :seq_len, :]
@@ -89,7 +77,8 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
+        # keep original weather and predict only missing ones
+        z = self._impute_weather(weather, z, weather_feature_mask)
 
         # Clamp variances for numerical stability before returning
         var_x = torch.clamp(var_x, min=1e-8, max=1)
@@ -97,13 +86,10 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
 
         # Pass through MLP to get yield prediction
         yield_pred = self.yield_model(
-            final_weather,
+            z,
             coord,
             year,
             interval,
             weather_feature_mask,
-            practices,
-            soil,
-            y_past,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k

@@ -71,9 +71,7 @@ class WeatherBERT(BaseModel):
         coords: torch.Tensor,
         year: torch.Tensor,
         interval: torch.Tensor,
-        weather_feature_mask: Optional[
-            torch.Tensor
-        ] = None,  # batch_size x seq_len x n_features,
+        weather_feature_mask: torch.Tensor,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
     ) -> torch.Tensor:
         """
@@ -86,10 +84,13 @@ class WeatherBERT(BaseModel):
         """
         batch_size, seq_len, n_features = weather.shape
 
-        if n_features != self.weather_dim:
-            raise ValueError(
-                f"expected {self.weather_dim} weather features but received {n_features} features"
-            )
+        assert (
+            n_features == self.weather_dim
+        ), f"expected {self.weather_dim} weather features but received {n_features} features"
+
+        assert (
+            weather_feature_mask.shape == weather.shape
+        ), f"expected weather_feature_mask shape {weather.shape} but received {weather_feature_mask.shape}"
 
         # normalize year, interval, and coords
         year, interval, coords = normalize_year_interval_coords(year, interval, coords)
@@ -104,11 +105,7 @@ class WeatherBERT(BaseModel):
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
         # mask the masked dimensions
-        if (
-            weather_feature_mask is not None
-            and weather_feature_mask.shape == weather.shape
-        ):
-            weather = weather * (~weather_feature_mask)
+        weather = weather * (~weather_feature_mask)
 
         input_tensor = torch.cat([weather, coords, year, interval], dim=2)
         input_tensor = self.in_proj(input_tensor)

@@ -111,7 +111,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         target_yield,
     ) -> Dict[str, torch.Tensor]:
         """Compute training loss for a batch - IMPLEMENTATION OF ABSTRACT METHOD."""
-
         # Forward pass through the model
         predicted_yield = self.model(
             padded_weather,
@@ -119,9 +118,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             year_expanded,
             interval,
             weather_feature_mask,
-            practices,
-            soil,
-            y_past,
         )
 
         # Compute MSE loss
@@ -150,9 +146,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 year_expanded,
                 interval,
                 weather_feature_mask,
-                practices,
-                soil,
-                y_past,
             )
 
         # Return RMSE for validation since that's standard for comparision

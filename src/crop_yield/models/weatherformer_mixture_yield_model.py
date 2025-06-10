@@ -21,13 +21,10 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         k: int,
         weather_dim: int,
         n_past_years: int,
-        max_len: int,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(
-            name, device, weather_dim, n_past_years, max_len, **model_size_params
-        )
+        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
 
         # Replace the WeatherBERT with WeatherFormerMixture
         self.weather_model = WeatherFormerMixture(
@@ -66,16 +63,13 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
 
-        final_weather = self._impute_weather(padded_weather, z, weather_feature_mask)
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         yield_pred = self.yield_model(
-            final_weather,
+            z,
             coord,
             year,
             interval,
             weather_feature_mask,
-            practices,
-            soil,
-            y_past,
         )
         return yield_pred, z, mu_x, var_x, mu_k, var_k

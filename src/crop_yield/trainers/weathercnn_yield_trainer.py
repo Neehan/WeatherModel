@@ -12,7 +12,6 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
     _create_yield_training_setup,
     _run_yield_cross_validation,
 )
-from src.utils.constants import TOTAL_WEATHER_VARS
 
 
 class WeatherCNNYieldTrainer(WeatherBERTYieldTrainer):
@@ -37,7 +36,4 @@ def weathercnn_yield_training_loop(args_dict):
         trainer_class=WeatherCNNYieldTrainer,
         model_name="weathercnn_yield",
         args_dict=args_dict,
-        extra_model_kwargs={
-            "max_len": 52 * (args_dict["n_past_years"] + 1),
-        },  # Match the model's output_dim
     )
