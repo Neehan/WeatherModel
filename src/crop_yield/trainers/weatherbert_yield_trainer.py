@@ -178,7 +178,7 @@ def _create_yield_training_setup(args_dict):
     local_rank = args_dict.get("local_rank", 0)
 
     # Set device for this process
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
     # Calculate MLP input dimension
 
