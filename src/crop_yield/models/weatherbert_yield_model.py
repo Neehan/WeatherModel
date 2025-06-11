@@ -24,13 +24,31 @@ class WeatherBERTYieldModel(BaseModel):
             device=device,
             **model_size_params,
         )
-        self.yield_model = WeatherCNNYieldModel(
-            name=f"{name}_cnn",
-            device=device,
-            weather_dim=weather_dim,
-            n_past_years=n_past_years,
-            **model_size_params,
+        # self.yield_model = WeatherCNNYieldModel(
+        #     name=f"{name}_cnn",
+        #     device=device,
+        #     weather_dim=weather_dim,
+        #     n_past_years=n_past_years,
+        #     **model_size_params,
+        # )
+        expected_len = 52 * (n_past_years + 1)
+        self.weather_fc = nn.Sequential(
+            nn.Linear(
+                weather_dim * expected_len, 60
+            ),  # flatten weather and make it same dim as cnn output
+            nn.GELU(),
         )
+        self.yield_mlp = nn.Sequential(
+            nn.Linear(60 + n_past_years + 1, 120),  # n_past_years + 1 past yields
+            nn.GELU(),
+            nn.Linear(120, 1),
+        )
+
+    def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
+        weather = weather.view(weather.size(0), -1)  # flatten weather
+        weather_fc_out = self.weather_fc(weather)
+        mlp_input = torch.cat([weather_fc_out, y_past], dim=1)
+        return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
         """
