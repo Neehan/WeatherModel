@@ -66,7 +66,8 @@ class WeatherBERT(BaseModel):
         self.in_proj = copy.deepcopy(pretrained_model.in_proj)
         self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
         self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
-        self.out_proj = copy.deepcopy(pretrained_model.out_proj)
+        if load_out_proj:
+            self.out_proj = copy.deepcopy(pretrained_model.out_proj)
 
     def forward(
         self,
