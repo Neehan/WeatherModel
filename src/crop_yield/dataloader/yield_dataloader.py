@@ -77,6 +77,11 @@ class CropDataset(Dataset):
             )
             self.index = shuffled_index.iloc[:samples_to_use]
 
+        dataset_name = "train" if not test_dataset else "test"
+        logger.info(
+            f"Creating {dataset_name} dataloader with {len(self.index)} samples."
+        )
+
         self.data = []
         global SHOW_WARNING
 
@@ -257,9 +262,6 @@ def get_train_test_loaders(
     train_pct: int = 100,
 ) -> Tuple[DataLoader, DataLoader]:
 
-    logger.info(
-        f"Creating train and test dataloaders for {len(crop_df)} locations with {num_workers} workers."
-    )
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df,
         test_states,
