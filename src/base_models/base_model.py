@@ -11,6 +11,7 @@ class BaseModel(nn.Module):
     def __init__(self, name: str):
         super(BaseModel, self).__init__()
         self.name = name
+        self.logger = logging.getLogger(f"models.{name}")
         logging.info(f"Initializing {self.name} model")
 
     def total_params(self):

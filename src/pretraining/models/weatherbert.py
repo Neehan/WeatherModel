@@ -68,6 +68,8 @@ class WeatherBERT(BaseModel):
         self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
         if load_out_proj:
             self.out_proj = copy.deepcopy(pretrained_model.out_proj)
+        else:
+            self.logger.info("⚠️ Not loading out_proj from pretrained model")
 
     def forward(
         self,
