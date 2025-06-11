@@ -150,7 +150,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 # Shape: [seq_len] - absolute time indices since 1984
                 absolute_time_indices = temporal_index * 365 + time_point_indices
                 # Shape: [seq_len] - convert to actual years
-                years_tensors[idx] = 1984 + (absolute_time_indices * interval) / 365
+                years_tensors[idx] = 1984.0 + (absolute_time_indices * interval) / 365
 
             if self.masking_function is not None:
                 # Use the actual masking functions with batch support

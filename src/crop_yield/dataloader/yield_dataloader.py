@@ -140,10 +140,15 @@ class CropDataset(Dataset):
             coord_processed = coord[0, :]  # (2,)
 
             # Expand year to match the sequence length
-            # year_data is [n_years], need to repeat each year for seq_len timesteps
-            year_expanded = (
-                torch.FloatTensor(year_data).unsqueeze(1).expand(n_years, seq_len)
-            )  # [n_years, seq_len]
+            # year_data is [n_years], need to add fraction for each week (1/52, 2/52, ..., 52/52)
+            week_fractions = (
+                torch.arange(1, seq_len + 1, dtype=torch.float32) / seq_len
+            )  # [seq_len]
+            year_expanded = torch.FloatTensor(year_data).unsqueeze(
+                1
+            ) + week_fractions.unsqueeze(  # [n_years, 1]
+                0
+            )  # [1, seq_len]  # [n_years, seq_len]
             year_expanded = year_expanded.contiguous().view(
                 n_years * seq_len
             )  # [n_years * seq_len]
