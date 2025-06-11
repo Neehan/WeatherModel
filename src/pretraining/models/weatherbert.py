@@ -49,7 +49,9 @@ class WeatherBERT(BaseModel):
 
         self.out_proj = nn.Linear(hidden_dim, output_dim)
 
-    def load_pretrained(self, pretrained_model: "WeatherBERT"):
+    def load_pretrained(
+        self, pretrained_model: "WeatherBERT", load_out_proj: bool = True
+    ):
         """Load weights from a pretrained WeatherBERT model by deep copying each layer."""
 
         if self.input_dim != pretrained_model.input_dim:
