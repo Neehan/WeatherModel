@@ -19,7 +19,7 @@ class WeatherCNNYieldModel(BaseModel):
     ):
         super().__init__(name)
         self.max_len = (n_past_years + 1) * 52
-        self.weather_model = WeatherCNN(
+        self.cnn = WeatherCNN(
             weather_dim=weather_dim,
             output_dim=output_dim,
             max_len=self.max_len,
@@ -36,7 +36,7 @@ class WeatherCNNYieldModel(BaseModel):
         """
         override the load_pretrained method from BaseModel to load the weather model
         """
-        self.weather_model.load_pretrained(pretrained_model)
+        self.cnn.load_pretrained(pretrained_model)
 
     def forward(
         self,
@@ -48,7 +48,7 @@ class WeatherCNNYieldModel(BaseModel):
         y_past,
     ):
         # dont pass the mask
-        weather = self.weather_model(
+        weather = self.cnn(
             padded_weather,
             coord,
             year,
