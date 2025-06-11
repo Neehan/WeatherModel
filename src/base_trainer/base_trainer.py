@@ -369,7 +369,7 @@ class BaseTrainer(ABC):
         if pretrained_model_path and os.path.exists(pretrained_model_path):
             pretrained_model = torch.load(pretrained_model_path, weights_only=False)
             self.logger.info(
-                f"🏋️ Loading pretrained model from: {pretrained_model_path}"
+                f"🔄 Loading pretrained model from: {pretrained_model_path}"
             )
             self._get_underlying_model().load_pretrained(pretrained_model)
 
