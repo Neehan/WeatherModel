@@ -31,18 +31,31 @@ class WeatherBERTYieldModel(BaseModel):
         #     n_past_years=n_past_years,
         #     **model_size_params,
         # )
-        expected_len = 52 * (n_past_years + 1)
-        self.weather_fc = nn.Linear(weather_dim * expected_len, 60)
+        # Attention mechanism to reduce sequence dimension
+        self.weather_attention = nn.Sequential(
+            nn.Linear(weather_dim, 16), nn.GELU(), nn.Linear(16, 1)
+        )
+
         self.yield_mlp = nn.Sequential(
-            nn.Linear(60 + n_past_years + 1, 120),  # n_past_years + 1 past yields
+            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
 
     def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
-        weather = weather.view(weather.size(0), -1)  # flatten weather
-        weather_fc_out = self.weather_fc(weather)
-        mlp_input = torch.cat([weather_fc_out, y_past], dim=1)
+        # Apply attention to reduce sequence dimension
+        # Compute attention weights
+        attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
+        attention_weights = torch.softmax(
+            attention_weights, dim=1
+        )  # normalize across sequence
+
+        # Apply attention to get weighted sum
+        weather_attended = torch.sum(
+            weather * attention_weights, dim=1
+        )  # batch_size x weather_dim
+
+        mlp_input = torch.cat([weather_attended, y_past], dim=1)
         return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
