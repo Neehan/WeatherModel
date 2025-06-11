@@ -34,35 +34,3 @@ class WeatherAutoencoder(WeatherBERT):
         )
         # override the name
         self.name = "weatherautoencoder"
-
-    def forward(
-        self,
-        weather: torch.Tensor,
-        coords: torch.Tensor,
-        year: torch.Tensor,
-        interval: torch.Tensor,
-        weather_feature_mask: torch.Tensor,
-        src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
-    ) -> torch.Tensor:
-        """
-        weather: batch_size x seq_len x n_features
-        coords: batch_size x 2
-        year: batch_size x seq_len
-        interval: batch_size x 1
-        weather_feature_mask: batch_size x seq_len x n_features
-        src_key_padding_mask: batch_size x seq_len
-
-        Returns:
-            torch.Tensor: Predicted values (mu only, no sigma)
-        """
-        # Call parent WeatherBERT forward method
-        output = super().forward(
-            weather=weather,
-            coords=coords,
-            year=year,
-            interval=interval,
-            weather_feature_mask=weather_feature_mask,
-            src_key_padding_mask=src_key_padding_mask,
-        )
-
-        return output
