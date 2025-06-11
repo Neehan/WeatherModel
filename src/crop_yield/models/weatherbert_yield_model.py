@@ -32,12 +32,7 @@ class WeatherBERTYieldModel(BaseModel):
         #     **model_size_params,
         # )
         expected_len = 52 * (n_past_years + 1)
-        self.weather_fc = nn.Sequential(
-            nn.Linear(
-                weather_dim * expected_len, 60
-            ),  # flatten weather and make it same dim as cnn output
-            nn.GELU(),
-        )
+        self.weather_fc = nn.Linear(weather_dim * expected_len, 60)
         self.yield_mlp = nn.Sequential(
             nn.Linear(60 + n_past_years + 1, 120),  # n_past_years + 1 past yields
             nn.GELU(),

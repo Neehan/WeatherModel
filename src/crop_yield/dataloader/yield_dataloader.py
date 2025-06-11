@@ -35,6 +35,12 @@ class CropDataset(Dataset):
         ]
 
         # Define weather indices used in preprocessing
+        # 7: precipitation
+        # 8: solar radiation
+        # 11: snow depth
+        # 1: max temp
+        # 2: min temp
+        # 29: vap pressure
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
 
         if test_dataset:  # test on missouri and kansas
