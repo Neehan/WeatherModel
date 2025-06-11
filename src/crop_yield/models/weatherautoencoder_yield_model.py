@@ -28,4 +28,4 @@ class WeatherAutoencoderYieldModel(WeatherBERTYieldModel):
         """
         Load pretrained WeatherAutoencoder model
         """
-        self.weather_model.load_pretrained(pretrained_model)
+        return super().load_pretrained(pretrained_model)

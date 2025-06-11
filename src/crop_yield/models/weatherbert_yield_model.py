@@ -76,7 +76,6 @@ class WeatherBERTYieldModel(BaseModel):
         """
         override the load_pretrained method from BaseModel to load the weather model
         """
-        self.logger.info("🔄 WEATHER BERT YIELD MODEL: Loading pretrained model")
         self.weather_model.load_pretrained(pretrained_model, load_out_proj=False)
 
     def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
