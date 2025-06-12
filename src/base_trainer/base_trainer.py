@@ -47,6 +47,8 @@ class BaseTrainer(ABC):
         local_rank: int = 0,
     ):
         self.model: Union[BaseModel, DDP]  # Add type annotation for model attribute
+        self.logger = logging.getLogger(__name__)
+
         self._setup_distributed_training(rank, world_size, local_rank)
         self._setup_model_and_device(model, batch_size, num_epochs)
         self._setup_model_directory()
@@ -338,8 +340,6 @@ class BaseTrainer(ABC):
 
     def _setup_logging_and_output(self):
         """Setup logging and output JSON structure."""
-        self.logger = logging.getLogger(__name__)
-
         if self.rank == 0:
             model_for_params = self._get_underlying_model()
             self.logger.info(
