@@ -49,10 +49,10 @@ class BaseTrainer(ABC):
         self.model: Union[BaseModel, DDP]  # Add type annotation for model attribute
         self._setup_distributed_training(rank, world_size, local_rank)
         self._setup_model_and_device(model, batch_size, num_epochs)
-        self._setup_logging_and_output()
         self._setup_model_directory()
         self._load_pretrained_model(pretrained_model_path)
         self._setup_training_components(init_lr, num_warmup_epochs, decay_factor)
+        self._setup_logging_and_output()
         self._resume_from_checkpoint(resume_from_checkpoint)
 
     # =============================================================================
