@@ -47,12 +47,14 @@ class WeatherBERTYieldModel(BaseModel):
 
     def freeze_weather_model(self):
         if not self.weather_model_frozen:
+            self.logger.info("Freezing weather model")
             for param in self.weather_model.parameters():
                 param.requires_grad = False
             self.weather_model_frozen = True
 
     def unfreeze_weather_model(self):
         if self.weather_model_frozen:
+            self.logger.info("Unfreezing weather model")
             for param in self.weather_model.parameters():
                 param.requires_grad = True
             self.weather_model_frozen = False
