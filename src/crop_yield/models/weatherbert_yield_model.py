@@ -38,26 +38,12 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim, 120),  # weather_dim + past yields
+            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
 
         self.weather_model_frozen = False
-
-    def freeze_weather_model(self):
-        if not self.weather_model_frozen:
-            self.logger.info("Freezing weather model")
-            for param in self.weather_model.parameters():
-                param.requires_grad = False
-            self.weather_model_frozen = True
-
-    def unfreeze_weather_model(self):
-        if self.weather_model_frozen:
-            self.logger.info("Unfreezing weather model")
-            for param in self.weather_model.parameters():
-                param.requires_grad = True
-            self.weather_model_frozen = False
 
     def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
         # Apply attention to reduce sequence dimension
@@ -72,8 +58,7 @@ class WeatherBERTYieldModel(BaseModel):
             weather * attention_weights, dim=1
         )  # batch_size x weather_dim
 
-        # mlp_input = torch.cat([weather_attended, y_past], dim=1)
-        mlp_input = weather_attended
+        mlp_input = torch.cat([weather_attended, y_past], dim=1)
         return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
@@ -127,3 +112,17 @@ class WeatherBERTYieldModel(BaseModel):
             y_past=y_past,
         )
         return output
+
+    def freeze_weather_model(self):
+        if not self.weather_model_frozen:
+            self.logger.info("Freezing weather model")
+            for param in self.weather_model.parameters():
+                param.requires_grad = False
+            self.weather_model_frozen = True
+
+    def unfreeze_weather_model(self):
+        if self.weather_model_frozen:
+            self.logger.info("Unfreezing weather model")
+            for param in self.weather_model.parameters():
+                param.requires_grad = True
+            self.weather_model_frozen = False

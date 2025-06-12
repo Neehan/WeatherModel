@@ -111,13 +111,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         target_yield,
     ) -> Dict[str, torch.Tensor]:
         """Compute training loss for a batch - IMPLEMENTATION OF ABSTRACT METHOD."""
-        current_epoch = self.get_current_epoch()
-        # freeze encoder for 5 epochs
-        if current_epoch and current_epoch < 5:
-            self.model.freeze_weather_model()  # type: ignore
-        else:
-            self.model.unfreeze_weather_model()  # type: ignore
-
         # Forward pass through the model
         predicted_yield = self.model(
             padded_weather,

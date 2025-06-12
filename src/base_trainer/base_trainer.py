@@ -49,10 +49,10 @@ class BaseTrainer(ABC):
         self.model: Union[BaseModel, DDP]  # Add type annotation for model attribute
         self._setup_distributed_training(rank, world_size, local_rank)
         self._setup_model_and_device(model, batch_size, num_epochs)
-        self._setup_training_components(init_lr, num_warmup_epochs, decay_factor)
         self._setup_logging_and_output()
         self._setup_model_directory()
         self._load_pretrained_model(pretrained_model_path)
+        self._setup_training_components(init_lr, num_warmup_epochs, decay_factor)
         self._resume_from_checkpoint(resume_from_checkpoint)
 
     # =============================================================================
@@ -314,7 +314,15 @@ class BaseTrainer(ABC):
     def _setup_training_components(
         self, init_lr: float, num_warmup_epochs: int, decay_factor: float
     ):
-        """Setup optimizer and scheduler."""
+        """
+        Setup optimizer and scheduler.
+
+        CRITICAL: This must be called AFTER _load_pretrained_model() because:
+        - The optimizer captures parameter references at creation time
+        - If we load pretrained weights after optimizer creation, the optimizer
+          will still reference the old (random) parameters, not the new pretrained ones
+        - This was a major bug that prevented pretrained models from being optimized!
+        """
         self.init_lr = init_lr
         self.num_warmup_epochs = num_warmup_epochs
         self.decay_factor = decay_factor
@@ -322,6 +330,7 @@ class BaseTrainer(ABC):
         # Initialize best validation loss tracking
         self.best_val_loss = float("inf")
 
+        # Create optimizer with current model parameters (which should be pretrained if provided)
         self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
         self.scheduler = utils.get_scheduler(
             self.optimizer, num_warmup_epochs, decay_factor
@@ -373,7 +382,13 @@ class BaseTrainer(ABC):
             self.logger.info(
                 f"🔄 Loading pretrained model from: {pretrained_model_path}"
             )
+            self.logger.info(
+                "⚠️  IMPORTANT: Loading pretrained weights BEFORE optimizer creation"
+            )
             self._get_underlying_model().load_pretrained(pretrained_model)
+            self.logger.info(
+                "✅ Pretrained model loaded successfully - optimizer will use these weights"
+            )
 
     def _resume_from_checkpoint(self, resume_from_checkpoint: Optional[str]):
         """Resume from checkpoint if provided."""
