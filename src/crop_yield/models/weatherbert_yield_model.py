@@ -103,3 +103,44 @@ class WeatherBERTYieldModel(BaseModel):
             weather, coord, year, interval, weather_feature_mask=None, y_past=y_past
         )
         return output
+
+    def diagnostic_stats(self, weather, coord, year, interval, weather_feature_mask):
+        """Helper function to check model weights and predictions.
+        Can be commented out when not needed.
+        """
+        with torch.no_grad():
+            predicted_weather = self.weather_model(
+                weather,
+                coord,
+                year,
+                interval,
+                weather_feature_mask=weather_feature_mask,
+            )
+
+            # Get attention weights
+            attention_weights = self.weather_attention(predicted_weather)
+            attention_weights = torch.softmax(attention_weights, dim=1)
+
+            # Compute statistics
+            weather_mean = predicted_weather.mean(
+                dim=(0, 1)
+            )  # mean across batch and sequence
+            weather_std = predicted_weather.std(dim=(0, 1))
+
+            # Compute singular values
+            weather_reshaped = predicted_weather.reshape(-1, predicted_weather.size(-1))
+            _, s, _ = torch.linalg.svd(weather_reshaped)
+
+            # Attention statistics
+            attn_mean = attention_weights.mean(dim=0)
+            attn_std = attention_weights.std(dim=0)
+
+            stats = {
+                "weather_mean": weather_mean,
+                "weather_std": weather_std,
+                "singular_values": s,
+                "attention_mean": attn_mean,
+                "attention_std": attn_std,
+            }
+
+            return stats

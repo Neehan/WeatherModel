@@ -123,6 +123,24 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         # Compute MSE loss
         loss = self.criterion(predicted_yield.squeeze(), target_yield.squeeze())
+
+        # Print diagnostic stats
+        stats = self.model.diagnostic_stats(  # type:ignore
+            padded_weather,
+            coord_processed,
+            year_expanded,
+            interval,
+            weather_feature_mask,
+        )
+        print(f"Weather mean: {torch.mean(stats['weather_mean']).item():.6f}")
+        print(f"Weather std: {torch.mean(stats['weather_std']).item():.6f}")
+        print(
+            f"Top 5 singular values: {stats['singular_values'][:5].cpu().numpy().tolist()}"
+        )
+        print(f"Attention mean: {torch.mean(stats['attention_mean']).item():.6f}")
+        print(f"Attention std: {torch.mean(stats['attention_std']).item():.6f}")
+        print("---")
+
         return {"total_loss": loss}
 
     def compute_validation_loss(
