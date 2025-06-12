@@ -1,17 +1,19 @@
-import torch
-import torch.optim as optim
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from abc import ABC, abstractmethod
+import json
 import logging
 import os
-import json
-from typing import Dict, List, Tuple, Optional, Union
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional, Tuple, Union
+
+import torch
+import torch.distributed as dist
+import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
+
+from src.base_models.base_model import BaseModel
 from src.base_trainer.find_optimal_lr import find_optimal_lr
 from src.utils import utils
 from src.utils.constants import DATA_DIR, DRY_RUN
-from src.base_models.base_model import BaseModel
-from torch.utils.data import DataLoader
 
 
 class BaseTrainer(ABC):

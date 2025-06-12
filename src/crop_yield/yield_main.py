@@ -1,11 +1,12 @@
 import argparse
 import logging
 import os
+import random
+
 import numpy as np
 import torch
-import random
-from src.utils.utils import parse_args, setup_logging
 
+from src.utils.utils import parse_args, setup_logging
 
 parser = argparse.ArgumentParser()
 
@@ -99,14 +100,17 @@ def main():
         torch.cuda.manual_seed(seed)
         torch.use_deterministic_algorithms(True)
 
-        from src.crop_yield.trainers.weatherbert_yield_trainer import (
-            weatherbert_yield_training_loop,
+        from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
+            weatherautoencoder_mixture_yield_training_loop,
         )
-        from src.crop_yield.trainers.weatherformer_yield_trainer import (
-            weatherformer_yield_training_loop,
+        from src.crop_yield.trainers.weatherautoencoder_sine_yield_trainer import (
+            weatherautoencoder_sine_yield_training_loop,
         )
         from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
             weatherautoencoder_yield_training_loop,
+        )
+        from src.crop_yield.trainers.weatherbert_yield_trainer import (
+            weatherbert_yield_training_loop,
         )
         from src.crop_yield.trainers.weathercnn_yield_trainer import (
             weathercnn_yield_training_loop,
@@ -114,11 +118,8 @@ def main():
         from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
             weatherformer_mixture_yield_training_loop,
         )
-        from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
-            weatherautoencoder_mixture_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherautoencoder_sine_yield_trainer import (
-            weatherautoencoder_sine_yield_training_loop,
+        from src.crop_yield.trainers.weatherformer_yield_trainer import (
+            weatherformer_yield_training_loop,
         )
 
         # Validate train-pct parameter

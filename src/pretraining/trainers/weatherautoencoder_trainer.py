@@ -65,5 +65,4 @@ def weatherautoencoder_training_loop(args_dict):
         world_size=world_size,
         local_rank=local_rank,
     )
-
-    return trainer.train()
+    return trainer.train(use_optimal_lr=args_dict["use_optimal_lr"])

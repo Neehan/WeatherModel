@@ -1,12 +1,12 @@
-from typing import Union, TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING
+
+import numpy as np
 import torch
 import torch.distributed as dist
-from tqdm import tqdm
 from torch.utils.data import DataLoader
-import torch.optim as optim
-import torch.nn as nn
-import logging
-import numpy as np
+from tqdm import tqdm
+
 from src.utils.constants import DRY_RUN
 
 if TYPE_CHECKING:

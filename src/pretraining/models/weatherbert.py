@@ -1,11 +1,12 @@
+import copy
+from typing import Optional
+
 import torch
 import torch.nn as nn
-from typing import Optional
-import copy
 
-from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
-from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 from src.base_models.base_model import BaseModel
+from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
+from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
 from src.utils.utils import normalize_year_interval_coords
 
 
@@ -112,6 +113,7 @@ class WeatherBERT(BaseModel):
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
         # mask the masked dimensions
+        # This forces the model to predict based on context, which is correct BERT behavior
         weather = weather * (~weather_feature_mask)
 
         input_tensor = torch.cat([weather, coords, year, interval], dim=2)

@@ -1,11 +1,12 @@
-import torch
-import torch.nn as nn
 from typing import Optional
 
-from src.pretraining.models.weatherbert import WeatherBERT
-from src.crop_yield.models.weathercnn_yield_model import WeatherCNNYieldModel
-from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
+import torch
+import torch.nn as nn
+
 from src.base_models.base_model import BaseModel
+from src.crop_yield.models.weathercnn_yield_model import WeatherCNNYieldModel
+from src.pretraining.models.weatherbert import WeatherBERT
+from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 
 
 class WeatherBERTYieldModel(BaseModel):

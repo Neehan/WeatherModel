@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from src.pretraining.models.weatherautoencoder import WeatherAutoencoder
+
 from src.crop_yield.models.weatherautoencoder_yield_model import (
     WeatherAutoencoderYieldModel,
 )
-from src.utils.constants import TOTAL_WEATHER_VARS
+from src.pretraining.models.weatherautoencoder import WeatherAutoencoder
 
 
 class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):

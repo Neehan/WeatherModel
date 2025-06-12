@@ -1,12 +1,13 @@
-import numpy as np
 import logging
-from typing import Type, Dict, Any, List
 import os
 import random
+from typing import Any, Dict, List, Type
 
+import numpy as np
 import torch
-from src.base_trainer.base_trainer import BaseTrainer
+
 from src.base_models.base_model import BaseModel
+from src.base_trainer.base_trainer import BaseTrainer
 
 
 class CrossValidator:
