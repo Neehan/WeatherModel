@@ -68,7 +68,6 @@ class WeatherBERTYieldModel(BaseModel):
         - imputed_weather: batch_size x seq_len x weather_dim
         - weather_feature_mask: batch_size x seq_len x weather_dim
         """
-        return imputed_weather
         return (
             original_weather
             * (~weather_feature_mask)  # keep original where mask is False
