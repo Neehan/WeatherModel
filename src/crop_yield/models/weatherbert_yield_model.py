@@ -68,12 +68,11 @@ class WeatherBERTYieldModel(BaseModel):
         - imputed_weather: batch_size x seq_len x weather_dim
         - weather_feature_mask: batch_size x seq_len x weather_dim
         """
-        # return (
-        #     original_weather
-        #     * (~weather_feature_mask)  # keep original where mask is False
-        #     + imputed_weather * weather_feature_mask
-        # )
-        return imputed_weather
+        return (
+            original_weather
+            * (~weather_feature_mask)  # keep original where mask is False
+            + imputed_weather * weather_feature_mask
+        )
 
     def load_pretrained(self, pretrained_model: WeatherBERT):
         """
@@ -100,10 +99,10 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         # Fast combination using element-wise ops
-        # weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
+        weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
         # we imputed weather, the mask is not necessary
         output = self.yield_model(
-            predicted_weather,
+            weather,
             coord,
             year,
             interval,
