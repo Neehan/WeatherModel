@@ -70,7 +70,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         """
         # Compute log q(z|x) - posterior log-density for masked features only
         log_q_z_x_all = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
-        log_q_z_x_masked = log_q_z_x_all * weather_feature_mask  # apply mask
+        log_q_z_x_masked = log_q_z_x_all  # * weather_feature_mask  # apply mask
         log_q_z_x = torch.sum(log_q_z_x_masked, dim=(1, 2))  # [batch_size]
 
         # Compute log p(z) - mixture prior log-density for masked features only
@@ -85,7 +85,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         )
         # Apply mask to only consider masked features
         log_component_densities_masked = (
-            log_component_densities_all * weather_feature_mask.unsqueeze(0)
+            log_component_densities_all  # * weather_feature_mask.unsqueeze(0)
         )
         log_component_densities = torch.sum(
             log_component_densities_masked, dim=(2, 3)
