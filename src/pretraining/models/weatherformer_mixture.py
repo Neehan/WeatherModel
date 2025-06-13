@@ -1,8 +1,11 @@
+import copy
+from typing import Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple
+
 from src.pretraining.models.weatherformer import WeatherFormer
-from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
+from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
 
 """
 This class implements the WeatherFormerMixture model, which extends WeatherFormer
@@ -41,10 +44,13 @@ class WeatherFormerMixture(WeatherFormer):
         # Initialize log_var_k to give var_k around 0.1-1.0 range instead of exactly 1.0
         self.log_var_k = nn.Parameter(torch.randn(k, max_len, output_dim) * 0.1 - 1.0)
 
-    def load_pretrained(self, pretrained_model: "WeatherFormerMixture"):
-        super().load_pretrained(pretrained_model)
-        self.mu_k = pretrained_model.mu_k
-        self.log_var_k = pretrained_model.log_var_k
+    def load_pretrained(
+        self, pretrained_model: "WeatherFormerMixture", load_out_proj=True
+    ):
+        super().load_pretrained(pretrained_model, load_out_proj)
+        if load_out_proj:
+            self.mu_k = copy.deepcopy(pretrained_model.mu_k)
+            self.log_var_k = copy.deepcopy(pretrained_model.log_var_k)
         self.k = pretrained_model.k
 
     def forward(
