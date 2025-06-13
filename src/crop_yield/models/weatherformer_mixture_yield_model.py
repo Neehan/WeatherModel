@@ -42,8 +42,6 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         year,
         interval,
         weather_feature_mask,
-        practices,
-        soil,
         y_past,
     ):
         # Prepare weather input using inherited method
