@@ -11,13 +11,16 @@ from src.pretraining.trainers.weatherautoencoder_trainer import (
 from src.pretraining.trainers.weatherformer_mixture_trainer import (
     weatherformer_mixture_training_loop,
 )
+from src.pretraining.trainers.weatherformer_sinusoid_trainer import (
+    weatherformer_sinusoid_training_loop,
+)
 from src.utils.utils import setup_distributed, cleanup_distributed, setup_logging
 from src.utils.utils import parse_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    help="model type is weatherformer, weatherbert, weatherautoencoder, or weatherformermixture",
+    help="model type is weatherformer, weatherbert, weatherautoencoder, weatherformermixture, or weatherformersinusoid",
     default="weatherformer",
     type=str,
 )
@@ -109,9 +112,11 @@ def main():
             weatherautoencoder_training_loop(args_dict)
         elif model_type == "weatherformermixture":
             weatherformer_mixture_training_loop(args_dict)
+        elif model_type == "weatherformersinusoid":
+            weatherformer_sinusoid_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherformer', 'weatherbert', 'weatherautoencoder', or 'weatherformermixture'"
+                f"Unknown model type: {model_type}. Choose 'weatherformer', 'weatherbert', 'weatherautoencoder', 'weatherformermixture', or 'weatherformersinusoid'"
             )
     finally:
         # Clean up distributed environment
