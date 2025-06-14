@@ -100,6 +100,6 @@ class WeatherFormerSinusoid(WeatherFormer):
         pos = self.positions[:, :seq_len, :]
         pos = pos * 2 * torch.pi * interval.unsqueeze(2) / 365.0
         mu_p = amplitude * torch.sin(frequency * pos + phase)
-        var_p = torch.exp(self.log_var_prior)
+        var_p = torch.exp(self.log_var_prior)[:, :seq_len, :]
 
         return mu_x, var_x, mu_p, var_p

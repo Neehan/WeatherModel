@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, or weathercnn",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, or weathercnn",
     default="weatherformer",
     type=str,
 )
@@ -118,6 +118,9 @@ def main():
         from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
             weatherformer_mixture_yield_training_loop,
         )
+        from src.crop_yield.trainers.weatherformer_sinusoid_yield_trainer import (
+            weatherformer_sinusoid_yield_training_loop,
+        )
         from src.crop_yield.trainers.weatherformer_yield_trainer import (
             weatherformer_yield_training_loop,
         )
@@ -135,6 +138,10 @@ def main():
             cross_validation_results = weatherbert_yield_training_loop(args_dict)
         elif model_type == "weatherformer":
             cross_validation_results = weatherformer_yield_training_loop(args_dict)
+        elif model_type == "weatherformersinusoid":
+            cross_validation_results = weatherformer_sinusoid_yield_training_loop(
+                args_dict
+            )
         elif model_type == "weatherformermixture":
             cross_validation_results = weatherformer_mixture_yield_training_loop(
                 args_dict
@@ -153,7 +160,7 @@ def main():
             cross_validation_results = weathercnn_yield_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
+                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
             )
 
         logger = logging.getLogger(__name__)
