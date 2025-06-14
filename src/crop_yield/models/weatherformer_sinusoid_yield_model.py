@@ -53,9 +53,11 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         )
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
-        # where epsilon ~ N(0, 1) but only for masked dimensions
-        epsilon = torch.randn_like(mu_x) * weather_feature_mask
+        # where epsilon ~ N(0, 1)
+        epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
+
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # we sampled weather, the mask is not necessary
         yield_pred = self.yield_model(
