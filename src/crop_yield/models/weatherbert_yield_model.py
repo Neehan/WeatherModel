@@ -98,11 +98,8 @@ class WeatherBERTYieldModel(BaseModel):
             weather_feature_mask=weather_feature_mask,
         )
 
-        # Do not impute weatherfor weatherbert which does better this way
-        # weather = self._impute_weather(weather, predicted_weather, weather_feature_mask)
-        # we imputed weather, the mask is not necessary
         output = self.yield_model(
-            weather,
+            predicted_weather,
             coord,
             year,
             interval,
