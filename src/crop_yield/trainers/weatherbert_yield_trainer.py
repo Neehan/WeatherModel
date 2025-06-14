@@ -13,16 +13,9 @@ from src.crop_yield.dataloader.yield_dataloader import (
 from src.base_trainer.cross_validator import CrossValidator
 import os
 
+# Test years for 5-fold cross validation
+TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
 FOLD_IDX = 0
-
-TEST_STATES_MAP = [
-    ("south dakota", "iowa"),
-    ("nebraska", "minnesota"),
-    ("north dakota", "kansas"),
-    ("indiana", "missouri"),
-    ("illinois", "minnesota"),
-    ("nebraska", "iowa"),
-]
 
 
 class WeatherBERTYieldTrainer(BaseTrainer):
@@ -44,7 +37,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self,
         crop_df: pd.DataFrame,
         n_past_years: int,
-        train_pct: int,
+        n_train_years: int,
         beta: float,
         **kwargs,
     ):
@@ -52,9 +45,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         # Store yield-specific parameters
         self.crop_df = crop_df
-        self.available_states = list(sorted(set(crop_df["State"].values)))
         self.n_past_years = n_past_years
-        self.train_pct = train_pct
+        self.n_train_years = n_train_years
         self.beta = beta
         self.output_json["model_config"]["beta"] = beta
         # Override criterion for yield prediction
@@ -67,9 +59,9 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 os.makedirs(self.model_dir)
 
         global FOLD_IDX
-        self.test_states = TEST_STATES_MAP[FOLD_IDX]
+        self.test_year = TEST_YEARS[FOLD_IDX]
         FOLD_IDX += 1
-        self.logger.info(f"Testing on states: {','.join(self.test_states)}")
+        self.logger.info(f"Testing on year: {self.test_year}")
 
         # Cache for datasets to avoid recreation during cross-validation
         self.train_loader: Optional[DataLoader] = None
@@ -87,12 +79,12 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         train_loader, test_loader = get_train_test_loaders(
             self.crop_df,
-            self.test_states,
+            self.n_train_years,
+            self.test_year,
             self.n_past_years,
             self.batch_size,
             shuffle,
             num_workers=0 if self.world_size > 1 else 8,
-            train_pct=self.train_pct,
         )
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -183,15 +175,11 @@ def _create_yield_training_setup(args_dict):
     # Set device for this process
     device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
-    # Calculate MLP input dimension
-
     # Read dataset
     crop_df = read_soybean_dataset(DATA_DIR)
 
-    # Validate cross validation parameter
-    cross_validation_k = args_dict["cross_validation_k"]
-    if cross_validation_k is None or cross_validation_k <= 1:
-        raise ValueError("Cross validation k must be greater than 1")
+    # Use fixed k-fold cross validation with test years [2015, 2016, 2017, 2018]
+    cross_validation_k = len(TEST_YEARS)
 
     return {
         "rank": rank,
@@ -240,7 +228,7 @@ def _run_yield_cross_validation(
     trainer_kwargs = {
         "crop_df": setup_params["crop_df"],
         "n_past_years": args_dict["n_past_years"],
-        "train_pct": args_dict["train_pct"],
+        "n_train_years": args_dict["n_train_years"],
         "beta": setup_params["beta"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],

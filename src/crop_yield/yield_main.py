@@ -48,8 +48,8 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
-    "--cross-validation-k",
-    help="number of cross validation folds",
+    "--n-train-years",
+    help="number of years of training data to use (start year will be calculated as test_year - n_train_years + 1)",
     default=5,
     type=int,
 )
@@ -58,12 +58,6 @@ parser.add_argument(
     help="beta parameter for WeatherFormer variational loss (sigma_y_squared)",
     default=1e-4,
     type=float,
-)
-parser.add_argument(
-    "--train-pct",
-    help="percentage of training data to use (1-100)",
-    default=100,
-    type=int,
 )
 parser.add_argument(
     "--use-optimal-lr",
@@ -124,12 +118,6 @@ def main():
         from src.crop_yield.trainers.weatherformer_yield_trainer import (
             weatherformer_yield_training_loop,
         )
-
-        # Validate train-pct parameter
-        if not 1 <= args_dict["train_pct"] <= 100:
-            raise ValueError(
-                f"train-pct must be between 1 and 100, got {args_dict['train_pct']}"
-            )
 
         # Determine which training function to use based on model type
         model_type = args_dict["model"].lower()

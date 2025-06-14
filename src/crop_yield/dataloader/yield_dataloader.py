@@ -11,9 +11,7 @@ SHOW_WARNING = False
 
 
 class CropDataset(Dataset):
-    def __init__(
-        self, data, test_states, test_dataset=False, n_past_years=5, train_pct=100
-    ):
+    def __init__(self, data, start_year, test_year, test_dataset=False, n_past_years=5):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
         soil_measurements = [
@@ -45,17 +43,16 @@ class CropDataset(Dataset):
         # 29: vap pressure
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
 
-        if test_dataset:  # test on missouri and kansas
+        if test_dataset:  # test on specific year
+            candidate_data = data[data["year"] == test_year]
+        else:  # train on years from start_year to year before test_year
             candidate_data = data[
-                (data["State"] == test_states[0]) | (data["State"] == test_states[1])
-            ]
-        else:
-            candidate_data = data[
-                (data["State"] != test_states[0]) & (data["State"] != test_states[1])
+                (data["year"] >= start_year) & (data["year"] < test_year)
             ]
 
         # Filter to only include cases where we have complete historical data
         valid_indices = []
+
         for _, row in candidate_data.iterrows():
             year, loc_ID = row["year"], row["loc_ID"]
             # Get the actual data we would use for this location/year
@@ -68,26 +65,22 @@ class CropDataset(Dataset):
 
         self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
 
-        # Apply train_pct limitation for training data only
-        if not test_dataset and train_pct < 100:
-            # Calculate how many samples to use based on train_pct
-            total_samples = len(self.index)
-            samples_to_use = int(total_samples * train_pct / 100.0)
-            # Shuffle indices to ensure representative sampling, then take first samples_to_use
-            shuffled_index = self.index.sample(frac=1, random_state=42).reset_index(
-                drop=True
-            )
-            self.index = shuffled_index.iloc[:samples_to_use]
-
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
-            f"Creating {dataset_name} dataloader with {len(self.index)} samples."
+            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-1)}."
         )
 
         self.data = []
         global SHOW_WARNING
 
-        for idx in range(1000 if DRY_RUN else len(self.index)):
+        total_samples = len(self.index)
+        samples_to_process = total_samples // 20 if DRY_RUN else total_samples
+
+        if total_samples == 0:
+            logger.warning(f"No samples found for {dataset_name} dataset!")
+            return
+
+        for idx in range(min(samples_to_process, total_samples)):
             year, loc_ID = self.index.iloc[idx].values.astype("int")
             # Get exactly n_past_years + 1 years of data for this location
             query_data = data[(data["year"] <= year) & (data["loc_ID"] == loc_ID)].tail(
@@ -189,7 +182,7 @@ class CropDataset(Dataset):
             )
 
     def __len__(self):
-        return 1000 if DRY_RUN else len(self.index)
+        return len(self.data)
 
     def __getitem__(self, idx):
         return self.data[idx]
@@ -206,11 +199,16 @@ class CropDataset(Dataset):
 
 def split_train_test_by_year(
     soybean_df: pd.DataFrame,
-    test_states,
+    n_train_years: int,
+    test_year: int,
     standardize: bool = True,
     n_past_years: int = 5,
-    train_pct: int = 100,
 ):
+    # you need n_train_years + 1 years of data
+    # n_train years to have at least one training datapoint
+    # last 1 year is test year
+    start_year = test_year - n_train_years
+
     data = soybean_df[
         soybean_df["year"] > 1981.0
     ]  # must be > 1981 otherwise all past data is just 0
@@ -237,13 +235,13 @@ def split_train_test_by_year(
 
     train_dataset = CropDataset(
         data.copy(),
-        test_states,
+        start_year,
+        test_year,
         test_dataset=False,
         n_past_years=n_past_years,
-        train_pct=train_pct,
     )
     test_dataset = CropDataset(
-        data.copy(), test_states, test_dataset=True, n_past_years=n_past_years
+        data.copy(), start_year, test_year, test_dataset=True, n_past_years=n_past_years
     )
 
     # Return the train and test datasets
@@ -261,21 +259,33 @@ def read_soybean_dataset(data_dir: str):
 
 def get_train_test_loaders(
     crop_df: pd.DataFrame,
-    test_states,
+    n_train_years: int,
+    test_year: int,
     n_past_years: int,
     batch_size: int,
     shuffle: bool = False,
     num_workers: int = 8,
-    train_pct: int = 100,
 ) -> Tuple[DataLoader, DataLoader]:
+
+    if n_train_years < n_past_years + 1:
+        raise ValueError(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}."
+        )
 
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df,
-        test_states,
+        n_train_years,
+        test_year,
         standardize=True,
         n_past_years=n_past_years,
-        train_pct=train_pct,
     )
+
+    if n_train_years < n_past_years + 1:
+        raise ValueError(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}."
+        )
 
     train_loader = train_dataset.get_data_loader(
         batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
