@@ -48,6 +48,10 @@ class CropDataset(Dataset):
             candidate_data = data[
                 (data["year"] >= start_year) & (data["year"] < test_year)
             ]
+
+        # Filter to only include cases where we have complete historical data
+        # Optimized vectorized approach instead of row-by-row iteration
+
         # For each location, find the minimum year where we have n_past_years + 1 years of data
         location_min_years = data.groupby("loc_ID")["year"].min()
 
@@ -130,7 +134,7 @@ class CropDataset(Dataset):
             )  # (n_years * seq_len, n_features)
 
             # Process coordinates - use only the first coordinate (same for all years in this location)
-            coord_processed = coord[0, :].clone()  # (2,) - clone to avoid shared memory
+            coord_processed = coord[0, :]  # (2,)
 
             # Expand year to match the sequence length
             # year_data is [n_years], need to add fraction for each week (1/52, 2/52, ..., 52/52)
@@ -142,9 +146,9 @@ class CropDataset(Dataset):
             ) + week_fractions.unsqueeze(  # [n_years, 1]
                 0
             )  # [1, seq_len]  # [n_years, seq_len]
-            year_expanded = (
-                year_expanded.contiguous().view(n_years * seq_len).clone()
-            )  # [n_years * seq_len] - clone to ensure independence
+            year_expanded = year_expanded.contiguous().view(
+                n_years * seq_len
+            )  # [n_years * seq_len]
 
             # Create padded weather with specific weather indices
             padded_weather = torch.zeros(
@@ -158,30 +162,24 @@ class CropDataset(Dataset):
                 dtype=torch.bool,
             )
             weather_feature_mask[self.weather_indices] = False
-            weather_feature_mask = (
-                weather_feature_mask.unsqueeze(0).expand(n_years * seq_len, -1).clone()
-            )  # Clone to avoid shared memory issues in DataLoader
+            weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
+                n_years * seq_len, -1
+            )
 
             # Create temporal interval (weekly data)
             interval = torch.full((1,), 7, dtype=torch.float32)
 
             self.data.append(
                 (
-                    padded_weather.clone(),  # (n_years * 52, TOTAL_WEATHER_VARS) - ensure independence
+                    padded_weather,  # (n_years * 52, TOTAL_WEATHER_VARS)
                     coord_processed,  # (2,)
                     year_expanded,  # (n_years * 52,)
-                    interval.clone(),  # (1,) - ensure independence
+                    interval,  # (1,)
                     weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
-                    torch.FloatTensor(
-                        practices
-                    ).clone(),  # (n_years, 14) - ensure independence
-                    torch.FloatTensor(
-                        soil
-                    ).clone(),  # (n_years, 11, 6) - ensure independence
-                    torch.FloatTensor(
-                        y_past
-                    ).clone(),  # (n_years,) - ensure independence
-                    torch.FloatTensor(y).clone(),  # (1,) - ensure independence
+                    practices,  # (n_years, 14)
+                    soil,  # (n_years, 11, 6)
+                    y_past,  # (n_years,)
+                    y,  # (1,)
                 )
             )
 
@@ -276,6 +274,14 @@ def get_train_test_loaders(
             f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
             f"Available training years: {n_train_years}."
         )
+
+    if n_train_years < n_past_years + 1:
+        logger.warning(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}. "
+            f"Setting n_past_years to {n_train_years - 1}."
+        )
+        n_past_years = n_train_years - 1
 
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df,
