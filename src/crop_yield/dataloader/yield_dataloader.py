@@ -4,10 +4,9 @@ from typing import Tuple
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+import numpy as np
 
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
-
-SHOW_WARNING = False
 
 
 class CropDataset(Dataset):
@@ -51,17 +50,32 @@ class CropDataset(Dataset):
             ]
 
         # Filter to only include cases where we have complete historical data
+        # Optimized approach: group by location and vectorize the filtering
+        data_sorted = data.sort_values(["loc_ID", "year"])
+        location_groups = data_sorted.groupby("loc_ID")
+
         valid_indices = []
 
-        for _, row in candidate_data.iterrows():
-            year, loc_ID = row["year"], row["loc_ID"]
-            # Get the actual data we would use for this location/year
-            historical_data = data[
-                (data["year"] <= year) & (data["loc_ID"] == loc_ID)
-            ].tail(n_past_years + 1)
-            # Only include if we have exactly the right amount of data
-            if len(historical_data) == n_past_years + 1:
-                valid_indices.append((year, loc_ID))
+        for loc_ID, loc_data in location_groups:
+            # Get years available for this location
+            available_years = loc_data["year"].values
+
+            # For each candidate year for this location, check if we have enough historical data
+            candidate_years = candidate_data[candidate_data["loc_ID"] == loc_ID][
+                "year"
+            ].values
+
+            for year in candidate_years:
+                # Find the position of this year in the sorted data
+                year_idx = np.where(available_years <= year)[0]
+
+                # Check if we have exactly n_past_years + 1 years of data ending at this year
+                if len(year_idx) >= n_past_years + 1:
+                    # Take the last n_past_years + 1 years
+                    historical_years = available_years[year_idx[-(n_past_years + 1) :]]
+                    # Verify we have exactly the right amount of consecutive data
+                    if len(historical_years) == n_past_years + 1:
+                        valid_indices.append((year, loc_ID))
 
         self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
 
@@ -71,8 +85,6 @@ class CropDataset(Dataset):
         )
 
         self.data = []
-        global SHOW_WARNING
-
         total_samples = len(self.index)
         samples_to_process = total_samples // 20 if DRY_RUN else total_samples
 
@@ -108,13 +120,13 @@ class CropDataset(Dataset):
             # get the true yield
             y = query_data.iloc[-1:]["yield"].values.astype("float32").copy()
             y_past = query_data["yield"].values.astype("float32")
-            # the current year's yield is the target variable, so replace it with last year's yield
-            y_past[-1] = y_past[-2] if len(y_past) > 1 else -5
-            if len(y_past) <= 1 and not SHOW_WARNING:
-                logger.warning(
-                    f"Only 1 year of yield data for location {loc_ID} in year {year}. y_past value set to -5."
+            if len(y_past) <= 1:
+                raise ValueError(
+                    f"Only 1 year of yield data for location {loc_ID} in year {year}. "
+                    f"y_past value set to -5."
                 )
-                SHOW_WARNING = True
+            # the current year's yield is the target variable, so replace it with last year's yield
+            y_past[-1] = y_past[-2]
 
             # Preprocess weather data for the model
             n_years, n_features, seq_len = weather.shape
@@ -267,11 +279,19 @@ def get_train_test_loaders(
     num_workers: int = 8,
 ) -> Tuple[DataLoader, DataLoader]:
 
-    if n_train_years < n_past_years + 1:
+    if n_train_years <= 1:
         raise ValueError(
             f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
             f"Available training years: {n_train_years}."
         )
+
+    if n_train_years < n_past_years + 1:
+        logger.warning(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}. "
+            f"Setting n_past_years to {n_train_years - 1}."
+        )
+        n_past_years = n_train_years - 1
 
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df,
