@@ -158,9 +158,9 @@ class CropDataset(Dataset):
                 dtype=torch.bool,
             )
             weather_feature_mask[self.weather_indices] = False
-            weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
-                n_years * seq_len, -1
-            )
+            weather_feature_mask = (
+                weather_feature_mask.unsqueeze(0).expand(n_years * seq_len, -1).clone()
+            )  # Clone to avoid shared memory issues in DataLoader
 
             # Create temporal interval (weekly data)
             interval = torch.full((1,), 7, dtype=torch.float32)
