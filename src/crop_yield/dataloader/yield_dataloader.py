@@ -130,7 +130,7 @@ class CropDataset(Dataset):
             )  # (n_years * seq_len, n_features)
 
             # Process coordinates - use only the first coordinate (same for all years in this location)
-            coord_processed = coord[0, :]  # (2,)
+            coord_processed = coord[0, :].clone()  # (2,) - clone to avoid shared memory
 
             # Expand year to match the sequence length
             # year_data is [n_years], need to add fraction for each week (1/52, 2/52, ..., 52/52)
@@ -142,9 +142,9 @@ class CropDataset(Dataset):
             ) + week_fractions.unsqueeze(  # [n_years, 1]
                 0
             )  # [1, seq_len]  # [n_years, seq_len]
-            year_expanded = year_expanded.contiguous().view(
-                n_years * seq_len
-            )  # [n_years * seq_len]
+            year_expanded = (
+                year_expanded.contiguous().view(n_years * seq_len).clone()
+            )  # [n_years * seq_len] - clone to ensure independence
 
             # Create padded weather with specific weather indices
             padded_weather = torch.zeros(
@@ -167,15 +167,21 @@ class CropDataset(Dataset):
 
             self.data.append(
                 (
-                    padded_weather,  # (n_years * 52, TOTAL_WEATHER_VARS)
+                    padded_weather.clone(),  # (n_years * 52, TOTAL_WEATHER_VARS) - ensure independence
                     coord_processed,  # (2,)
                     year_expanded,  # (n_years * 52,)
-                    interval,  # (1,)
+                    interval.clone(),  # (1,) - ensure independence
                     weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
-                    practices,  # (n_years, 14)
-                    soil,  # (n_years, 11, 6)
-                    y_past,  # (n_years,)
-                    y,  # (1,)
+                    torch.FloatTensor(
+                        practices
+                    ).clone(),  # (n_years, 14) - ensure independence
+                    torch.FloatTensor(
+                        soil
+                    ).clone(),  # (n_years, 11, 6) - ensure independence
+                    torch.FloatTensor(
+                        y_past
+                    ).clone(),  # (n_years,) - ensure independence
+                    torch.FloatTensor(y).clone(),  # (1,) - ensure independence
                 )
             )
 
