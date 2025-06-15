@@ -26,14 +26,33 @@ class WeatherCNNYieldModel(BaseModel):
             device=device,
         )
 
-        # MLP for yield prediction (copied from WeatherBERTYieldModel)
+        # Attention mechanism to reduce sequence dimension (identical to WeatherBERT)
+        self.weather_attention = nn.Sequential(
+            nn.Linear(output_dim, 16), nn.GELU(), nn.Linear(16, 1)
+        )
+
+        # MLP for yield prediction (identical to WeatherBERT)
         self.yield_mlp = nn.Sequential(
-            nn.Linear(
-                output_dim + n_past_years + 1, 120
-            ),  # n_past_years + 1 past yields
+            nn.Linear(output_dim + n_past_years + 1, 120),  # output_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
+
+    def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
+        # Apply attention to reduce sequence dimension (identical to WeatherBERT)
+        # Compute attention weights
+        attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
+        attention_weights = torch.softmax(
+            attention_weights, dim=1
+        )  # normalize across sequence
+
+        # Apply attention to get weighted sum
+        weather_attended = torch.sum(
+            weather * attention_weights, dim=1
+        )  # batch_size x output_dim
+
+        mlp_input = torch.cat([weather_attended, y_past], dim=1)
+        return self.yield_mlp(mlp_input)
 
     def load_pretrained(self, pretrained_model: WeatherCNN):
         """
@@ -50,7 +69,8 @@ class WeatherCNNYieldModel(BaseModel):
         weather_feature_mask,
         y_past,
     ):
-        # dont pass the mask
+        # Get weather representations from CNN (batch_size, n_years, output_dim)
+        # it doesnt support mask
         weather = self.cnn(
             padded_weather,
             coord,
@@ -58,7 +78,14 @@ class WeatherCNNYieldModel(BaseModel):
             interval,
             weather_feature_mask=None,
         )
-        mlp_input = torch.cat([weather, y_past], dim=1)
-        # Apply MLP
-        output = self.yield_mlp(mlp_input)
+
+        # Use identical yield model as WeatherBERT
+        output = self.yield_model(
+            weather,
+            coord,
+            year,
+            interval,
+            weather_feature_mask=None,
+            y_past=y_past,
+        )
         return output

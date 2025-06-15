@@ -26,7 +26,11 @@ class WeatherCNN(BaseModel):
         self.max_len = max_len
         self.device = device
 
-        # CNN layers for processing weather sequences
+        # Assume weekly data: 52 weeks per year
+        self.weeks_per_year = 52
+        self.n_years = max_len // self.weeks_per_year
+
+        # CNN layers for processing weather sequences (per year)
         self.weather_cnn = nn.Sequential(
             nn.Conv1d(
                 in_channels=1, out_channels=8, kernel_size=9, stride=1, padding=0
@@ -54,13 +58,17 @@ class WeatherCNN(BaseModel):
         )
 
         # Calculate the final sequence length after all CNN operations
-        # Use a dummy input to calculate CNN output features per input dimension
-        dummy_input = torch.zeros(self.input_dim, 1, max_len)
+        # Use a dummy input to calculate CNN output features per year
+        dummy_input = torch.zeros(1, 1, self.weeks_per_year)
         with torch.no_grad():
             dummy_output = self.weather_cnn(dummy_input)
-        self.final_fc_input_size = dummy_output.shape[1] * self.input_dim
-        # Final combination layer - input_dim * cnn_features_per_input
-        self.final_fc = nn.Linear(self.final_fc_input_size, output_dim)
+        self.cnn_features_per_feature = dummy_output.shape[1]
+        self.cnn_features_per_year = self.cnn_features_per_feature * self.input_dim
+
+        # FC layer to combine features per year (like in original)
+        self.weather_fc = nn.Sequential(
+            nn.Linear(self.cnn_features_per_year, output_dim), nn.ReLU()
+        )
 
     def load_pretrained(self, pretrained_model: "WeatherCNN"):
         """Load weights from a pretrained WeatherCNN model by deep copying each layer."""
@@ -77,13 +85,13 @@ class WeatherCNN(BaseModel):
             raise ValueError(
                 f"expected max length {self.max_len} but received {pretrained_model.max_len}"
             )
-        if self.final_fc_input_size != pretrained_model.final_fc_input_size:
+        if self.cnn_features_per_year != pretrained_model.cnn_features_per_year:
             raise ValueError(
-                f"expected final FC input size {self.final_fc_input_size} but received {pretrained_model.final_fc_input_size}"
+                f"expected CNN features per year {self.cnn_features_per_year} but received {pretrained_model.cnn_features_per_year}"
             )
 
         self.weather_cnn = copy.deepcopy(pretrained_model.weather_cnn)
-        self.final_fc = copy.deepcopy(pretrained_model.final_fc)
+        self.weather_fc = copy.deepcopy(pretrained_model.weather_fc)
 
     def forward(
         self,
@@ -134,23 +142,32 @@ class WeatherCNN(BaseModel):
             [weather, coords, year, interval], dim=2
         )  # batch_size x seq_len x input_dim
 
-        # Process each feature dimension through CNN while preserving sequence
-        # Transpose to (batch_size * input_dim, 1, seq_len) for conv1d processing
-        input_tensor = input_tensor.transpose(1, 2)  # batch_size x input_dim x seq_len
-        batch_size, input_dim, seq_len = input_tensor.shape
+        # Reshape to process per year: (batch_size, n_years, weeks_per_year, input_dim)
+        input_tensor = input_tensor.view(
+            batch_size, self.n_years, self.weeks_per_year, self.input_dim
+        )
 
-        # Reshape to process each feature separately: (batch_size * input_dim, 1, seq_len)
-        input_tensor = input_tensor.reshape(batch_size * input_dim, 1, seq_len)
+        # Reshape to process each feature of each year separately: (batch_size * n_years * input_dim, 1, weeks_per_year)
+        input_tensor = input_tensor.reshape(
+            batch_size * self.n_years * self.input_dim, 1, self.weeks_per_year
+        )
 
-        # Pass all features through CNN in parallel
+        # Pass each feature of each year through CNN
         cnn_output = self.weather_cnn(
             input_tensor
-        )  # (batch_size * input_dim, features)
+        )  # (batch_size * n_years * input_dim, cnn_features_per_feature)
 
-        # Reshape back to (batch_size, final_fc_input_size)
-        cnn_output = cnn_output.reshape(batch_size, self.final_fc_input_size)
+        # Reshape to combine features per year: (batch_size * n_years, cnn_features_per_year)
+        cnn_output = cnn_output.view(
+            batch_size * self.n_years, self.cnn_features_per_year
+        )
 
-        # Pass through final FC layer
-        final_output = self.final_fc(cnn_output)
+        # Apply FC layer to combine features per year
+        year_features = self.weather_fc(
+            cnn_output
+        )  # (batch_size * n_years, output_dim)
 
-        return final_output
+        # Reshape back to separate years: (batch_size, n_years, output_dim)
+        year_features = year_features.view(batch_size, self.n_years, self.output_dim)
+
+        return year_features
