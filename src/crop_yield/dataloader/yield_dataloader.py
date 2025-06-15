@@ -52,15 +52,23 @@ class CropDataset(Dataset):
         # Filter to only include cases where we have complete historical data
         valid_indices = []
 
+        # Group data by location for efficient processing
+        data_by_location = data.groupby("loc_ID")
+
         for _, row in candidate_data.iterrows():
             year, loc_ID = row["year"], row["loc_ID"]
-            # Get the actual data we would use for this location/year
-            historical_data = data[
-                (data["year"] <= year) & (data["loc_ID"] == loc_ID)
-            ].tail(n_past_years + 1)
-            # Only include if we have exactly the right amount of data
-            if len(historical_data) == n_past_years + 1:
-                valid_indices.append((year, loc_ID))
+
+            # Get location data efficiently
+            if loc_ID in data_by_location.groups:
+                loc_data = data_by_location.get_group(loc_ID)
+                # Filter to years <= current year and get last n_past_years + 1
+                historical_data = loc_data[loc_data["year"] <= year].tail(
+                    n_past_years + 1
+                )
+
+                # Only include if we have exactly the right amount of data
+                if len(historical_data) == n_past_years + 1:
+                    valid_indices.append((year, loc_ID))
 
         self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
 
