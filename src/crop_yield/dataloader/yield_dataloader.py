@@ -50,28 +50,19 @@ class CropDataset(Dataset):
             ]
 
         # Filter to only include cases where we have complete historical data
-        # Since there are no gaps in years, we just need to check if location
-        # has been active for at least n_past_years + 1 years
+        valid_indices = []
 
-        # For each location, find the first year it appears
-        location_start_years = data.groupby("loc_ID")["year"].min()
+        for _, row in candidate_data.iterrows():
+            year, loc_ID = row["year"], row["loc_ID"]
+            # Get the actual data we would use for this location/year
+            historical_data = data[
+                (data["year"] <= year) & (data["loc_ID"] == loc_ID)
+            ].tail(n_past_years + 1)
+            # Only include if we have exactly the right amount of data
+            if len(historical_data) == n_past_years + 1:
+                valid_indices.append((year, loc_ID))
 
-        # For each candidate, check if (candidate_year - start_year + 1) >= n_past_years + 1
-        # This is equivalent to: candidate_year >= start_year + n_past_years
-        candidate_with_start = candidate_data.merge(
-            location_start_years.rename("start_year"),
-            left_on="loc_ID",
-            right_index=True,
-            how="left",
-        )
-
-        # Filter candidates that have enough historical data
-        valid_candidate_data = candidate_with_start[
-            candidate_with_start["year"]
-            >= candidate_with_start["start_year"] + n_past_years
-        ]
-
-        self.index = valid_candidate_data[["year", "loc_ID"]].reset_index(drop=True)
+        self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
