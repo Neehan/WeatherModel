@@ -50,30 +50,19 @@ class CropDataset(Dataset):
             ]
 
         # Filter to only include cases where we have complete historical data
-        # Robust vectorized approach that works consistently across CPU and GPU
+        valid_indices = []
 
-        # For each location, find the minimum year where we have n_past_years + 1 years of data
-        location_min_years = data.groupby("loc_ID")["year"].min()
+        for _, row in candidate_data.iterrows():
+            year, loc_ID = row["year"], row["loc_ID"]
+            # Get the actual data we would use for this location/year
+            historical_data = data[
+                (data["year"] <= year) & (data["loc_ID"] == loc_ID)
+            ].tail(n_past_years + 1)
+            # Only include if we have exactly the right amount of data
+            if len(historical_data) == n_past_years + 1:
+                valid_indices.append((year, loc_ID))
 
-        # Create a mapping of loc_ID to the earliest valid year for that location
-        # earliest_valid_year = min_year + n_past_years
-        location_earliest_valid = location_min_years + n_past_years
-
-        # Use merge instead of apply for consistent behavior
-        candidate_with_earliest = candidate_data.merge(
-            location_earliest_valid.rename("earliest_valid_year"),
-            left_on="loc_ID",
-            right_index=True,
-            how="left",
-        )
-
-        # Filter using vectorized comparison
-        valid_candidate_data = candidate_with_earliest[
-            candidate_with_earliest["year"]
-            >= candidate_with_earliest["earliest_valid_year"]
-        ]
-
-        self.index = valid_candidate_data[["year", "loc_ID"]].reset_index(drop=True)
+        self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
