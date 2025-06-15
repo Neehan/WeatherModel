@@ -50,27 +50,21 @@ class CropDataset(Dataset):
             ]
 
         # Filter to only include cases where we have complete historical data
-        valid_indices = []
+        # Vectorized approach: group by loc_ID and check consecutive years availability
+        data_sorted = data.sort_values(["loc_ID", "year"])
 
-        # Group data by location for efficient processing
-        data_by_location = data.groupby("loc_ID")
-
-        for _, row in candidate_data.iterrows():
+        # For each candidate, check if we can get exactly n_past_years + 1 consecutive years ending at that year
+        def has_sufficient_history(row):
             year, loc_ID = row["year"], row["loc_ID"]
+            loc_data = data_sorted[data_sorted["loc_ID"] == loc_ID]
+            loc_data_up_to_year = loc_data[loc_data["year"] <= year]
+            return len(loc_data_up_to_year.tail(n_past_years + 1)) == n_past_years + 1
 
-            # Get location data efficiently
-            if loc_ID in data_by_location.groups:
-                loc_data = data_by_location.get_group(loc_ID)
-                # Filter to years <= current year and get last n_past_years + 1
-                historical_data = loc_data[loc_data["year"] <= year].tail(
-                    n_past_years + 1
-                )
+        # Apply vectorized check
+        mask = candidate_data.apply(has_sufficient_history, axis=1)
+        valid_candidates = candidate_data[mask]
 
-                # Only include if we have exactly the right amount of data
-                if len(historical_data) == n_past_years + 1:
-                    valid_indices.append((year, loc_ID))
-
-        self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
+        self.index = valid_candidates[["year", "loc_ID"]].reset_index(drop=True)
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
