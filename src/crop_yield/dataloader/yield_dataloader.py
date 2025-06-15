@@ -50,7 +50,7 @@ class CropDataset(Dataset):
             ]
 
         # Filter to only include cases where we have complete historical data
-        # Optimized vectorized approach instead of row-by-row iteration
+        # Robust vectorized approach that works consistently across CPU and GPU
 
         # For each location, find the minimum year where we have n_past_years + 1 years of data
         location_min_years = data.groupby("loc_ID")["year"].min()
@@ -59,14 +59,20 @@ class CropDataset(Dataset):
         # earliest_valid_year = min_year + n_past_years
         location_earliest_valid = location_min_years + n_past_years
 
-        # Filter candidate_data to only include (year, loc_ID) pairs where year >= earliest_valid_year for that location
-        valid_mask = candidate_data.apply(
-            lambda row: row["year"]
-            >= location_earliest_valid.get(row["loc_ID"], float("inf")),
-            axis=1,
+        # Use merge instead of apply for consistent behavior
+        candidate_with_earliest = candidate_data.merge(
+            location_earliest_valid.rename("earliest_valid_year"),
+            left_on="loc_ID",
+            right_index=True,
+            how="left",
         )
 
-        valid_candidate_data = candidate_data[valid_mask]
+        # Filter using vectorized comparison
+        valid_candidate_data = candidate_with_earliest[
+            candidate_with_earliest["year"]
+            >= candidate_with_earliest["earliest_valid_year"]
+        ]
+
         self.index = valid_candidate_data[["year", "loc_ID"]].reset_index(drop=True)
 
         dataset_name = "train" if not test_dataset else "test"
@@ -94,31 +100,22 @@ class CropDataset(Dataset):
                 .values.astype("float32")
                 .reshape((-1, 6, 52))
             )  # 6 measurements, 52 weeks
-            practices = torch.tensor(
+            practices = (
                 query_data[self.practice_cols]
                 .values.astype("float32")
-                .reshape((-1, 14)),
-                dtype=torch.float32,
+                .reshape((-1, 14))
             )  # 14 practices
-            soil = torch.tensor(
-                query_data[self.soil_cols]
-                .values.astype("float32")
-                .reshape((-1, 11, 6)),
-                dtype=torch.float32,
+            soil = (
+                query_data[self.soil_cols].values.astype("float32").reshape((-1, 11, 6))
             )  # 11 measurements, at 6 depths
             year_data = query_data["year"].values.astype("float32")
-            coord = torch.tensor(
-                query_data[["lat", "lng"]].values.astype("float32"), dtype=torch.float32
+            coord = torch.FloatTensor(
+                query_data[["lat", "lng"]].values.astype("float32")
             )
 
             # get the true yield
-            y = torch.tensor(
-                query_data.iloc[-1:]["yield"].values.astype("float32").copy(),
-                dtype=torch.float32,
-            )
-            y_past = torch.tensor(
-                query_data["yield"].values.astype("float32"), dtype=torch.float32
-            )
+            y = query_data.iloc[-1:]["yield"].values.astype("float32").copy()
+            y_past = query_data["yield"].values.astype("float32")
             if len(y_past) <= 1:
                 raise ValueError(
                     f"Only 1 year of yield data for location {loc_ID} in year {year}. "
@@ -150,22 +147,20 @@ class CropDataset(Dataset):
             week_fractions = (
                 torch.arange(1, seq_len + 1, dtype=torch.float32) / seq_len
             )  # [seq_len]
-            year_expanded = torch.tensor(year_data, dtype=torch.float32).unsqueeze(
+            year_expanded = torch.FloatTensor(year_data).unsqueeze(
                 1
             ) + week_fractions.unsqueeze(  # [n_years, 1]
                 0
             )  # [1, seq_len]  # [n_years, seq_len]
-            year_expanded = year_expanded.contiguous().reshape(
+            year_expanded = year_expanded.contiguous().view(
                 n_years * seq_len
             )  # [n_years * seq_len]
 
             # Create padded weather with specific weather indices
             padded_weather = torch.zeros(
-                (seq_len * n_years, TOTAL_WEATHER_VARS), dtype=torch.float32
+                (seq_len * n_years, TOTAL_WEATHER_VARS),
             )
-            padded_weather[:, self.weather_indices] = torch.tensor(
-                weather, dtype=torch.float32
-            )
+            padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
 
             # Create weather feature mask
             weather_feature_mask = torch.ones(
@@ -173,8 +168,8 @@ class CropDataset(Dataset):
                 dtype=torch.bool,
             )
             weather_feature_mask[self.weather_indices] = False
-            weather_feature_mask = weather_feature_mask.unsqueeze(0).repeat(
-                n_years * seq_len, 1
+            weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
+                n_years * seq_len, -1
             )
 
             # Create temporal interval (weekly data)
