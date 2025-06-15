@@ -18,7 +18,7 @@ parser.add_argument(
 )
 parser.add_argument("--batch-size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n-past-years", help="number of past years to look at", default=4, type=int
+    "--n-past-years", help="number of past years to look at", default=6, type=int
 )
 parser.add_argument(
     "--n-epochs", help="number of training epochs", default=40, type=int
@@ -93,6 +93,14 @@ def main():
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.use_deterministic_algorithms(True)
+
+        if args_dict["n_train_years"] < args_dict["n_past_years"] + 1:
+            logging.warning(
+                f"Not enough training data for current year + n_past_years. Required: {args_dict['n_past_years'] + 1}. "
+                f"Available training years: {args_dict['n_train_years']}. "
+                f"Setting n_past_years to {args_dict['n_train_years'] - 1}."
+            )
+            args_dict["n_past_years"] = args_dict["n_train_years"] - 1
 
         from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
             weatherautoencoder_mixture_yield_training_loop,

@@ -271,14 +271,6 @@ def get_train_test_loaders(
             f"Available training years: {n_train_years}."
         )
 
-    if n_train_years < n_past_years + 1:
-        logger.warning(
-            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
-            f"Available training years: {n_train_years}. "
-            f"Setting n_past_years to {n_train_years - 1}."
-        )
-        n_past_years = n_train_years - 1
-
     train_dataset, test_dataset = split_train_test_by_year(
         crop_df,
         n_train_years,
