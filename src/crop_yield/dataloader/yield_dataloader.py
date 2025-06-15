@@ -48,36 +48,22 @@ class CropDataset(Dataset):
             candidate_data = data[
                 (data["year"] >= start_year) & (data["year"] < test_year)
             ]
+        # For each location, find the minimum year where we have n_past_years + 1 years of data
+        location_min_years = data.groupby("loc_ID")["year"].min()
 
-        # Filter to only include cases where we have complete historical data
-        # Optimized approach: group by location and vectorize the filtering
-        data_sorted = data.sort_values(["loc_ID", "year"])
-        location_groups = data_sorted.groupby("loc_ID")
+        # Create a mapping of loc_ID to the earliest valid year for that location
+        # earliest_valid_year = min_year + n_past_years
+        location_earliest_valid = location_min_years + n_past_years
 
-        valid_indices = []
+        # Filter candidate_data to only include (year, loc_ID) pairs where year >= earliest_valid_year for that location
+        valid_mask = candidate_data.apply(
+            lambda row: row["year"]
+            >= location_earliest_valid.get(row["loc_ID"], float("inf")),
+            axis=1,
+        )
 
-        for loc_ID, loc_data in location_groups:
-            # Get years available for this location
-            available_years = loc_data["year"].values
-
-            # For each candidate year for this location, check if we have enough historical data
-            candidate_years = candidate_data[candidate_data["loc_ID"] == loc_ID][
-                "year"
-            ].values
-
-            for year in candidate_years:
-                # Find the position of this year in the sorted data
-                year_idx = np.where(available_years <= year)[0]
-
-                # Check if we have exactly n_past_years + 1 years of data ending at this year
-                if len(year_idx) >= n_past_years + 1:
-                    # Take the last n_past_years + 1 years
-                    historical_years = available_years[year_idx[-(n_past_years + 1) :]]
-                    # Verify we have exactly the right amount of consecutive data
-                    if len(historical_years) == n_past_years + 1:
-                        valid_indices.append((year, loc_ID))
-
-        self.index = pd.DataFrame(valid_indices, columns=["year", "loc_ID"])
+        valid_candidate_data = candidate_data[valid_mask]
+        self.index = valid_candidate_data[["year", "loc_ID"]].reset_index(drop=True)
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
