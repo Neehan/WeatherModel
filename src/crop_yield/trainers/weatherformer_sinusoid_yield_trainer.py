@@ -34,6 +34,7 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
             self.output_json["losses"] = {
                 "train": {
                     "total_loss": [],
+                    "yield": [],
                     "reconstruction": [],
                     "log_variance": [],
                     "kl_term": [],
@@ -89,6 +90,7 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
 
     def _compute_sinusoidal_variational_loss_components(
         self,
+        weather: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
         z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
         mu_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior mean
         var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
@@ -120,23 +122,28 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
         Returns:
             Dictionary containing all loss components
         """
+        # Average over batch and multiply by β
+        beta = self._current_beta()
         # 1. Reconstruction term: mean over batch of (y_j - μ_θ(z_j))²
-        reconstruction_loss = self.criterion(
-            yield_pred.squeeze(), target_yield.squeeze()
-        )
+        yield_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
 
-        # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is sinusoidal prior
+        reconstruction_loss = beta * torch.mean(
+            torch.sum(
+                (weather * (~weather_feature_mask) - z * (~weather_feature_mask)) ** 2,
+                dim=(1, 2),
+            )
+        )
+        # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
         kl_term, log_variance = self._compute_sinusoidal_kl_divergence(
             mu_x, var_x, mu_p, var_p, weather_feature_mask
         )
-        # Average over batch and multiply by β
-        beta = self._current_beta()
         kl_term = beta * kl_term
 
         # Total loss: sum of both terms
-        total_loss = reconstruction_loss + kl_term
+        total_loss = yield_loss + kl_term
 
         if log_losses or DRY_RUN:
+            print(f"Yield loss: {yield_loss.item()}")
             print(f"Reconstruction loss: {reconstruction_loss.item()}")
             print(f"KL term: {kl_term.item()}")
             print(f"Log variance: {log_variance.item()}")
@@ -144,6 +151,7 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
 
         return {
             "total_loss": total_loss,
+            "yield": yield_loss,
             "reconstruction": reconstruction_loss,
             "kl_term": kl_term,
             "log_variance": log_variance,
@@ -176,7 +184,15 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
 
         # Compute all loss components using the helper method
         return self._compute_sinusoidal_variational_loss_components(
-            z, mu_x, var_x, mu_p, var_p, yield_pred, target_yield, weather_feature_mask
+            padded_weather,
+            z,
+            mu_x,
+            var_x,
+            mu_p,
+            var_p,
+            yield_pred,
+            target_yield,
+            weather_feature_mask,
         )
 
     def compute_validation_loss(
@@ -206,7 +222,15 @@ class WeatherFormerSinusoidYieldTrainer(WeatherBERTYieldTrainer):
 
         # Compute all loss components using the helper method
         components = self._compute_sinusoidal_variational_loss_components(
-            z, mu_x, var_x, mu_p, var_p, yield_pred, target_yield, weather_feature_mask
+            padded_weather,
+            z,
+            mu_x,
+            var_x,
+            mu_p,
+            var_p,
+            yield_pred,
+            target_yield,
+            weather_feature_mask,
         )
         # only return the reconstruction (RMSE) loss for validation
         return {"total_loss": components["reconstruction"] ** 0.5}
