@@ -17,7 +17,7 @@ class CropDataset(Dataset):
         test_year,
         test_dataset=False,
         n_past_years=5,
-        test_gap=20,
+        test_gap=5,
     ):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
