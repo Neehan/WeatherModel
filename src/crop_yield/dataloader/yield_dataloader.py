@@ -76,7 +76,7 @@ class CropDataset(Dataset):
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
-            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-1)}."
+            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year-test_gap) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)}."
         )
 
         self.data = []
