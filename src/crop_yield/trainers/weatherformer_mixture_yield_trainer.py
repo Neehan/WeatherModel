@@ -144,11 +144,12 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         # 1. Reconstruction term: mean over batch of (y_j - μ_θ(z_j))²
         yield_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
 
-        reconstruction_loss = beta * torch.mean(
-            torch.sum(
-                (weather * (~weather_feature_mask) - z * (~weather_feature_mask)) ** 2,
+        reconstruction_loss = (
+            beta
+            * torch.sum(
+                (weather - z) ** 2 * (~weather_feature_mask),  # keep only input
                 dim=(1, 2),
-            )
+            ).mean()  # mean over batch
         )
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
         kl_term, log_variance = self._compute_mixture_kl_divergence(
@@ -157,7 +158,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         kl_term = beta * kl_term
 
         # Total loss: sum of both terms
-        total_loss = yield_loss + kl_term
+        total_loss = yield_loss + reconstruction_loss + kl_term
 
         if log_losses or DRY_RUN:
             print(f"Yield loss: {yield_loss.item()}")
@@ -249,8 +250,8 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             target_yield,
             weather_feature_mask,
         )
-        # only return the reconstruction (RMSE) loss for validation
-        return {"total_loss": components["reconstruction"] ** 0.5}
+        # only return the yield (RMSE) loss for validation
+        return {"total_loss": components["yield"] ** 0.5}
 
 
 # =============================================================================
