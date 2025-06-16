@@ -10,7 +10,15 @@ from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 
 
 class CropDataset(Dataset):
-    def __init__(self, data, start_year, test_year, test_dataset=False, n_past_years=5):
+    def __init__(
+        self,
+        data,
+        start_year,
+        test_year,
+        test_dataset=False,
+        n_past_years=5,
+        test_gap=10,
+    ):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
         soil_measurements = [
@@ -44,9 +52,9 @@ class CropDataset(Dataset):
 
         if test_dataset:  # test on specific year
             candidate_data = data[data["year"] == test_year]
-        else:  # train on years from start_year to year before test_year
+        else:  # train on years from start_year to year before test_year - test_gap
             candidate_data = data[
-                (data["year"] >= start_year) & (data["year"] < test_year)
+                (data["year"] >= start_year) & (data["year"] < test_year - test_gap)
             ]
 
         # Filter to only include cases where we have complete historical data
