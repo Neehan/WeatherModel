@@ -17,7 +17,7 @@ class CropDataset(Dataset):
         test_year,
         test_dataset=False,
         n_past_years=5,
-        test_gap=4,
+        test_gap=0,
     ):
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
@@ -76,7 +76,7 @@ class CropDataset(Dataset):
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
-            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year-test_gap) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)}."
+            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)}."
         )
 
         self.data = []
