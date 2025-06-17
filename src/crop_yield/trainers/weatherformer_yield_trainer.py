@@ -94,15 +94,8 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         beta = self._current_beta()
         # 2. Reconstruction term: Gaussian NLL for weather features
         # use negative mask so that it is computed for input weather vals
-        # reconstruction_loss = beta * gaussian_nll_loss(
-        #     weather, mu_x, var_x, ~weather_feature_mask
-        # )
-        reconstruction_loss = (
-            beta
-            * torch.sum(
-                (weather - mu_x) ** 2 * (~weather_feature_mask),  # keep only input
-                dim=(1, 2),
-            ).mean()  # mean over batch
+        reconstruction_loss = beta * gaussian_nll_loss(
+            weather, mu_x, var_x, ~weather_feature_mask
         )
 
         # 3. KL divergence term: β * KL(q(z|x) || p(z))
