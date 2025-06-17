@@ -37,11 +37,11 @@ class WeatherFormerSinusoid(WeatherFormer):
         # override the name
         self.name = "weatherformer_sinusoid"
         self.k = k
-        self.positions = (
-            torch.arange(max_len, dtype=torch.float, device=device)
-            .unsqueeze(0)
-            .unsqueeze(2)
-        )
+        self.positions = torch.arange(
+            max_len, dtype=torch.float, device=device
+        ).reshape(
+            1, 1, max_len, 1
+        )  #
         # Initialize with shape (1, k, max_len, weather_dim) to avoid unsqueezing later
         self.frequency = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
         self.phase = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
@@ -104,9 +104,9 @@ class WeatherFormerSinusoid(WeatherFormer):
         frequency = self.frequency[:, :, :seq_len, :]  # (1, k, seq_len, weather_dim)
 
         # pos is (1, seq_len, 1)
-        pos = self.positions[:, :seq_len, :]
-        # scaled_pos is (batch_size, seq_len, 1) -> (batch_size, 1, seq_len, 1)
-        scaled_pos = (pos * 2 * torch.pi * interval.unsqueeze(2) / 365.0).unsqueeze(1)
+        pos = self.positions[:, :, :seq_len, :]
+        # scaled_pos is (1, 1, seq_len, 1) -> (batch_size, 1, seq_len, 1)
+        scaled_pos = pos * 2 * torch.pi * interval.view(batch_size, 1, 1, 1) / 365.0
 
         # Now broadcasting works directly: (batch_size, k, seq_len, weather_dim)
         sines = amplitude * torch.sin(frequency * scaled_pos + phase)
@@ -115,7 +115,7 @@ class WeatherFormerSinusoid(WeatherFormer):
         )  # sum over k dimension -> (batch_size, seq_len, weather_dim)
         var_p = torch.exp(self.log_var_prior)[:, :seq_len, :].expand(batch_size, -1, -1)
 
-        # Clamp var_p to prevent numerical instability
-        var_p = torch.clamp(var_p, min=1e-6, max=1)
+        # # Clamp var_p to prevent numerical instability
+        # var_p = torch.clamp(var_p, min=1e-6, max=1)
 
         return mu_x, var_x, mu_p, var_p
