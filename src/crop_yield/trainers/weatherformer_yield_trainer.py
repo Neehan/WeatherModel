@@ -99,9 +99,10 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         # )
         reconstruction_loss = (
             beta
-            * self._masked_mean(
-                (weather - mu_x) ** 2, ~weather_feature_mask, dim=(1, 2)
-            ).mean()
+            * torch.sum(
+                (weather - mu_x) ** 2 * (~weather_feature_mask),  # keep only input
+                dim=(1, 2),
+            ).mean()  # mean over batch
         )
 
         # 3. KL divergence term: β * KL(q(z|x) || p(z))

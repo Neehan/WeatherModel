@@ -115,7 +115,7 @@ class WeatherFormerSinusoid(WeatherFormer):
         )  # sum over k dimension -> (batch_size, seq_len, weather_dim)
         var_p = torch.exp(self.log_var_prior)[:, :seq_len, :].expand(batch_size, -1, -1)
 
-        # # Clamp var_p to prevent numerical instability
-        # var_p = torch.clamp(var_p, min=1e-6, max=1)
+        # Clamp var_p to prevent numerical instability
+        var_p = torch.clamp(var_p, min=1e-6, max=1)
 
         return mu_x, var_x, mu_p, var_p
