@@ -1,5 +1,5 @@
 import torch
-from typing import Tuple, overload, Literal, Union
+from typing import Tuple
 
 
 def masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]):
@@ -8,36 +8,13 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]):
     return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
 
 
-@overload
 def compute_gaussian_kl_divergence(
     mu_x: torch.Tensor,
     var_x: torch.Tensor,
     mu_p: torch.Tensor,
     var_p: torch.Tensor,
     feature_mask: torch.Tensor,
-    return_log_variance: Literal[False] = False,
-) -> torch.Tensor: ...
-
-
-@overload
-def compute_gaussian_kl_divergence(
-    mu_x: torch.Tensor,
-    var_x: torch.Tensor,
-    mu_p: torch.Tensor,
-    var_p: torch.Tensor,
-    feature_mask: torch.Tensor,
-    return_log_variance: Literal[True],
-) -> Tuple[torch.Tensor, torch.Tensor]: ...
-
-
-def compute_gaussian_kl_divergence(
-    mu_x: torch.Tensor,
-    var_x: torch.Tensor,
-    mu_p: torch.Tensor,
-    var_p: torch.Tensor,
-    feature_mask: torch.Tensor,
-    return_log_variance: bool = False,
-) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+) -> torch.Tensor:
     """
     Compute KL divergence between two diagonal Gaussians for masked features only.
     KL(q(z|x) || p(z)) = 0.5 * [log(var_p/var_x) + var_x/var_p + (mu_x - mu_p)^2/var_p - 1]
@@ -47,15 +24,9 @@ def compute_gaussian_kl_divergence(
     )
     kl_masked = kl_per_dim * feature_mask
     kl_divergence = masked_mean(kl_masked, feature_mask, dim=(1, 2)).mean()
-
-    if return_log_variance:
-        log_variance = masked_mean(torch.log(var_x), feature_mask, dim=(1, 2)).mean()
-        return kl_divergence, log_variance
-
     return kl_divergence
 
 
-@overload
 def compute_mixture_kl_divergence(
     z: torch.Tensor,
     mu_x: torch.Tensor,
@@ -63,31 +34,7 @@ def compute_mixture_kl_divergence(
     mu_k: torch.Tensor,
     var_k: torch.Tensor,
     feature_mask: torch.Tensor,
-    return_log_variance: Literal[False] = False,
-) -> torch.Tensor: ...
-
-
-@overload
-def compute_mixture_kl_divergence(
-    z: torch.Tensor,
-    mu_x: torch.Tensor,
-    var_x: torch.Tensor,
-    mu_k: torch.Tensor,
-    var_k: torch.Tensor,
-    feature_mask: torch.Tensor,
-    return_log_variance: Literal[True],
-) -> Tuple[torch.Tensor, torch.Tensor]: ...
-
-
-def compute_mixture_kl_divergence(
-    z: torch.Tensor,
-    mu_x: torch.Tensor,
-    var_x: torch.Tensor,
-    mu_k: torch.Tensor,
-    var_k: torch.Tensor,
-    feature_mask: torch.Tensor,
-    return_log_variance: bool = False,
-) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+) -> torch.Tensor:
     """
     Compute KL divergence between a diagonal Gaussian posterior and a mixture of diagonal
     Gaussians prior for masked features only.
@@ -114,11 +61,6 @@ def compute_mixture_kl_divergence(
 
     log_p_z = torch.logsumexp(log_component_densities, dim=0)
     kl_divergence = (log_q_z_x - log_p_z).mean()
-
-    if return_log_variance:
-        log_variance = masked_mean(torch.log(var_x), feature_mask, dim=(1, 2)).mean()
-        return kl_divergence, log_variance
-
     return kl_divergence
 
 

@@ -5,8 +5,8 @@ import math
 from typing import Dict, Tuple
 from src.utils.constants import DRY_RUN
 from src.utils.losses import compute_gaussian_kl_divergence
-from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
-    WeatherFormerMixtureYieldTrainer,
+from src.crop_yield.trainers.weatherformer_yield_trainer import (
+    WeatherFormerYieldTrainer,
 )
 from src.crop_yield.trainers.weatherbert_yield_trainer import (
     _create_yield_training_setup,
@@ -17,20 +17,32 @@ from src.crop_yield.models.weatherformer_sinusoid_yield_model import (
 )
 
 
-class WeatherFormerSinusoidYieldTrainer(WeatherFormerMixtureYieldTrainer):
+class WeatherFormerSinusoidYieldTrainer(WeatherFormerYieldTrainer):
     """
     Trainer class for WeatherFormerSinusoid-based crop yield prediction models.
 
-    Inherits from WeatherFormerMixtureYieldTrainer but overrides the KL divergence computation
-    to use Gaussian KL divergence with sinusoidal priors instead of mixture priors.
+    Inherits from WeatherFormerYieldTrainer but overrides the KL divergence computation
+    to use Gaussian KL divergence with sinusoidal priors instead of standard normal priors.
     """
 
-    def kl_div_loss(self, z, mu_x, var_x, mu_p, var_p, weather_feature_mask):
-        """Compute Gaussian KL divergence loss for sinusoidal priors."""
-        kl_term, log_variance = compute_gaussian_kl_divergence(
-            mu_x, var_x, mu_p, var_p, weather_feature_mask, return_log_variance=True
+    def compute_kl_loss(
+        self,
+        weather_feature_mask: torch.Tensor,
+        mu_x: torch.Tensor,
+        var_x: torch.Tensor,
+        mu_p: torch.Tensor,
+        var_p: torch.Tensor,
+        z: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute KL divergence loss using sinusoidal priors instead of standard normal."""
+        kl_term = compute_gaussian_kl_divergence(
+            mu_x=mu_x,
+            var_x=var_x,
+            mu_p=mu_p,
+            var_p=var_p,
+            feature_mask=weather_feature_mask,
         )
-        return kl_term, log_variance
+        return kl_term
 
 
 # =============================================================================

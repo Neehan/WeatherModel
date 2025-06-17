@@ -70,4 +70,4 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
             weather_feature_mask=None,
             y_past=y_past,
         )
-        return yield_pred, z, mu_x, var_x, mu_p, var_p
+        return yield_pred, mu_x, var_x, mu_p, var_p, z
