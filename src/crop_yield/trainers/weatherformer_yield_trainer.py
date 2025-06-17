@@ -8,7 +8,11 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
     _run_yield_cross_validation,
 )
 from src.crop_yield.models.weatherformer_yield_model import WeatherFormerYieldModel
-from src.utils.losses import compute_gaussian_kl_divergence, gaussian_nll_loss
+from src.utils.losses import (
+    compute_gaussian_kl_divergence,
+    gaussian_nll_loss,
+    masked_mean,
+)
 
 
 class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
@@ -44,6 +48,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
     def compute_kl_loss(
         self,
         weather_feature_mask: torch.Tensor,
+        z: torch.Tensor,
         mu_x: torch.Tensor,
         var_x: torch.Tensor,
         *args,
@@ -70,6 +75,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         weather_feature_mask: torch.Tensor,
         target_yield: torch.Tensor,
         yield_pred: torch.Tensor,
+        z: torch.Tensor,
         mu_x: torch.Tensor,
         var_x: torch.Tensor,
         *args,
@@ -94,12 +100,22 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         beta = self._current_beta()
         # 2. Reconstruction term: Gaussian NLL for weather features
         # use negative mask so that it is computed for input weather vals
-        reconstruction_loss = beta * gaussian_nll_loss(
-            weather, mu_x, var_x, ~weather_feature_mask
-        )
+        # reconstruction_loss = beta * gaussian_nll_loss(
+        #     weather, mu_x, var_x, ~weather_feature_mask
+        # )
+        reconstruction_loss = (
+            beta
+            * masked_mean(
+                (weather - z) ** 2,  # keep only input
+                ~weather_feature_mask,
+                dim=(1, 2),
+            ).mean()
+        )  # mean over batch
 
         # 3. KL divergence term: β * KL(q(z|x) || p(z))
-        kl_term = beta * self.compute_kl_loss(weather_feature_mask, mu_x, var_x, *args)
+        kl_term = beta * self.compute_kl_loss(
+            weather_feature_mask, z, mu_x, var_x, *args
+        )
 
         # Total loss: sum of all terms
         total_loss = yield_loss + reconstruction_loss + kl_term

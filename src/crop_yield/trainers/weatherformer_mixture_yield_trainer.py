@@ -31,11 +31,11 @@ class WeatherFormerMixtureYieldTrainer(WeatherFormerYieldTrainer):
     def compute_kl_loss(
         self,
         weather_feature_mask: torch.Tensor,
+        z: torch.Tensor,
         mu_x: torch.Tensor,
         var_x: torch.Tensor,
         mu_k: torch.Tensor,
         var_k: torch.Tensor,
-        z: torch.Tensor,
     ) -> torch.Tensor:
         """Compute KL divergence loss using mixture prior instead of standard normal."""
         kl_term = compute_mixture_kl_divergence(

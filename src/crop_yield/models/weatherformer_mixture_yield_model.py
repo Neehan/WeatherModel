@@ -57,8 +57,8 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         )
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
-        # where epsilon ~ N(0, 1) and mask is true
-        epsilon = torch.randn_like(mu_x) * weather_feature_mask
+        # where epsilon ~ N(0, 1)
+        epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
 
         # z = self._impute_weather(padded_weather, z, weather_feature_mask)
@@ -72,4 +72,4 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
             weather_feature_mask=None,
             y_past=y_past,
         )
-        return yield_pred, mu_x, var_x, mu_k, var_k, z
+        return yield_pred, z, mu_x, var_x, mu_k, var_k
