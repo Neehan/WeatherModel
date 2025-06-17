@@ -6,12 +6,14 @@ from src.pretraining.models.weatherformer import WeatherFormer
 from src.utils.constants import TOTAL_WEATHER_VARS
 from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
 from torch.utils.data import DataLoader
+from src.utils.losses import compute_gaussian_kl_divergence, gaussian_nll_loss
 from typing import Tuple
 
 
 class WeatherFormerTrainer(BaseTrainer):
     """
-    WeatherFormer trainer that implements feature swapping masking and VAE-style loss.
+    WeatherFormer trainer that implements feature  swapping masking and VAE-style loss
+    between a diagonal Gaussian posterior and a standard normal prior.
     """
 
     def __init__(
@@ -19,32 +21,60 @@ class WeatherFormerTrainer(BaseTrainer):
         model: WeatherFormer,
         masking_prob: float,
         n_masked_features: int,
+        beta: float,
         **kwargs,
     ):
         super().__init__(model, **kwargs)
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.masking_function = "weatherformer"
-
+        self.beta = beta
+        self.output_json["model_config"]["beta"] = beta
         # override the losses collected
         self.output_json["losses"] = {
             "train": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
+                "kl_term": [],
             },
             "val": {
                 "total_loss": [],
                 "reconstruction": [],
-                "log_variance": [],
+                "kl_term": [],
             },
         }
 
-    def compute_elbo_loss(
+    def compute_kl_loss(
         self,
-        target_features: torch.Tensor,
+        weather: torch.Tensor,
+        weather_feature_mask: torch.Tensor,
         mu_x: torch.Tensor,
         var_x: torch.Tensor,
+        *args,
+    ) -> torch.Tensor:
+        """Compute KL divergence loss between two multivariate normal distributions.
+        Some derived classes may need to override this method."""
+
+        # Standard normal prior for VAE: mu_p = 0, var_p = 1
+        mu_p = torch.zeros_like(mu_x)
+        var_p = torch.ones_like(var_x)
+
+        kl_term = compute_gaussian_kl_divergence(
+            mu_x=mu_x,
+            var_x=var_x,
+            mu_p=mu_p,
+            var_p=var_p,
+            feature_mask=weather_feature_mask,
+        )
+        return kl_term
+
+    def compute_elbo_loss(
+        self,
+        weather: torch.Tensor,
+        feature_mask: torch.Tensor,
+        mu_x: torch.Tensor,
+        var_x: torch.Tensor,
+        *args,
         log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
@@ -60,23 +90,20 @@ class WeatherFormerTrainer(BaseTrainer):
             mu_x: Predicted mean values
             var_x: Predicted variance values (σ²) - already clamped in model
         """
-        # Reconstruction term: (z - μ)² / (2σ²)
-        reconstruction_term = torch.mean(((target_features - mu_x) ** 2) / (2 * var_x))
-
-        # Log variance term: 0.5 * log(σ²)
-        log_variance_term = torch.mean(0.5 * torch.log(var_x))
+        # Reconstruction term: (z - μ)² / (2σ²) + 1/2log(σ²)
+        reconstruction_term = gaussian_nll_loss(weather, mu_x, var_x, feature_mask)
+        kl_term = self.compute_kl_loss(weather, feature_mask, mu_x, var_x, *args)
 
         if log_losses:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
-            self.logger.info(f"Log Variance Term: {log_variance_term.item():.6f}")
-
-        # Total loss: reconstruction + log_variance (both terms now ≥ 0)
-        total_loss = reconstruction_term + log_variance_term
+            self.logger.info(f"KL Term: {kl_term.item():.6f}")
+        # Total loss: reconstruction + log_variance
+        total_loss = reconstruction_term + self.beta * kl_term
 
         return {
             "total_loss": total_loss,
             "reconstruction": reconstruction_term,
-            "log_variance": log_variance_term,
+            "kl_term": kl_term,
         }
 
     def compute_train_loss(
@@ -89,20 +116,13 @@ class WeatherFormerTrainer(BaseTrainer):
     ) -> Dict[str, torch.Tensor]:
         """Compute WeatherFormer training loss using VAE-style loss function."""
 
-        # Get model predictions (mu_x, sigma)
-        mu_x, var_x = self.model(
+        # Get model predictions - first two returns are always mu_x and var_x
+        model_outputs = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Extract target features and predictions for masked positions only
-        target_features = weather[feature_mask]
-        predicted_mu_x = mu_x[feature_mask]
-        predicted_var_x = var_x[feature_mask]
-
-        # Compute VAE loss
-        loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu_x, predicted_var_x
-        )
+        # Compute VAE loss - pass all outputs directly
+        loss_dict = self.compute_elbo_loss(weather, feature_mask, *model_outputs)
 
         return loss_dict
 
@@ -114,23 +134,16 @@ class WeatherFormerTrainer(BaseTrainer):
         interval: torch.Tensor,
         feature_mask: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
-        """Compute WeatherFormer validation loss using VAE-style loss function."""
+        """Compute WeatherFormer validation loss using VAE-style loss function. Some derived classes
+        need to override this method."""
 
-        # Get model predictions (mu_x, var_x)
-        mu_x, var_x = self.model(
+        # Get model predictions - first two returns are always mu_x and var_x
+        model_outputs = self.model(
             weather, coords, year, interval, weather_feature_mask=feature_mask
         )
 
-        # Extract target features and predictions for masked positions only
-        target_features = weather[feature_mask]
-        predicted_mu_x = mu_x[feature_mask]
-        predicted_var_x = var_x[feature_mask]
-
-        # Compute VAE loss
-        loss_dict = self.compute_elbo_loss(
-            target_features, predicted_mu_x, predicted_var_x
-        )
-
+        # Compute loss - pass all outputs directly
+        loss_dict = self.compute_elbo_loss(weather, feature_mask, *model_outputs)
         return loss_dict
 
     def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
@@ -193,6 +206,7 @@ def weatherformer_training_loop(args_dict):
         pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
         n_masked_features=args_dict["n_masked_features"],
+        beta=args_dict["beta"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
         rank=rank,
         world_size=world_size,

@@ -4,6 +4,7 @@ import torch.nn as nn
 import math
 from typing import Dict, Tuple
 from src.utils.constants import DRY_RUN
+from src.utils.losses import compute_mixture_kl_divergence
 from src.crop_yield.trainers.weatherbert_yield_trainer import (
     WeatherBERTYieldTrainer,
     _create_yield_training_setup,
@@ -44,68 +45,14 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
                 },
             }
 
-    def _masked_mean(
-        self, tensor: torch.Tensor, mask: torch.Tensor, dim: Tuple[int, ...]
-    ):
-        """Mean over `dim`, ignoring False in `mask`."""
-        masked = tensor * mask
-        return masked.sum(dim=dim) / (mask.sum(dim=dim).clamp(min=1))
-
-    def _compute_mixture_kl_divergence(
-        self,
-        z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
-        mu_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior mean
-        var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
-        mu_k: torch.Tensor,  # [k, seq_len, n_features] - mixture means
-        var_k: torch.Tensor,  # [k, seq_len, n_features] - mixture variances
-        weather_feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - weather feature mask
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Compute KL divergence between posterior q(z|x) and mixture prior p(z) for masked features only.
-
-        KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
-
-        where:
-        - q(z|x) is a diagonal Gaussian N(mu_x, var_x)
-        - p(z) is a mixture of k diagonal Gaussians: (1/k) * Σ_i N(mu_k[i], var_k[i])
-        """
-        # Compute log q(z|x) - posterior log-density for masked features only
-        log_q_z_x_all = -0.5 * (torch.log(var_x) + (z - mu_x) ** 2 / var_x)
-        log_q_z_x_masked = log_q_z_x_all * weather_feature_mask  # apply mask
-        log_q_z_x = torch.sum(log_q_z_x_masked, dim=(1, 2))  # [batch_size]
-
-        # Compute log p(z) - mixture prior log-density for masked features only
-        z_expanded = z.unsqueeze(0)  # [1, batch_size, seq_len, n_features]
-        mu_k_expanded = mu_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
-        var_k_expanded = var_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
-
-        # Compute log-density for each component
-        log_component_densities_all = -0.5 * (
-            torch.log(var_k_expanded)
-            + (z_expanded - mu_k_expanded) ** 2 / var_k_expanded
+    def kl_div_loss(self, z, mu_x, var_x, mu_k, var_k, weather_feature_mask):
+        """Compute KL divergence loss - can be overridden by child classes."""
+        kl_term, log_variance = compute_mixture_kl_divergence(
+            z, mu_x, var_x, mu_k, var_k, weather_feature_mask, return_log_variance=True
         )
-        # Apply mask to only consider masked features
-        log_component_densities_masked = (
-            log_component_densities_all * weather_feature_mask.unsqueeze(0)
-        )
-        log_component_densities = torch.sum(
-            log_component_densities_masked, dim=(2, 3)
-        )  # [k, batch_size]
+        return kl_term, log_variance
 
-        # Compute log p(z) = log(Σ_k exp(log_component_densities))
-        log_p_z = torch.logsumexp(log_component_densities, dim=0)  # [batch_size]
-
-        # KL divergence: KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
-        kl_divergence = log_q_z_x - log_p_z  # [batch_size]
-
-        # Compute log variance for monitoring (preserve original return type)
-        log_variance = self._masked_mean(
-            torch.log(var_x), weather_feature_mask, dim=(1, 2)
-        )
-
-        return kl_divergence.mean(), log_variance.mean()  # average over batch
-
-    def _compute_mixture_variational_loss_components(
+    def _compute_variational_loss_components(
         self,
         weather: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
         z: torch.Tensor,  # [batch_size, seq_len, n_features] - sampled latent
@@ -152,7 +99,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             ).mean()  # mean over batch
         )
         # 2. KL divergence term: β * KL(q(z|x) || p(z)) where p(z) is mixture prior
-        kl_term, log_variance = self._compute_mixture_kl_divergence(
+        kl_term, log_variance = self.kl_div_loss(
             z, mu_x, var_x, mu_k, var_k, weather_feature_mask
         )
         kl_term = beta * kl_term
@@ -201,7 +148,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
         )
 
         # Compute all loss components using the helper method
-        return self._compute_mixture_variational_loss_components(
+        return self._compute_variational_loss_components(
             padded_weather,
             z,
             mu_x,
@@ -239,7 +186,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherBERTYieldTrainer):
             )
 
         # Compute all loss components using the helper method
-        components = self._compute_mixture_variational_loss_components(
+        components = self._compute_variational_loss_components(
             padded_weather,
             z,
             mu_x,

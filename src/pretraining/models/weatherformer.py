@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Optional
+from typing import Optional, Tuple
 from src.pretraining.models.weatherbert import WeatherBERT
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
 
@@ -46,7 +46,7 @@ class WeatherFormer(WeatherBERT):
         interval: torch.Tensor,
         weather_feature_mask: torch.Tensor,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2

@@ -18,6 +18,7 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         self,
         name: str,
         device: torch.device,
+        k: int,
         weather_dim: int,
         n_past_years: int,
         **model_size_params,
@@ -29,6 +30,7 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         self.weather_model = WeatherFormerSinusoid(
             weather_dim=weather_dim,
             output_dim=weather_dim,
+            k=k,
             device=device,
             **model_size_params,
         )
