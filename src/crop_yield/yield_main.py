@@ -74,7 +74,7 @@ parser.add_argument(
 parser.add_argument(
     "--n-mixture-components",
     help="number of gaussian mixture components for WeatherFormerMixture model",
-    default=7,
+    default=3,
     type=int,
 )
 

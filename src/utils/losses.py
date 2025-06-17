@@ -72,7 +72,8 @@ def gaussian_nll_loss(
 ) -> torch.Tensor:
     """
     Compute the Gaussian Negative Log-Likelihood loss for masked features.
+    NLL = 0.5 * log(2π) + 0.5 * log(σ²) + (x-μ)²/(2σ²)
     """
-    gaussian_nll = 0.5 * torch.log(var) + 0.5 * (x - mu) ** 2 / var
+    gaussian_nll = 0.5 * torch.log(2 * torch.pi * var) + 0.5 * (x - mu) ** 2 / var
     masked_gaussian_nll = gaussian_nll * feature_mask
     return masked_mean(masked_gaussian_nll, feature_mask, dim=(1, 2)).mean()
