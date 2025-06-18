@@ -108,7 +108,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         )
 
         # 3. KL divergence term: β * KL(q(z|x) || p(z))
-        # dont pass in weather feature
+        # dont pass weather mask
         kl_term = (
             beta
             * self.compute_kl_loss(torch.ones_like(mu_x), z, mu_x, var_x, *args).mean()
