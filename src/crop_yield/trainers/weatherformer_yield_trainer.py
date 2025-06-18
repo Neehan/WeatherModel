@@ -106,7 +106,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         # reconstruction_term = (
         #     beta * -gaussian_log_likelihood(weather, mu_x, var_x, input_mask).mean()
         # )
-        reconstruction_term = beta * (weather - z) ** 2 * input_mask
+        reconstruction_term = beta * (weather - mu_x) ** 2 * input_mask
         reconstruction_term = reconstruction_term.sum(dim=(1, 2)).mean()
         # 3. KL divergence term: β * KL(q(z|x) || p(z))
         kl_term = (
