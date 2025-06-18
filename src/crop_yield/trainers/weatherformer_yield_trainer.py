@@ -103,15 +103,15 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         # 2. Reconstruction term: Gaussian negative log-likelihood for weather features
         # Use inverse mask to compute reconstruction for input features
         input_mask = ~weather_feature_mask
-        # reconstruction_term = (
-        #     beta * -gaussian_log_likelihood(weather, mu_x, var_x, input_mask).mean()
-        # )
-        reconstruction_term = beta * (weather - mu_x) ** 2 * input_mask
-        reconstruction_term = reconstruction_term.sum(dim=(1, 2)).mean()
+        reconstruction_term = (
+            beta * -gaussian_log_likelihood(weather, mu_x, var_x, input_mask).mean()
+        )
+
         # 3. KL divergence term: β * KL(q(z|x) || p(z))
+        # dont pass in weather feature
         kl_term = (
             beta
-            * self.compute_kl_loss(weather_feature_mask, z, mu_x, var_x, *args).mean()
+            * self.compute_kl_loss(torch.ones_like(mu_x), z, mu_x, var_x, *args).mean()
         )
 
         if log_losses or DRY_RUN:
