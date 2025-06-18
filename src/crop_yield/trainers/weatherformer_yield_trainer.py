@@ -7,11 +7,11 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
     _create_yield_training_setup,
     _run_yield_cross_validation,
 )
+from src.utils.constants import DRY_RUN
 from src.crop_yield.models.weatherformer_yield_model import WeatherFormerYieldModel
 from src.utils.losses import (
     compute_gaussian_kl_divergence,
-    gaussian_nll_loss,
-    masked_mean,
+    gaussian_log_likelihood,
 )
 
 
@@ -61,15 +61,15 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         var_p = torch.ones_like(var_x)
 
         kl_term = compute_gaussian_kl_divergence(
+            feature_mask=weather_feature_mask,
             mu_x=mu_x,
             var_x=var_x,
             mu_p=mu_p,
             var_p=var_p,
-            feature_mask=weather_feature_mask,
         )
         return kl_term
 
-    def _compute_variational_loss_components(
+    def compute_elbo_loss(
         self,
         weather: torch.Tensor,
         weather_feature_mask: torch.Tensor,
@@ -79,51 +79,52 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         mu_x: torch.Tensor,
         var_x: torch.Tensor,
         *args,
+        log_losses: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
-        Compute the variational loss components for WeatherFormer yield prediction.
+        Compute the ELBO loss for WeatherFormer yield prediction following the elegant
+        pattern from WeatherFormer trainer.
 
         Args:
-            weather: Original weather data [batch_size, seq_len, weather_dim]
-            mu_x: Mean of weather representations [batch_size, seq_len, weather_dim]
-            var_x: Variance of weather representations [batch_size, seq_len, weather_dim]
-            yield_pred: Predicted yield values [batch_size, 1]
-            target_yield: Ground truth yield values [batch_size, 1]
-            weather_feature_mask: Boolean mask indicating predicted positions
-
-        Returns:
-            Dictionary containing all loss components
+            weather: Original weather data
+            weather_feature_mask: Boolean mask for weather features
+            target_yield: Ground truth yield values
+            yield_pred: Predicted yield values
+            z: Sampled weather representations
+            mu_x: Mean of weather representations
+            var_x: Variance of weather representations
         """
+
         # 1. Yield term: MSE between predicted and target yield
         yield_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
 
         beta = self._current_beta()
-        # 2. Reconstruction term: Gaussian NLL for weather features
-        # use negative mask so that it is computed for input weather vals
-        # reconstruction_loss = beta * gaussian_nll_loss(
-        #     weather, mu_x, var_x, ~weather_feature_mask
-        # )
-        reconstruction_loss = (
-            beta
-            * masked_mean(
-                (weather - z) ** 2,  # keep only input
-                ~weather_feature_mask,
-                dim=(1, 2),
-            ).mean()
-        )  # mean over batch
 
-        # 3. KL divergence term: β * KL(q(z|x) || p(z))
-        kl_term = beta * self.compute_kl_loss(
-            weather_feature_mask, z, mu_x, var_x, *args
+        # 2. Reconstruction term: Gaussian negative log-likelihood for weather features
+        # Use inverse mask to compute reconstruction for input features
+        input_mask = ~weather_feature_mask
+        reconstruction_term = (
+            beta * -gaussian_log_likelihood(weather, mu_x, var_x, input_mask).mean()
         )
 
+        # 3. KL divergence term: β * KL(q(z|x) || p(z))
+        kl_term = (
+            beta
+            * self.compute_kl_loss(weather_feature_mask, z, mu_x, var_x, *args).mean()
+        )
+
+        if log_losses or DRY_RUN:
+            self.logger.info(f"Yield Loss: {yield_loss.item():.6f}")
+            self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
+            self.logger.info(f"KL Term: {kl_term.item():.6f}")
+
         # Total loss: sum of all terms
-        total_loss = yield_loss + reconstruction_loss + kl_term
+        total_loss = yield_loss + reconstruction_term + kl_term
 
         return {
             "total_loss": total_loss,
             "yield": yield_loss,
-            "reconstruction": reconstruction_loss,
+            "reconstruction": reconstruction_term,
             "kl_term": kl_term,
         }
 
@@ -142,7 +143,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         """Compute variational training loss for WeatherFormer yield prediction."""
 
         # Forward pass through WeatherFormer model
-        # Returns (yield_pred, mu_x, var_x)
+        # Returns (yield_pred, z, mu_x, var_x)
         model_outputs = self.model(
             padded_weather,
             coord_processed,
@@ -151,8 +152,9 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
             weather_feature_mask,
             y_past,
         )
-        # Compute all loss components using the helper method
-        return self._compute_variational_loss_components(
+
+        # Compute ELBO loss using the elegant helper method
+        return self.compute_elbo_loss(
             padded_weather, weather_feature_mask, target_yield, *model_outputs
         )
 
@@ -181,10 +183,11 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
                 y_past,
             )
 
-        # Compute all loss components using the helper method
-        components = self._compute_variational_loss_components(
+        # Compute ELBO loss using the elegant helper method
+        components = self.compute_elbo_loss(
             padded_weather, weather_feature_mask, target_yield, *model_outputs
         )
+
         # only return the yield (RMSE) loss for validation
         return {"total_loss": components["yield"] ** 0.5}
 

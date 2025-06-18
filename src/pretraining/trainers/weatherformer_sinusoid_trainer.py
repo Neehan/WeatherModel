@@ -5,7 +5,7 @@ from src.pretraining.dataloader.pretraining_dataloader import streaming_dataload
 from src.pretraining.models.weatherformer_sinusoid import WeatherFormerSinusoid
 from src.pretraining.trainers.weatherformer_trainer import WeatherFormerTrainer
 from src.utils.constants import TOTAL_WEATHER_VARS
-from src.utils.losses import compute_gaussian_kl_divergence, gaussian_nll_loss
+from src.utils.losses import compute_gaussian_kl_divergence
 
 
 class WeatherFormerSinusoidTrainer(WeatherFormerTrainer):
@@ -41,11 +41,7 @@ class WeatherFormerSinusoidTrainer(WeatherFormerTrainer):
     ) -> torch.Tensor:
         """Compute KL divergence loss between posterior and sinusoidal prior distributions."""
         kl_term = compute_gaussian_kl_divergence(
-            mu_x=mu_x,
-            var_x=var_x,
-            mu_p=mu_p,
-            var_p=var_p,
-            feature_mask=weather_feature_mask,
+            weather_feature_mask, mu_x, var_x, mu_p, var_p
         )
         return kl_term
 

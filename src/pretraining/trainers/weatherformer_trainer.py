@@ -1,13 +1,14 @@
-import torch
 import logging
-from typing import Dict, Optional, Tuple
-from src.base_trainer.base_trainer import BaseTrainer
-from src.pretraining.models.weatherformer import WeatherFormer
-from src.utils.constants import TOTAL_WEATHER_VARS
-from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
+from typing import Dict, Tuple
+
+import torch
 from torch.utils.data import DataLoader
-from src.utils.losses import compute_gaussian_kl_divergence, gaussian_nll_loss
-from typing import Tuple
+
+from src.base_trainer.base_trainer import BaseTrainer
+from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
+from src.pretraining.models.weatherformer import WeatherFormer
+from src.utils.constants import DRY_RUN, TOTAL_WEATHER_VARS
+from src.utils.losses import compute_gaussian_kl_divergence, gaussian_log_likelihood
 
 
 class WeatherFormerTrainer(BaseTrainer):
@@ -60,11 +61,7 @@ class WeatherFormerTrainer(BaseTrainer):
         var_p = torch.ones_like(var_x)
 
         kl_term = compute_gaussian_kl_divergence(
-            mu_x=mu_x,
-            var_x=var_x,
-            mu_p=mu_p,
-            var_p=var_p,
-            feature_mask=weather_feature_mask,
+            weather_feature_mask, mu_x, var_x, mu_p, var_p
         )
         return kl_term
 
@@ -91,14 +88,21 @@ class WeatherFormerTrainer(BaseTrainer):
             var_x: Predicted variance values (σ²) - already clamped in model
         """
         # Reconstruction term: (z - μ)² / (2σ²) + 1/2log(σ²)
-        reconstruction_term = gaussian_nll_loss(weather, mu_x, var_x, feature_mask)
-        kl_term = self.compute_kl_loss(weather, feature_mask, mu_x, var_x, *args)
+        n_masked_features = feature_mask.sum(dim=(1, 2)).float().mean()
+        reconstruction_term = (
+            -gaussian_log_likelihood(weather, mu_x, var_x, feature_mask)
+            / n_masked_features
+        ).mean()
+        kl_term = (
+            self.beta
+            * self.compute_kl_loss(weather, feature_mask, mu_x, var_x, *args).mean()
+        ) / n_masked_features
 
-        if log_losses:
+        if log_losses or DRY_RUN:
             self.logger.info(f"Reconstruction Term: {reconstruction_term.item():.6f}")
             self.logger.info(f"KL Term: {kl_term.item():.6f}")
         # Total loss: reconstruction + log_variance
-        total_loss = reconstruction_term + self.beta * kl_term
+        total_loss = reconstruction_term + kl_term
 
         return {
             "total_loss": total_loss,

@@ -82,7 +82,7 @@ parser.add_argument(
 parser.add_argument(
     "--beta",
     help="lambda parameter for mixture prior loss weighting (for weatherformermixture)",
-    default=1e-4,
+    default=1e-0,
     type=float,
 )
 

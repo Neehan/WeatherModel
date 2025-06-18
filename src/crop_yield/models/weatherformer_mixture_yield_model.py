@@ -57,8 +57,8 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         )
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
-        # where epsilon ~ N(0, 1)
-        epsilon = torch.randn_like(mu_x)
+        # where epsilon ~ N(0, 1) only for missing dims
+        epsilon = torch.randn_like(mu_x) * weather_feature_mask
         z = mu_x + torch.sqrt(var_x) * epsilon
 
         # z = self._impute_weather(padded_weather, z, weather_feature_mask)

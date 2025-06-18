@@ -8,7 +8,7 @@ from src.pretraining.models.weatherformer import WeatherFormer
 from src.pretraining.models.weatherformer_mixture import WeatherFormerMixture
 from src.pretraining.trainers.weatherformer_trainer import WeatherFormerTrainer
 from src.utils.constants import TOTAL_WEATHER_VARS
-from src.utils.losses import compute_mixture_kl_divergence, gaussian_nll_loss
+from src.utils.losses import compute_mixture_kl_divergence
 
 
 class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
@@ -44,11 +44,11 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         """Compute KL divergence loss using mixture prior instead of standard normal."""
         kl_term = compute_mixture_kl_divergence(
             z=weather,
+            feature_mask=weather_feature_mask,
             mu_x=mu_x,
             var_x=var_x,
             mu_k=mu_k,
             var_k=var_k,
-            feature_mask=weather_feature_mask,
         )
         return kl_term
 

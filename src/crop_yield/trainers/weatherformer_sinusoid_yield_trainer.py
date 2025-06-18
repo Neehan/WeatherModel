@@ -36,11 +36,11 @@ class WeatherFormerSinusoidYieldTrainer(WeatherFormerYieldTrainer):
     ) -> torch.Tensor:
         """Compute KL divergence loss using sinusoidal priors instead of standard normal."""
         kl_term = compute_gaussian_kl_divergence(
+            feature_mask=weather_feature_mask,
             mu_x=mu_x,
             var_x=var_x,
             mu_p=mu_p,
             var_p=var_p,
-            feature_mask=weather_feature_mask,
         )
         return kl_term
 

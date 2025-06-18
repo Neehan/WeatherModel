@@ -40,11 +40,11 @@ class WeatherFormerMixtureYieldTrainer(WeatherFormerYieldTrainer):
         """Compute KL divergence loss using mixture prior instead of standard normal."""
         kl_term = compute_mixture_kl_divergence(
             z=z,
+            feature_mask=weather_feature_mask,
             mu_x=mu_x,
             var_x=var_x,
             mu_k=mu_k,
             var_k=var_k,
-            feature_mask=weather_feature_mask,
         )
         return kl_term
 
