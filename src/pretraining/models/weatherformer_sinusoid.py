@@ -36,12 +36,13 @@ class WeatherFormerSinusoid(WeatherFormer):
         )
         # override the name
         self.name = "weatherformer_sinusoid"
-        self.k = k
         self.positions = torch.arange(
             max_len, dtype=torch.float, device=device
         ).reshape(
             1, 1, max_len, 1
         )  #
+        self.k = k
+
         # Initialize with shape (1, k, max_len, weather_dim) to avoid unsqueezing later
         self.frequency = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
         self.phase = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
@@ -54,11 +55,14 @@ class WeatherFormerSinusoid(WeatherFormer):
         self, pretrained_model: "WeatherFormerSinusoid", load_out_proj=True
     ):
         super().load_pretrained(pretrained_model, load_out_proj)
+        if self.k != pretrained_model.k:
+            raise ValueError(
+                f"k mismatch: {self.k} != {pretrained_model.k}. Please set k to the same value."
+            )
         self.frequency = copy.deepcopy(pretrained_model.frequency)
         self.phase = copy.deepcopy(pretrained_model.phase)
         self.amplitude = copy.deepcopy(pretrained_model.amplitude)
         self.log_var_prior = copy.deepcopy(pretrained_model.log_var_prior)
-        self.k = pretrained_model.k
 
     def forward(
         self,

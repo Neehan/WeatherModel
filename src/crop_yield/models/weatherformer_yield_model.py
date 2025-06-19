@@ -58,8 +58,7 @@ class WeatherFormerYieldModel(WeatherBERTYieldModel):
         # where epsilon ~ N(0, 1)
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-
-        # z = self._impute_weather(padded_weather, z, weather_feature_mask)
+        z = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(

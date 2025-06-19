@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional
 from src.pretraining.models.weatherbert import WeatherBERT
-from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE
+from src.utils.constants import MAX_CONTEXT_LENGTH
 
 """
 This class implements the WeatherAutoencoder model for baseline comparison.
@@ -17,11 +17,11 @@ class WeatherAutoencoder(WeatherBERT):
         self,
         weather_dim,
         output_dim,
+        device,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
-        device=DEVICE,
     ):
         super(WeatherAutoencoder, self).__init__(
             weather_dim=weather_dim,

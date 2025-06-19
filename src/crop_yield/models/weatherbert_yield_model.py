@@ -97,9 +97,9 @@ class WeatherBERTYieldModel(BaseModel):
             interval,
             weather_feature_mask=weather_feature_mask,
         )
-        # predicted_weather = self._impute_weather(
-        #     weather, predicted_weather, weather_feature_mask
-        # )
+        predicted_weather = self._impute_weather(
+            weather, predicted_weather, weather_feature_mask
+        )
 
         output = self.yield_model(
             predicted_weather,
