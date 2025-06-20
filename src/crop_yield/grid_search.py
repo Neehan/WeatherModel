@@ -131,6 +131,15 @@ def run_single_experiment(experiment_idx, config, gpu_id):
     # Set device parameters for this experiment
     config = copy.deepcopy(config)  # Avoid modifying original config
     if torch.cuda.is_available():
+        # Validate GPU ID
+        if gpu_id >= torch.cuda.device_count():
+            raise ValueError(
+                f"GPU {gpu_id} not available. Only {torch.cuda.device_count()} GPUs detected."
+            )
+
+        # Explicitly set the current CUDA device for this thread
+        torch.cuda.set_device(gpu_id)
+
         # Pass local_rank instead of device string - this is what training loops expect
         config["local_rank"] = gpu_id
         config["rank"] = 0  # Single GPU training
@@ -142,9 +151,13 @@ def run_single_experiment(experiment_idx, config, gpu_id):
 
     experiment_name = f"{config['model']}_beta{config['beta']}_years{config['n_train_years']}_pretrained{config['pretrained_model_path'] is not None}"
 
-    logger.info(
-        f"Starting experiment {experiment_idx} on GPU {gpu_id}: {experiment_name}"
-    )
+    if torch.cuda.is_available():
+        logger.info(
+            f"Starting experiment {experiment_idx} on GPU {gpu_id}/{torch.cuda.device_count()-1}: {experiment_name}"
+        )
+        logger.info(f"Current CUDA device: {torch.cuda.current_device()}")
+    else:
+        logger.info(f"Starting experiment {experiment_idx} on CPU: {experiment_name}")
 
     try:
         # Clear GPU cache before starting experiment
@@ -152,8 +165,12 @@ def run_single_experiment(experiment_idx, config, gpu_id):
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
-        # Run the experiment
-        avg_rmse, std_rmse = main(config)
+        # Run the experiment with explicit device context
+        if torch.cuda.is_available():
+            with torch.cuda.device(gpu_id):
+                avg_rmse, std_rmse = main(config)
+        else:
+            avg_rmse, std_rmse = main(config)
 
         # Clear GPU cache after experiment
         if torch.cuda.is_available():
