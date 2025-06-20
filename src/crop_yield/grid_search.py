@@ -268,7 +268,10 @@ def run_grid_search(num_gpus, checkpoint_frequency):
                     )
 
             except Exception as e:
-                logger.error(f"Experiment {experiment_idx} on GPU {gpu_id} failed: {e}")
+                logger.error(
+                    f"Experiment {experiment_idx} on GPU {gpu_id} failed: {e}",
+                    exc_info=True,
+                )
                 # Continue with other experiments
 
     # Final save
