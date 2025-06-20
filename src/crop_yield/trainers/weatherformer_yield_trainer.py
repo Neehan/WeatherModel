@@ -112,7 +112,7 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
         # dont pass weather mask
         kl_term = (
             beta
-            * self.compute_kl_loss(torch.ones_like(mu_x), z, mu_x, var_x, *args).mean()
+            * self.compute_kl_loss(weather_feature_mask, z, mu_x, var_x, *args).mean()
         )
 
         if log_losses or DRY_RUN:
