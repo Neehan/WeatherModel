@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from src.pretraining.models.weatherformer import WeatherFormer
-from src.utils.constants import MAX_CONTEXT_LENGTH
+from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
 
 """
 This class implements the WeatherFormerMixture model, which extends WeatherFormer
@@ -18,12 +18,12 @@ class WeatherFormerSinusoid(WeatherFormer):
         self,
         weather_dim,
         output_dim,
-        device,
         k=4,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
+        device=DEVICE,
     ):
         super(WeatherFormerSinusoid, self).__init__(
             weather_dim=weather_dim,
@@ -44,17 +44,11 @@ class WeatherFormerSinusoid(WeatherFormer):
         self.k = k
 
         # Initialize with shape (1, k, max_len, weather_dim) to avoid unsqueezing later
-        self.frequency = nn.Parameter(
-            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
-        )
-        self.phase = nn.Parameter(
-            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
-        )
-        self.amplitude = nn.Parameter(
-            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
-        )
+        self.frequency = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
+        self.phase = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
+        self.amplitude = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
         self.log_var_prior = nn.Parameter(
-            torch.randn(1, max_len, weather_dim, device=device) * 0.1 - 1
+            torch.randn(1, max_len, weather_dim) * 0.1 - 1
         )
 
     def load_pretrained(

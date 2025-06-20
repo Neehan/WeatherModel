@@ -40,13 +40,9 @@ class WeatherFormerMixture(WeatherFormer):
 
         # Mixture parameters: mu_k and log_var_k of shape (k, max_len, weather_dim)
         # Initialize mixture means with small random values instead of zeros
-        self.mu_k = nn.Parameter(
-            torch.randn(k, max_len, output_dim, device=device) * 0.1
-        )
+        self.mu_k = nn.Parameter(torch.randn(k, max_len, output_dim) * 0.1)
         # Initialize log_var_k to give var_k around 0.1-1.0 range instead of exactly 1.0
-        self.log_var_k = nn.Parameter(
-            torch.randn(k, max_len, output_dim, device=device) * 0.1 - 1.0
-        )
+        self.log_var_k = nn.Parameter(torch.randn(k, max_len, output_dim) * 0.1 - 1.0)
 
     def load_pretrained(
         self, pretrained_model: "WeatherFormerMixture", load_out_proj=True

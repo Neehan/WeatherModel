@@ -39,12 +39,11 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         self.k = k
         # Initialize mu_k to give var_k around (-0.2, 0.2) range
         self.mu_k = nn.Parameter(
-            torch.randn(k, self.weather_model.max_len, weather_dim, device=device) * 0.1
+            torch.randn(k, self.weather_model.max_len, weather_dim) * 0.1
         )
         # Initialize log_var_k to give var_k around (-1.2, -0.8) range
         self.log_var_k = nn.Parameter(
-            torch.randn(k, self.weather_model.max_len, weather_dim, device=device) * 0.1
-            - 1.0
+            torch.randn(k, self.weather_model.max_len, weather_dim) * 0.1 - 1.0
         )
         self.log_var_x = nn.Sequential(
             nn.Linear(weather_dim, 4 * weather_dim),

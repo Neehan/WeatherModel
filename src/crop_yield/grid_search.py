@@ -1,78 +1,77 @@
 import os
 import logging
 import torch
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import copy
 import json
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 from src.crop_yield.yield_main import main
-from src.utils.utils import setup_logging, get_model_params
+from src.utils.utils import setup_logging
 
-# Pretrained model path mapping
+# Pretrained model path mapping - update these paths as needed
 PRETRAINED_MODEL_PATHS = {
-    "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
-    "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.1m_latest.pth",
+    "weatherformersinusoid": "data/trained_models/pretraining/weatherformersinusoid_small.pth",
+    "weatherformermixture": "data/trained_models/pretraining/weatherformermixture_small.pth",
 }
 
-CHECKPOINT_DIR = "data/grid_search"
-CHECKPOINT_FILE = "grid_search_checkpoint.json"
 
-# Thread lock for checkpoint saving
-checkpoint_lock = threading.Lock()
+def run_single_experiment(args_dict, gpu_id):
+    """Run a single experiment on specified GPU"""
+    # Set GPU device
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu_id)
+        args_dict["device"] = f"cuda:{gpu_id}"
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
+    # Setup logging for this process
+    setup_logging(rank=gpu_id)
+    logger = logging.getLogger(__name__)
 
-def ensure_checkpoint_dir():
-    """Ensure checkpoint directory exists"""
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    experiment_name = (
+        f"{args_dict['model']}_beta{args_dict['beta']}_"
+        f"years{args_dict['n_train_years']}_"
+        f"pretrained{args_dict['pretrained_model_path'] is not None}"
+    )
 
+    logger.info(f"Starting experiment on GPU {gpu_id}: {experiment_name}")
 
-def save_checkpoint(results, completed_indices, total_experiments):
-    """Save current progress to checkpoint file - thread safe"""
-    with checkpoint_lock:
-        ensure_checkpoint_dir()
-        checkpoint_path = os.path.join(CHECKPOINT_DIR, CHECKPOINT_FILE)
+    try:
+        avg_rmse, std_rmse = main(args_dict)
 
-        checkpoint_data = {
-            "timestamp": datetime.now().isoformat(),
-            "completed_indices": list(completed_indices),
-            "total_experiments": total_experiments,
-            "results": results,
-            "progress": f"{len(completed_indices)}/{total_experiments}",
+        result = {
+            "experiment_name": experiment_name,
+            "args": args_dict,
+            "avg_rmse": avg_rmse,
+            "std_rmse": std_rmse,
+            "gpu_id": gpu_id,
+            "status": "success",
         }
 
-        with open(checkpoint_path, "w") as f:
-            json.dump(checkpoint_data, f, indent=2)
-
-        logger = logging.getLogger(__name__)
         logger.info(
-            f"Checkpoint saved: {len(completed_indices)}/{total_experiments} experiments completed"
+            f"Completed experiment {experiment_name}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}"
         )
+        return result
 
-
-def load_checkpoint():
-    """Load checkpoint if it exists"""
-    checkpoint_path = os.path.join(CHECKPOINT_DIR, CHECKPOINT_FILE)
-
-    if os.path.exists(checkpoint_path):
-        with open(checkpoint_path, "r") as f:
-            checkpoint_data = json.load(f)
-
-        logger = logging.getLogger(__name__)
-        logger.info(f"Resuming from checkpoint: {checkpoint_data['progress']}")
-
-        return (
-            set(checkpoint_data["completed_indices"]),
-            checkpoint_data["results"],
-            checkpoint_data["total_experiments"],
-        )
-
-    return set(), [], 0
+    except Exception as e:
+        logger.error(f"Failed experiment {experiment_name} on GPU {gpu_id}: {str(e)}")
+        result = {
+            "experiment_name": experiment_name,
+            "args": args_dict,
+            "avg_rmse": None,
+            "std_rmse": None,
+            "gpu_id": gpu_id,
+            "status": "failed",
+            "error": str(e),
+        }
+        return result
 
 
 def generate_experiment_configs():
     """Generate all experiment configurations"""
+
+    # Grid search parameters
     beta_values = [0.0, 1e-4, 1e-3, 1e-2]
     n_train_years_values = [5, 10, 20, 30]
     model_configs = [
@@ -81,6 +80,7 @@ def generate_experiment_configs():
     ]
     pretrained_options = [True, False]
 
+    # Base configuration
     base_config = {
         "batch_size": 64,
         "n_past_years": 6,
@@ -93,16 +93,13 @@ def generate_experiment_configs():
         "seed": 1234,
     }
 
-    model_size_params = get_model_params("small")
-    base_config["model_size_params"] = model_size_params
-
     experiments = []
-    experiment_idx = 0
 
     for beta in beta_values:
         for n_train_years in n_train_years_values:
             for model_config in model_configs:
                 for use_pretrained in pretrained_options:
+                    # Create experiment config
                     config = copy.deepcopy(base_config)
                     config["beta"] = beta
                     config["n_train_years"] = n_train_years
@@ -111,6 +108,7 @@ def generate_experiment_configs():
                         "n_mixture_components"
                     ]
 
+                    # Set pretrained model path
                     if use_pretrained:
                         config["pretrained_model_path"] = PRETRAINED_MODEL_PATHS[
                             model_config["model"]
@@ -118,214 +116,107 @@ def generate_experiment_configs():
                     else:
                         config["pretrained_model_path"] = None
 
-                    experiments.append((experiment_idx, config))
-                    experiment_idx += 1
+                    experiments.append(config)
 
     return experiments
 
 
-def run_single_experiment(experiment_idx, config, gpu_id):
-    """Run a single experiment on a specific GPU"""
-    logger = logging.getLogger(__name__)
+def run_grid_search(num_gpus=4, max_workers=None):
+    """Run grid search across multiple GPUs"""
 
-    # Set device parameters for this experiment
-    config = copy.deepcopy(config)  # Avoid modifying original config
-    if torch.cuda.is_available():
-        # Validate GPU ID
-        if gpu_id >= torch.cuda.device_count():
-            raise ValueError(
-                f"GPU {gpu_id} not available. Only {torch.cuda.device_count()} GPUs detected."
-            )
-
-        # Explicitly set the current CUDA device for this thread
-        torch.cuda.set_device(gpu_id)
-
-        # Pass local_rank instead of device string - this is what training loops expect
-        config["local_rank"] = gpu_id
-        config["rank"] = 0  # Single GPU training
-        config["world_size"] = 1  # Single GPU training
-    else:
-        config["local_rank"] = 0
-        config["rank"] = 0
-        config["world_size"] = 1
-
-    experiment_name = f"{config['model']}_beta{config['beta']}_years{config['n_train_years']}_pretrained{config['pretrained_model_path'] is not None}"
-
-    if torch.cuda.is_available():
-        logger.info(
-            f"Starting experiment {experiment_idx} on GPU {gpu_id}/{torch.cuda.device_count()-1}: {experiment_name}"
-        )
-        logger.info(f"Current CUDA device: {torch.cuda.current_device()}")
-    else:
-        logger.info(f"Starting experiment {experiment_idx} on CPU: {experiment_name}")
-
-    try:
-        # Clear GPU cache before starting experiment
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-        # Run the experiment with explicit device context
-        if torch.cuda.is_available():
-            with torch.cuda.device(gpu_id):
-                avg_rmse, std_rmse = main(config)
-        else:
-            avg_rmse, std_rmse = main(config)
-
-        # Clear GPU cache after experiment
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-        # Store result
-        result = config.copy()
-        result.update(
-            {
-                "experiment_idx": experiment_idx,
-                "mean_rmse": avg_rmse,
-                "std_rmse": std_rmse,
-                "gpu_id": gpu_id,
-            }
-        )
-
-        logger.info(
-            f"Completed experiment {experiment_idx} on GPU {gpu_id}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}"
-        )
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Experiment {experiment_idx} on GPU {gpu_id} failed: {e}")
-        # Clear GPU cache on error
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        raise
-
-
-def run_grid_search(num_gpus, checkpoint_frequency):
-    """Run grid search with concurrent GPU utilization"""
     setup_logging(rank=0)
     logger = logging.getLogger(__name__)
 
-    # Generate all experiments
-    all_experiments = generate_experiment_configs()
-    total_experiments = len(all_experiments)
+    # Generate all experiment configurations
+    experiments = generate_experiment_configs()
 
-    # Load checkpoint
-    completed_indices, results, checkpoint_total = load_checkpoint()
+    logger.info(f"Generated {len(experiments)} experiments to run")
+    logger.info(f"Using {num_gpus} GPUs")
 
-    if checkpoint_total > 0 and checkpoint_total != total_experiments:
-        logger.warning(f"Config changed. Starting fresh.")
-        completed_indices, results = set(), []
+    # Determine max workers (default to number of GPUs)
+    if max_workers is None:
+        max_workers = num_gpus
 
-    # Filter remaining experiments
-    remaining_experiments = [
-        (idx, config) for idx, config in all_experiments if idx not in completed_indices
-    ]
+    results = []
 
-    logger.info(
-        f"Total: {total_experiments}, Completed: {len(completed_indices)}, Remaining: {len(remaining_experiments)}"
-    )
-
-    if not remaining_experiments:
-        logger.info("All experiments completed!")
-        return results
-
-    logger.info(f"Running experiments on {num_gpus} GPUs concurrently")
-
-    # Use ThreadPoolExecutor to run experiments concurrently
-    with ThreadPoolExecutor(max_workers=num_gpus) as executor:
-        # Submit initial batch of experiments (one per GPU)
+    # Run experiments in parallel using ProcessPoolExecutor
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all experiments
         future_to_experiment = {}
-        experiment_queue = iter(remaining_experiments)
 
-        # Submit initial batch
-        for gpu_id in range(num_gpus):
-            try:
-                experiment_idx, config = next(experiment_queue)
-                future = executor.submit(
-                    run_single_experiment, experiment_idx, config, gpu_id
-                )
-                future_to_experiment[future] = (experiment_idx, gpu_id)
-                logger.info(f"Submitted experiment {experiment_idx} to GPU {gpu_id}")
-            except StopIteration:
-                break
+        for i, experiment in enumerate(experiments):
+            gpu_id = i % num_gpus  # Assign GPU in round-robin fashion
+            future = executor.submit(run_single_experiment, experiment, gpu_id)
+            future_to_experiment[future] = (experiment, gpu_id, i)
 
-        # Process completed experiments and submit new ones
+        # Collect results as they complete
         for future in as_completed(future_to_experiment):
-            experiment_idx, gpu_id = future_to_experiment[future]
-
+            experiment, gpu_id, exp_idx = future_to_experiment[future]
             try:
                 result = future.result()
                 results.append(result)
-                completed_indices.add(experiment_idx)
 
-                logger.info(
-                    f"GPU {gpu_id} completed experiment {experiment_idx}: RMSE = {result['mean_rmse']:.3f} ± {result['std_rmse']:.3f} "
-                    f"({len(completed_indices)}/{total_experiments})"
-                )
-
-                # Save checkpoint periodically
-                if len(completed_indices) % checkpoint_frequency == 0:
-                    save_checkpoint(results, completed_indices, total_experiments)
-
-                # Submit next experiment to the now-free GPU
-                try:
-                    next_experiment_idx, next_config = next(experiment_queue)
-                    next_future = executor.submit(
-                        run_single_experiment, next_experiment_idx, next_config, gpu_id
-                    )
-                    future_to_experiment[next_future] = (next_experiment_idx, gpu_id)
-                    logger.info(
-                        f"Submitted experiment {next_experiment_idx} to GPU {gpu_id}"
-                    )
-                except StopIteration:
-                    logger.info(
-                        f"No more experiments to submit. GPU {gpu_id} is now idle."
-                    )
+                logger.info(f"Completed {len(results)}/{len(experiments)} experiments")
 
             except Exception as e:
-                logger.error(
-                    f"Experiment {experiment_idx} on GPU {gpu_id} failed: {e}",
-                    exc_info=True,
+                logger.error(f"Experiment {exp_idx} failed with exception: {str(e)}")
+                # Still add a failed result
+                results.append(
+                    {
+                        "experiment_name": f"experiment_{exp_idx}",
+                        "args": experiment,
+                        "avg_rmse": None,
+                        "std_rmse": None,
+                        "gpu_id": gpu_id,
+                        "status": "failed",
+                        "error": str(e),
+                    }
                 )
-                # Continue with other experiments
 
-    # Final save
-    save_checkpoint(results, completed_indices, total_experiments)
-
+    # Save results to file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    final_file = os.path.join(CHECKPOINT_DIR, f"grid_search_results.json")
+    results_file = f"grid_search_results_{timestamp}.json"
 
-    with open(final_file, "w") as f:
+    with open(results_file, "w") as f:
         json.dump(results, f, indent=2)
 
-    logger.info(f"Grid search completed! Results saved to {final_file}")
+    logger.info(f"Grid search completed! Results saved to {results_file}")
 
-    if results:
-        best_result = min(results, key=lambda x: x["mean_rmse"])
+    # Print summary
+    successful_results = [r for r in results if r["status"] == "success"]
+    failed_results = [r for r in results if r["status"] == "failed"]
+
+    logger.info(
+        f"Summary: {len(successful_results)} successful, {len(failed_results)} failed"
+    )
+
+    if successful_results:
+        # Find best result
+        best_result = min(successful_results, key=lambda x: x["avg_rmse"])
+        logger.info(f"Best result: {best_result['experiment_name']}")
         logger.info(
-            f"Best: {best_result['model']}_beta{best_result['beta']}_years{best_result['n_train_years']}"
-        )
-        logger.info(
-            f"Best RMSE: {best_result['mean_rmse']:.3f} ± {best_result['std_rmse']:.3f}"
+            f"Best RMSE: {best_result['avg_rmse']:.3f} ± {best_result['std_rmse']:.3f}"
         )
 
-    # Clean up checkpoint
-    checkpoint_path = os.path.join(CHECKPOINT_DIR, CHECKPOINT_FILE)
-    if os.path.exists(checkpoint_path):
-        os.remove(checkpoint_path)
+        # Print top 5 results
+        top_results = sorted(successful_results, key=lambda x: x["avg_rmse"])[:5]
+        logger.info("\nTop 5 results:")
+        for i, result in enumerate(top_results, 1):
+            logger.info(
+                f"{i}. {result['experiment_name']}: {result['avg_rmse']:.3f} ± {result['std_rmse']:.3f}"
+            )
 
     return results
 
 
 if __name__ == "__main__":
+    # Check GPU availability
     if not torch.cuda.is_available():
-        print("CUDA not available! Running on CPU")
+        print("CUDA not available! Running on CPU (will be slow)")
         num_gpus = 1
     else:
-        # Use all 4 GPUs for maximum parallel processing
         num_gpus = min(4, torch.cuda.device_count())
-        print(f"Using {num_gpus} GPUs")
+        print(f"Found {torch.cuda.device_count()} GPUs, using {num_gpus}")
 
-    results = run_grid_search(num_gpus=num_gpus, checkpoint_frequency=1)
+    # Run grid search
+    results = run_grid_search(num_gpus=num_gpus)

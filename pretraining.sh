@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p mit_preemptable              # Use GPU partition with longer runtime
 #SBATCH -A mit_general
-#SBATCH --job-name=pretrain
+#SBATCH --job-name=ddp_single_node
 #SBATCH -N 1                            # Single node
 #SBATCH --ntasks=1                      # One task (master launcher)
 #SBATCH --cpus-per-task=4              # 4 CPU threads for the task

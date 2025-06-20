@@ -69,11 +69,11 @@ class Weatherformer(nn.Module):
         self,
         input_dim,
         output_dim,
-        device,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
+        device=DEVICE,
     ):
         super(Weatherformer, self).__init__()
 

@@ -36,12 +36,8 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
             .unsqueeze(2)
         )
         self.theta_p = nn.Linear(1, weather_dim)
-        self.A_p = nn.Parameter(
-            torch.randn(1, max_len, weather_dim, device=device) * 0.1
-        )
-        self.log_var_p = nn.Parameter(
-            torch.randn(1, max_len, weather_dim, device=device) * 0.1 - 1
-        )
+        self.A_p = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1)
+        self.log_var_p = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1 - 1)
 
         self.log_var_x = nn.Sequential(
             nn.Linear(weather_dim, 4 * weather_dim),

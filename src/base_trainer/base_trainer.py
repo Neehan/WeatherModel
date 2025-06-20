@@ -378,14 +378,10 @@ class BaseTrainer(ABC):
     def _load_pretrained_model(self, pretrained_model_path: Optional[str]):
         """Load pretrained model if provided."""
         if pretrained_model_path and os.path.exists(pretrained_model_path):
-            # Load pretrained model to the correct device to avoid device mismatch
-            pretrained_model = torch.load(
-                pretrained_model_path, weights_only=False, map_location=self.device
-            )
+            pretrained_model = torch.load(pretrained_model_path, weights_only=False)
             self.logger.info(
                 f"🔄 Loading pretrained model from: {pretrained_model_path}"
             )
-            self.logger.info(f"🎯 Loading pretrained model to device: {self.device}")
             self.logger.info(
                 "⚠️  IMPORTANT: Loading pretrained weights BEFORE optimizer creation"
             )

@@ -15,6 +15,7 @@ import os
 
 # Test years for 5-fold cross validation
 TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
+FOLD_IDX = 0
 
 
 class WeatherBERTYieldTrainer(BaseTrainer):
@@ -38,7 +39,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         n_past_years: int,
         n_train_years: int,
         beta: float,
-        fold_idx: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -58,7 +58,9 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
 
-        self.test_year = TEST_YEARS[fold_idx]
+        global FOLD_IDX
+        self.test_year = TEST_YEARS[FOLD_IDX]
+        FOLD_IDX += 1
         self.logger.info(f"Testing on year: {self.test_year}")
 
         # Cache for datasets to avoid recreation during cross-validation
@@ -82,7 +84,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             self.n_past_years,
             self.batch_size,
             shuffle,
-            num_workers=8,
+            num_workers=0 if self.world_size > 1 else 8,
         )
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -170,8 +172,8 @@ def _create_yield_training_setup(args_dict):
     world_size = args_dict.get("world_size", 1)
     local_rank = args_dict.get("local_rank", 0)
 
-    # Set device for this process using local_rank
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+    # Set device for this process
+    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
     # Read dataset
     crop_df = read_soybean_dataset(DATA_DIR)
