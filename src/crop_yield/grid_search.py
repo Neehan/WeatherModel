@@ -67,7 +67,7 @@ class GridSearch:
 
     def _experiment_exists(self, beta: float, n_train_years: int) -> bool:
         """Check if specific experiment (beta, year) already exists and completed successfully"""
-        if self.existing_results.empty:
+        if self.existing_results.empty or "model" not in self.existing_results.columns:
             return False
 
         mask = (
@@ -185,7 +185,7 @@ class GridSearch:
             )
 
             if mask.any():
-                # Update existing row
+                # Update existing row with only the new results
                 row_idx = df[mask].index[0]
                 for n_years, (mean_rmse, std_rmse) in results.items():
                     year_col = f"year_{n_years}"
@@ -194,32 +194,24 @@ class GridSearch:
                     else:
                         df.loc[row_idx, year_col] = "FAILED"
             else:
-                # Create new row with all year columns
+                # Create new row with only the attempted experiments
                 new_row = {"model": self.model, "method": self.method, "beta": beta}
-                for n_years in self.n_train_years_values:
+                for n_years, (mean_rmse, std_rmse) in results.items():
                     year_col = f"year_{n_years}"
-                    if n_years in results:
-                        mean_rmse, std_rmse = results[n_years]
-                        if mean_rmse is not None and std_rmse is not None:
-                            new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
-                        else:
-                            new_row[year_col] = "FAILED"
+                    if mean_rmse is not None and std_rmse is not None:
+                        new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
                     else:
                         new_row[year_col] = "FAILED"
 
                 new_df = pd.DataFrame([new_row])
                 df = pd.concat([df, new_df], ignore_index=True)
         else:
-            # Empty DataFrame or missing columns - create new row
+            # Empty DataFrame - create new row with only attempted experiments
             new_row = {"model": self.model, "method": self.method, "beta": beta}
-            for n_years in self.n_train_years_values:
+            for n_years, (mean_rmse, std_rmse) in results.items():
                 year_col = f"year_{n_years}"
-                if n_years in results:
-                    mean_rmse, std_rmse = results[n_years]
-                    if mean_rmse is not None and std_rmse is not None:
-                        new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
-                    else:
-                        new_row[year_col] = "FAILED"
+                if mean_rmse is not None and std_rmse is not None:
+                    new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
                 else:
                     new_row[year_col] = "FAILED"
 
@@ -245,34 +237,40 @@ class GridSearch:
         completed_experiments = 0
         skipped_experiments = 0
 
-        # Run experiments for each beta value
-        for beta in self.beta_values:
-            # Check if any experiments need to be run for this beta
-            missing_years = [
-                n_years
-                for n_years in self.n_train_years_values
-                if not self._experiment_exists(beta, n_years)
-            ]
-
-            if not missing_years:
-                self.logger.info(
-                    f"Skipping beta={beta} (all year experiments already completed)"
-                )
-                skipped_experiments += 1
-                continue
-
+        # Run experiments for each year, then each beta within that year
+        for n_train_years in self.n_train_years_values:
             self.logger.info(
-                f"Running experiments for beta={beta}, missing years: {missing_years}"
+                f"\n=== Running experiments for {n_train_years} training years ==="
             )
 
-            # Run all year experiments for this beta (including existing ones for completeness)
-            results = self._run_beta_experiments(beta)
+            for beta in self.beta_values:
+                # Check if this specific (beta, year) experiment already exists
+                if self._experiment_exists(beta, n_train_years):
+                    self.logger.info(
+                        f"Skipping beta={beta}, years={n_train_years} (already completed)"
+                    )
+                    skipped_experiments += 1
+                    continue
 
-            # Save results immediately after completing this beta
-            self._save_results(beta, results)
+                self.logger.info(
+                    f"Running experiment: beta={beta}, years={n_train_years}"
+                )
 
-            completed_experiments += 1
-            self.logger.info(f"Completed and saved results for beta={beta}")
+                # Run single experiment
+                base_config = self._get_base_config()
+                base_config["beta"] = beta
+                base_config["n_train_years"] = n_train_years
+
+                avg_rmse, std_rmse = self._run_single_experiment(base_config)
+
+                # Save result immediately
+                results = {n_train_years: (avg_rmse, std_rmse)}
+                self._save_results(beta, results)
+
+                completed_experiments += 1
+                self.logger.info(
+                    f"Completed and saved: beta={beta}, years={n_train_years}"
+                )
 
         self.logger.info(f"Grid search completed!")
         self.logger.info(
