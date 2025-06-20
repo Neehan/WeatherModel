@@ -18,6 +18,10 @@ echo "======== Starting Parallel Grid Search on 4 GPUs ========"
 mkdir -p data/grid_search
 mkdir -p log
 
+rm -rf data/grid_search/*
+rm -rf log/gpu*.log
+rm -rf data/trained_models/crop_yield/*
+
 # Function to run experiment and log output
 run_experiment() {
     local gpu_id=$1
