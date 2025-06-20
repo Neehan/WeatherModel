@@ -9,7 +9,7 @@ import math
 
 
 class CNNYieldPredictor(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
         self.soil_cnn = SoilCNN()
 
@@ -49,6 +49,7 @@ class CNNYieldPredictor(nn.Module):
             input_dim=fc_dims,
             output_dim=32,
             num_layers=3,
+            device=device,
         )
         self.fc1 = nn.Linear(in_features=32, out_features=1)
 

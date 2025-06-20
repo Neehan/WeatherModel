@@ -8,8 +8,6 @@ load_dotenv()
 DATA_DIR = "data/"
 WEATHER_FILE_PATH = DATA_DIR + "nasa_power/train_dataset_weekly.pth"
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 # Read the STDOUT environment variable
 STDOUT = os.environ.get("STDOUT", "False").lower() in ("true", "1", "t")
 # Read the TEST_ENV environment variable

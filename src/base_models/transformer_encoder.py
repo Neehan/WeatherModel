@@ -1,5 +1,4 @@
 from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
-from src.utils.constants import DEVICE
 
 import torch
 import torch.nn as nn
@@ -12,6 +11,7 @@ class TransformerEncoder(nn.Module):
         self,
         input_dim,
         output_dim,
+        device,
         num_heads=8,
         num_layers=3,
         hidden_dim_factor=8,
@@ -21,7 +21,7 @@ class TransformerEncoder(nn.Module):
         super(TransformerEncoder, self).__init__()
         self.embedding = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = VanillaPositionalEncoding(
-            hidden_dim, max_len=5000, device=DEVICE
+            hidden_dim, max_len=5000, device=device
         )
         encoder_layer = nn.TransformerEncoderLayer(
             batch_first=True,

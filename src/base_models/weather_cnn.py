@@ -4,7 +4,6 @@ import copy
 from typing import Optional
 
 from src.base_models.base_model import BaseModel
-from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE, TOTAL_WEATHER_VARS
 from src.utils.utils import normalize_year_interval_coords
 
 
@@ -14,7 +13,7 @@ class WeatherCNN(BaseModel):
         weather_dim,
         output_dim,
         max_len,
-        device=DEVICE,
+        device,
     ):
         super(WeatherCNN, self).__init__("weathercnn")
 
