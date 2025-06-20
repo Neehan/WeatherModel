@@ -177,23 +177,40 @@ class GridSearch:
         df = self._load_existing_results()
 
         # Find existing row for this beta
-        mask = (
-            (df["model"] == self.model)
-            & (df["method"] == self.method)
-            & (df["beta"] == beta)
-        )
+        if not df.empty and "model" in df.columns:
+            mask = (
+                (df["model"] == self.model)
+                & (df["method"] == self.method)
+                & (df["beta"] == beta)
+            )
 
-        if mask.any():
-            # Update existing row
-            row_idx = df[mask].index[0]
-            for n_years, (mean_rmse, std_rmse) in results.items():
-                year_col = f"year_{n_years}"
-                if mean_rmse is not None and std_rmse is not None:
-                    df.loc[row_idx, year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
-                else:
-                    df.loc[row_idx, year_col] = "FAILED"
+            if mask.any():
+                # Update existing row
+                row_idx = df[mask].index[0]
+                for n_years, (mean_rmse, std_rmse) in results.items():
+                    year_col = f"year_{n_years}"
+                    if mean_rmse is not None and std_rmse is not None:
+                        df.loc[row_idx, year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                    else:
+                        df.loc[row_idx, year_col] = "FAILED"
+            else:
+                # Create new row with all year columns
+                new_row = {"model": self.model, "method": self.method, "beta": beta}
+                for n_years in self.n_train_years_values:
+                    year_col = f"year_{n_years}"
+                    if n_years in results:
+                        mean_rmse, std_rmse = results[n_years]
+                        if mean_rmse is not None and std_rmse is not None:
+                            new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                        else:
+                            new_row[year_col] = "FAILED"
+                    else:
+                        new_row[year_col] = "FAILED"
+
+                new_df = pd.DataFrame([new_row])
+                df = pd.concat([df, new_df], ignore_index=True)
         else:
-            # Create new row with all year columns
+            # Empty DataFrame or missing columns - create new row
             new_row = {"model": self.model, "method": self.method, "beta": beta}
             for n_years in self.n_train_years_values:
                 year_col = f"year_{n_years}"
