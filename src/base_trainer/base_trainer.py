@@ -495,3 +495,11 @@ class BaseTrainer(ABC):
                 "Cleanup completed. Only latest checkpoint and model files remain."
             )
             self.saved_checkpoint_files.clear()
+
+    def _get_n_masked_features(self, epoch, initial_n_masked_features=1):
+        """Calculate dynamic n_masked_features: start with initial, increase by 2 every 5 epochs, cap at 20."""
+        if epoch is None:
+            return initial_n_masked_features
+        # mask 2 more features every 5 epochs up to 25
+        additional_features = (epoch // 5) * 2
+        return min(initial_n_masked_features + additional_features, 25)
