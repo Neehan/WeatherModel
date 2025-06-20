@@ -304,8 +304,8 @@ if __name__ == "__main__":
         print("CUDA not available! Running on CPU")
         num_gpus = 1
     else:
-        # Use fewer GPUs to avoid memory exhaustion with concurrent training
-        num_gpus = min(2, torch.cuda.device_count())
+        # Use all 4 GPUs for maximum parallel processing
+        num_gpus = min(4, torch.cuda.device_count())
         print(f"Using {num_gpus} GPUs")
 
     results = run_grid_search(num_gpus=num_gpus, checkpoint_frequency=1)
