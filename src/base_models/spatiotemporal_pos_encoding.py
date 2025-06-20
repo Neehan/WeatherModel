@@ -5,6 +5,10 @@ import torch.nn as nn
 
 
 class SpatiotemporalPositionalEncoding(nn.Module):
+    # Type hints for registered buffers
+    position_list: torch.Tensor
+    div_term: torch.Tensor
+
     def __init__(self, d_model, max_len, device):
         assert (
             d_model % 4 == 0
@@ -13,17 +17,21 @@ class SpatiotemporalPositionalEncoding(nn.Module):
         # we did seq_len + 1 for max len cause there's a summary vector
         super(SpatiotemporalPositionalEncoding, self).__init__()
 
-        # Create a position array (time encoding)
-        self.position_list = torch.arange(
-            0, max_len, dtype=torch.float, device=device
-        ).reshape(1, max_len, 1)
+        # Create a position array (time encoding) - create on CPU, register_buffer handles device
+        position_list = torch.arange(0, max_len, dtype=torch.float).reshape(
+            1, max_len, 1
+        )
 
-        # max is 10k**(-1/2), cause we have the bias
-        self.div_term = torch.exp(
-            torch.arange(0, d_model, 4, device=device).float()
-            * (-math.log(10000.0) / d_model)
+        # Register as buffer so it moves with the model to different devices
+        self.register_buffer("position_list", position_list)
+
+        # max is 10k**(-1/2), cause we have the bias - create on CPU, register_buffer handles device
+        div_term = torch.exp(
+            torch.arange(0, d_model, 4).float() * (-math.log(10000.0) / d_model)
         ).reshape(1, 1, -1)
-        self.device = device
+
+        # Register as buffer so it moves with the model to different devices
+        self.register_buffer("div_term", div_term)
 
     def forward(self, token_embedding, coords):
         """
@@ -39,8 +47,10 @@ class SpatiotemporalPositionalEncoding(nn.Module):
         """
         batch_size, seq_len, d_model = token_embedding.shape
         latitude, longitude = coords[:, :, :1], coords[:, :, 1:]
-        # Create geo encoding
-        custom_pe = torch.zeros(batch_size, seq_len, d_model, device=self.device)
+        # Create geo encoding - use token_embedding.device to ensure same device
+        custom_pe = torch.zeros(
+            batch_size, seq_len, d_model, device=token_embedding.device
+        )
 
         # geo pe
         custom_pe[:, :, 2::4] = torch.sin(latitude * self.div_term)
