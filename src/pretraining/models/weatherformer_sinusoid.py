@@ -44,11 +44,17 @@ class WeatherFormerSinusoid(WeatherFormer):
         self.k = k
 
         # Initialize with shape (1, k, max_len, weather_dim) to avoid unsqueezing later
-        self.frequency = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
-        self.phase = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
-        self.amplitude = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
+        self.frequency = nn.Parameter(
+            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
+        )
+        self.phase = nn.Parameter(
+            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
+        )
+        self.amplitude = nn.Parameter(
+            torch.randn(1, k, max_len, weather_dim, device=device) * 0.1
+        )
         self.log_var_prior = nn.Parameter(
-            torch.randn(1, max_len, weather_dim) * 0.1 - 1
+            torch.randn(1, max_len, weather_dim, device=device) * 0.1 - 1
         )
 
     def load_pretrained(
