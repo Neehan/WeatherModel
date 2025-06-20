@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH -p mit_preemptable              # Use GPU partition with longer runtime
 #SBATCH -A mit_general
-#SBATCH --job-name=crop_yield_grid_search
+#SBATCH --job-name=crop_grid
 #SBATCH -N 1                            # Single node
 #SBATCH --ntasks=1                      # One task (master launcher)
-#SBATCH --cpus-per-task=32             # More CPUs for parallel processing
-#SBATCH --gres=gpu:H100:4                   # Request 4 GPUs
-#SBATCH --mem=160GB                    # More memory for parallel processing
-#SBATCH -t 72:00:00                    # 72-hour wall time (grid search will take long)
+#SBATCH --cpus-per-task=4             # More CPUs for parallel processing
+#SBATCH --gres=gpu:h100:4                   # Request 4 GPUs
+#SBATCH --mem=40GB                    # More memory for parallel processing
+#SBATCH -t 24:00:00                    # 24-hour wall time (grid search will take long)
 
 # Load your environment
 module load miniforge/24.3.0-0
