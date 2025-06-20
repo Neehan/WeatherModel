@@ -65,8 +65,8 @@ class GridSearch:
                 return pd.DataFrame()
         return pd.DataFrame()
 
-    def _experiment_exists(self, beta: float) -> bool:
-        """Check if experiment already exists in results"""
+    def _experiment_exists(self, beta: float, n_train_years: int) -> bool:
+        """Check if specific experiment (beta, year) already exists and completed successfully"""
         if self.existing_results.empty:
             return False
 
@@ -75,7 +75,17 @@ class GridSearch:
             & (self.existing_results["method"] == self.method)
             & (self.existing_results["beta"] == beta)
         )
-        return mask.any()
+
+        matching_rows = self.existing_results[mask]
+        if matching_rows.empty:
+            return False
+
+        year_col = f"year_{n_train_years}"
+        if year_col not in matching_rows.columns:
+            return False
+
+        year_values = matching_rows[year_col].values
+        return len(year_values) > 0 and year_values[0] != "FAILED"
 
     def _get_base_config(self) -> Dict:
         """Get base configuration for experiments"""
@@ -141,6 +151,13 @@ class GridSearch:
         results = {}
 
         for n_train_years in self.n_train_years_values:
+            # Check if this specific (beta, year) experiment already exists
+            if self._experiment_exists(beta, n_train_years):
+                self.logger.info(
+                    f"Skipping beta={beta}, years={n_train_years} (already completed)"
+                )
+                continue
+
             config = copy.deepcopy(base_config)
             config["n_train_years"] = n_train_years
 
@@ -153,22 +170,44 @@ class GridSearch:
         self, beta: float, results: Dict[int, Tuple[Optional[float], Optional[float]]]
     ):
         """Save experiment results to TSV file"""
+        if not results:  # No new results to save
+            return
+
         # Load current results
         df = self._load_existing_results()
 
-        # Create new row
-        new_row = {"model": self.model, "method": self.method, "beta": beta}
+        # Find existing row for this beta
+        mask = (
+            (df["model"] == self.model)
+            & (df["method"] == self.method)
+            & (df["beta"] == beta)
+        )
 
-        # Add year columns with mean ± std format
-        for n_years, (mean_rmse, std_rmse) in results.items():
-            if mean_rmse is not None and std_rmse is not None:
-                new_row[f"year_{n_years}"] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
-            else:
-                new_row[f"year_{n_years}"] = "FAILED"
+        if mask.any():
+            # Update existing row
+            row_idx = df[mask].index[0]
+            for n_years, (mean_rmse, std_rmse) in results.items():
+                year_col = f"year_{n_years}"
+                if mean_rmse is not None and std_rmse is not None:
+                    df.loc[row_idx, year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                else:
+                    df.loc[row_idx, year_col] = "FAILED"
+        else:
+            # Create new row with all year columns
+            new_row = {"model": self.model, "method": self.method, "beta": beta}
+            for n_years in self.n_train_years_values:
+                year_col = f"year_{n_years}"
+                if n_years in results:
+                    mean_rmse, std_rmse = results[n_years]
+                    if mean_rmse is not None and std_rmse is not None:
+                        new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                    else:
+                        new_row[year_col] = "FAILED"
+                else:
+                    new_row[year_col] = "FAILED"
 
-        # Append to dataframe
-        new_df = pd.DataFrame([new_row])
-        df = pd.concat([df, new_df], ignore_index=True)
+            new_df = pd.DataFrame([new_row])
+            df = pd.concat([df, new_df], ignore_index=True)
 
         # Save to file
         df.to_csv(self.output_file, sep="\t", index=False)
@@ -191,15 +230,25 @@ class GridSearch:
 
         # Run experiments for each beta value
         for beta in self.beta_values:
-            # Check if this experiment already exists
-            if self._experiment_exists(beta):
-                self.logger.info(f"Skipping beta={beta} (already completed)")
+            # Check if any experiments need to be run for this beta
+            missing_years = [
+                n_years
+                for n_years in self.n_train_years_values
+                if not self._experiment_exists(beta, n_years)
+            ]
+
+            if not missing_years:
+                self.logger.info(
+                    f"Skipping beta={beta} (all year experiments already completed)"
+                )
                 skipped_experiments += 1
                 continue
 
-            self.logger.info(f"Running experiments for beta={beta}")
+            self.logger.info(
+                f"Running experiments for beta={beta}, missing years: {missing_years}"
+            )
 
-            # Run all year experiments for this beta
+            # Run all year experiments for this beta (including existing ones for completeness)
             results = self._run_beta_experiments(beta)
 
             # Save results immediately after completing this beta
