@@ -27,7 +27,7 @@ run_experiment() {
     
     echo "$(date): Starting ${model} ${pretrained_flag} on GPU ${gpu_id}" | tee -a "$log_file"
     
-    CUDA_VISIBLE_DEVICES=$gpu_id python src/crop_yield/grid_search.py \
+    CUDA_VISIBLE_DEVICES=$gpu_id python -m src.crop_yield.grid_search \
         --model "$model" \
         $pretrained_flag \
         --output-dir data/grid_search \
