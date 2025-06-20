@@ -88,12 +88,13 @@ class GridSearch:
         if len(year_values) == 0:
             return False
 
-        # Check if the value is NaN, "FAILED", or empty
+        # Check if the value contains "±" symbol, indicating successful completion
         value = year_values[0]
-        if pd.isna(value) or value == "FAILED" or value == "":
+        if pd.isna(value) or not isinstance(value, str):
             return False
 
-        return True
+        # Only consider experiment completed if it contains the "±" symbol
+        return "±" in value
 
     def _get_base_config(self) -> Dict:
         """Get base configuration for experiments"""
