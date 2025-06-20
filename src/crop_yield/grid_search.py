@@ -109,7 +109,7 @@ class GridSearch:
         base_config = {
             "batch_size": 64,
             "n_past_years": 6,
-            "n_epochs": 40,
+            "n_epochs": 1,
             "init_lr": 0.0005,
             "decay_factor": 0.95,
             "n_warmup_epochs": 10,
