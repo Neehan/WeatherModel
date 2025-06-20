@@ -84,7 +84,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             self.n_past_years,
             self.batch_size,
             shuffle,
-            num_workers=2,  # Reduced from 8 to avoid multiprocessing issues
+            num_workers=8,
         )
         self.train_loader = train_loader
         self.test_loader = test_loader
