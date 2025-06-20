@@ -85,7 +85,15 @@ class GridSearch:
             return False
 
         year_values = matching_rows[year_col].values
-        return len(year_values) > 0 and year_values[0] != "FAILED"
+        if len(year_values) == 0:
+            return False
+
+        # Check if the value is NaN, "FAILED", or empty
+        value = year_values[0]
+        if pd.isna(value) or value == "FAILED" or value == "":
+            return False
+
+        return True
 
     def _get_base_config(self) -> Dict:
         """Get base configuration for experiments"""
