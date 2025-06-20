@@ -165,24 +165,13 @@ def _create_yield_training_setup(args_dict):
     Helper function to create common training setup for all yield trainers.
     Returns common parameters needed by all yield training loops.
     """
-    # Use device from args_dict if provided, otherwise create default
-    device = args_dict.get("device")
-    if device is None:
-        device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        # Convert string to torch.device if needed
-        if isinstance(device, str):
-            device = torch.device(device)
+    # Get distributed training parameters
+    rank = args_dict.get("rank", 0)
+    world_size = args_dict.get("world_size", 1)
+    local_rank = args_dict.get("local_rank", 0)
 
-    # Extract GPU ID from device for single-GPU training
-    if device.type == "cuda" and device.index is not None:
-        local_rank = device.index
-    else:
-        local_rank = 0
-
-    # Single-GPU training parameters
-    rank = 0
-    world_size = 1
+    # Set device for this process using local_rank
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
     # Read dataset
     crop_df = read_soybean_dataset(DATA_DIR)
