@@ -15,7 +15,6 @@ import os
 
 # Test years for 5-fold cross validation
 TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
-FOLD_IDX = 0
 
 
 class WeatherBERTYieldTrainer(BaseTrainer):
@@ -39,6 +38,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         n_past_years: int,
         n_train_years: int,
         beta: float,
+        fold_idx: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -58,9 +58,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
 
-        global FOLD_IDX
-        self.test_year = TEST_YEARS[FOLD_IDX]
-        FOLD_IDX += 1
+        self.test_year = TEST_YEARS[fold_idx]
         self.logger.info(f"Testing on year: {self.test_year}")
 
         # Cache for datasets to avoid recreation during cross-validation

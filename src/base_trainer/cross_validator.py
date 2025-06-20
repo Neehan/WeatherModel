@@ -40,6 +40,7 @@ class CrossValidator:
         self.model_kwargs = model_kwargs
         self.trainer_class = trainer_class
         self.trainer_kwargs = trainer_kwargs
+
         self.k_folds = k_folds
         self.logger = logging.getLogger(__name__)
 
@@ -68,6 +69,8 @@ class CrossValidator:
             torch.manual_seed(1234)
             torch.cuda.manual_seed(1234)
             torch.use_deterministic_algorithms(True)
+
+            self.trainer_kwargs["fold_idx"] = fold
 
             # Create model for this fold
             model = self.model_class(**self.model_kwargs)

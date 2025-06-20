@@ -254,7 +254,7 @@ def run_grid_search(num_gpus, checkpoint_frequency):
     save_checkpoint(results, completed_indices, total_experiments)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    final_file = os.path.join(CHECKPOINT_DIR, f"grid_search_results_{timestamp}.json")
+    final_file = os.path.join(CHECKPOINT_DIR, f"grid_search_results.json")
 
     with open(final_file, "w") as f:
         json.dump(results, f, indent=2)
