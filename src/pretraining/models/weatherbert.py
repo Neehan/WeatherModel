@@ -6,6 +6,7 @@ import torch.nn as nn
 
 from src.base_models.base_model import BaseModel
 from src.base_models.spatiotemporal_pos_encoding import SpatiotemporalPositionalEncoding
+from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
 from src.utils.constants import MAX_CONTEXT_LENGTH
 from src.utils.utils import normalize_year_interval_coords
 
@@ -24,7 +25,9 @@ class WeatherBERT(BaseModel):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim + 1  # weather (normalized) + (year-1970)/100
+        self.input_dim = (
+            weather_dim + 1 + 2
+        )  # weather (normalized) + (year-1970)/100 + coords
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -32,7 +35,10 @@ class WeatherBERT(BaseModel):
         feedforward_dim = hidden_dim * 4
 
         self.in_proj = nn.Linear(self.input_dim, hidden_dim)
-        self.positional_encoding = SpatiotemporalPositionalEncoding(
+        # self.positional_encoding = SpatiotemporalPositionalEncoding(
+        #     hidden_dim, max_len=max_len, device=device
+        # )
+        self.positional_encoding = VanillaPositionalEncoding(
             hidden_dim, max_len=max_len, device=device
         )
         encoder_layer = nn.TransformerEncoderLayer(
@@ -104,9 +110,9 @@ class WeatherBERT(BaseModel):
         # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
 
-        input_tensor = torch.cat([weather, year], dim=2)
+        input_tensor = torch.cat([weather, year, coords], dim=2)
         input_tensor = self.in_proj(input_tensor)
-        input_tensor = self.positional_encoding(input_tensor, coords)
+        input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(
             input_tensor, src_key_padding_mask=src_key_padding_mask
         )
