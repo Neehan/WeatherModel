@@ -128,14 +128,17 @@ def run_single_experiment(experiment_idx, config, gpu_id):
     """Run a single experiment on a specific GPU"""
     logger = logging.getLogger(__name__)
 
-    # Set device and GPU visibility for this process
+    # Set device parameters for this experiment
     config = copy.deepcopy(config)  # Avoid modifying original config
     if torch.cuda.is_available():
-        config["device"] = f"cuda:{gpu_id}"
-        # Set CUDA_VISIBLE_DEVICES for this thread's subprocess
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        # Pass local_rank instead of device string - this is what training loops expect
+        config["local_rank"] = gpu_id
+        config["rank"] = 0  # Single GPU training
+        config["world_size"] = 1  # Single GPU training
     else:
-        config["device"] = "cpu"
+        config["local_rank"] = 0
+        config["rank"] = 0
+        config["world_size"] = 1
 
     experiment_name = f"{config['model']}_beta{config['beta']}_years{config['n_train_years']}_pretrained{config['pretrained_model_path'] is not None}"
 
@@ -143,25 +146,43 @@ def run_single_experiment(experiment_idx, config, gpu_id):
         f"Starting experiment {experiment_idx} on GPU {gpu_id}: {experiment_name}"
     )
 
-    # Run the experiment
-    avg_rmse, std_rmse = main(config)
+    try:
+        # Clear GPU cache before starting experiment
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
-    # Store result
-    result = config.copy()
-    result.update(
-        {
-            "experiment_idx": experiment_idx,
-            "mean_rmse": avg_rmse,
-            "std_rmse": std_rmse,
-            "gpu_id": gpu_id,
-        }
-    )
+        # Run the experiment
+        avg_rmse, std_rmse = main(config)
 
-    logger.info(
-        f"Completed experiment {experiment_idx} on GPU {gpu_id}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}"
-    )
+        # Clear GPU cache after experiment
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
-    return result
+        # Store result
+        result = config.copy()
+        result.update(
+            {
+                "experiment_idx": experiment_idx,
+                "mean_rmse": avg_rmse,
+                "std_rmse": std_rmse,
+                "gpu_id": gpu_id,
+            }
+        )
+
+        logger.info(
+            f"Completed experiment {experiment_idx} on GPU {gpu_id}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}"
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Experiment {experiment_idx} on GPU {gpu_id} failed: {e}")
+        # Clear GPU cache on error
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        raise
 
 
 def run_grid_search(num_gpus, checkpoint_frequency):
@@ -283,7 +304,8 @@ if __name__ == "__main__":
         print("CUDA not available! Running on CPU")
         num_gpus = 1
     else:
-        num_gpus = min(4, torch.cuda.device_count())
+        # Use fewer GPUs to avoid memory exhaustion with concurrent training
+        num_gpus = min(2, torch.cuda.device_count())
         print(f"Using {num_gpus} GPUs")
 
     results = run_grid_search(num_gpus=num_gpus, checkpoint_frequency=1)
