@@ -23,7 +23,7 @@ run_experiment() {
     local gpu_id=$1
     local model=$2
     local pretrained_flag=$3
-    local log_file="logs/gpu${gpu_id}.log"
+    local log_file="log/gpu${gpu_id}.log"
     
     echo "$(date): Starting ${model} ${pretrained_flag} on GPU ${gpu_id}" | tee -a "$log_file"
     
@@ -37,7 +37,7 @@ run_experiment() {
 }
 
 # Clear previous logs
-rm -f logs/gpu*.log
+rm -f log/gpu*.log
 
 echo "Starting all 4 experiments in parallel..."
 
@@ -96,7 +96,7 @@ MONITOR_PID=$!
 
 # Wait for all background jobs to complete
 echo "All experiments started. Waiting for completion..."
-echo "You can monitor progress in real-time with: tail -f logs/gpu*.log"
+echo "You can monitor progress in real-time with: tail -f log/gpu*.log"
 wait $PID1 $PID2 $PID3 $PID4
 
 # Stop monitoring
@@ -109,8 +109,8 @@ echo "- grid_search_weatherformersinusoid_pretrained.tsv"
 echo "- grid_search_weatherformermixture_not_pretrained.tsv"
 echo "- grid_search_weatherformermixture_pretrained.tsv"
 echo ""
-echo "Logs saved in logs/ directory:"
-echo "- logs/gpu0.log (weatherformersinusoid, no pretraining)"
-echo "- logs/gpu1.log (weatherformersinusoid, with pretraining)"
-echo "- logs/gpu2.log (weatherformermixture, no pretraining)"
-echo "- logs/gpu3.log (weatherformermixture, with pretraining)" 
+echo "Logs saved in log/ directory:"
+echo "- log/gpu0.log (weatherformersinusoid, no pretraining)"
+echo "- log/gpu1.log (weatherformersinusoid, with pretraining)"
+echo "- log/gpu2.log (weatherformermixture, no pretraining)"
+echo "- log/gpu3.log (weatherformermixture, with pretraining)" 
