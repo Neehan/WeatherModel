@@ -164,7 +164,7 @@ def run_single_experiment(experiment_idx, config, gpu_id):
     return result
 
 
-def run_grid_search(num_gpus=4, checkpoint_frequency=5):
+def run_grid_search(num_gpus, checkpoint_frequency):
     """Run grid search with concurrent GPU utilization"""
     setup_logging(rank=0)
     logger = logging.getLogger(__name__)
@@ -286,4 +286,4 @@ if __name__ == "__main__":
         num_gpus = min(4, torch.cuda.device_count())
         print(f"Using {num_gpus} GPUs")
 
-    results = run_grid_search(num_gpus=num_gpus, checkpoint_frequency=3)
+    results = run_grid_search(num_gpus=num_gpus, checkpoint_frequency=1)
