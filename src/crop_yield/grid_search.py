@@ -10,6 +10,9 @@ from datetime import datetime
 from src.crop_yield.yield_main import main
 from src.utils.utils import setup_logging, get_model_params
 
+# Set multiprocessing start method to spawn for CUDA compatibility
+mp.set_start_method("spawn", force=True)
+
 # Pretrained model path mapping - update these paths as needed
 PRETRAINED_MODEL_PATHS = {
     "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
@@ -77,15 +80,17 @@ def load_checkpoint():
 
 def run_single_experiment(args_dict, gpu_id, experiment_idx):
     """Run a single experiment on specified GPU"""
-    # Set GPU device
-    if torch.cuda.is_available():
-        torch.cuda.set_device(gpu_id)
-        args_dict["device"] = f"cuda:{gpu_id}"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-
     # Setup logging for this process
     setup_logging(rank=gpu_id)
     logger = logging.getLogger(__name__)
+
+    # Set device in args_dict instead of calling torch.cuda.set_device
+    if torch.cuda.is_available():
+        args_dict["device"] = f"cuda:{gpu_id}"
+        # Set environment variable for this process
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    else:
+        args_dict["device"] = "cpu"
 
     experiment_name = (
         f"{args_dict['model']}_beta{args_dict['beta']}_"
