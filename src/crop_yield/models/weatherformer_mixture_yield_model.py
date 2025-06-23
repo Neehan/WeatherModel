@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from src.pretraining.models.weatherformer_mixture import WeatherFormerMixture
 from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
-from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 
 
 class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
@@ -57,15 +56,14 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         )
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
-        # where epsilon ~ N(0, 1)
+        # where epsilon ~ N(0, 1) only for missing dims
         epsilon = torch.randn_like(mu_x)
         z = mu_x + torch.sqrt(var_x) * epsilon
-
-        z = self._impute_weather(padded_weather, z, weather_feature_mask)
+        z_imputed = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # we imputed weather, the mask is not necessary
         yield_pred = self.yield_model(
-            z,
+            z_imputed,
             coord,
             year,
             interval,

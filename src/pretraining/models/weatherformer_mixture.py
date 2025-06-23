@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from src.pretraining.models.weatherformer import WeatherFormer
-from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
+from src.utils.constants import MAX_CONTEXT_LENGTH
 
 """
 This class implements the WeatherFormerMixture model, which extends WeatherFormer
@@ -18,12 +18,12 @@ class WeatherFormerMixture(WeatherFormer):
         self,
         weather_dim,
         output_dim,
+        device,
         k=7,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
-        device=DEVICE,
     ):
         super(WeatherFormerMixture, self).__init__(
             weather_dim=weather_dim,
@@ -97,6 +97,6 @@ class WeatherFormerMixture(WeatherFormer):
         var_k = torch.exp(log_var_k)
 
         # Clamp var_k to prevent numerical instability
-        var_k = torch.clamp(var_k, min=0.01, max=1)  # var_k is in [0.01, 1]
+        var_k = torch.clamp(var_k, min=1e-6, max=1)  # var_k is in [0.01, 1]
 
         return mu_x, var_x, mu_k, var_k

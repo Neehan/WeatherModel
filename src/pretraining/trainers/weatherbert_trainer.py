@@ -83,12 +83,17 @@ class WeatherBertTrainer(BaseTrainer):
     def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
         """Get data loaders for training/validation."""
 
+        current_n_masked = self._get_n_masked_features(
+            self.current_epoch, self.n_masked_features
+        )
+
         train_loader = streaming_dataloader(
             self.batch_size,
             split="train",
             shuffle=shuffle,
             masking_function=self.masking_function,
             masking_prob=self.masking_prob,
+            n_masked_features=current_n_masked,
             world_size=self.world_size,
             rank=self.rank,
         )
@@ -99,6 +104,7 @@ class WeatherBertTrainer(BaseTrainer):
             shuffle=False,
             masking_function=self.masking_function,
             masking_prob=self.masking_prob,
+            n_masked_features=current_n_masked,
             world_size=self.world_size,
             rank=self.rank,
         )

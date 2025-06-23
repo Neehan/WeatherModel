@@ -18,6 +18,7 @@ class WeatherFormerSinusoid(WeatherFormer):
         self,
         weather_dim,
         output_dim,
+        k=4,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
@@ -35,14 +36,17 @@ class WeatherFormerSinusoid(WeatherFormer):
         )
         # override the name
         self.name = "weatherformer_sinusoid"
-        self.positions = (
-            torch.arange(max_len, dtype=torch.float, device=device)
-            .unsqueeze(0)
-            .unsqueeze(2)
-        )
-        self.frequency = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1)
-        self.phase = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1)
-        self.amplitude = nn.Parameter(torch.randn(1, max_len, weather_dim) * 0.1)
+        self.positions = torch.arange(
+            max_len, dtype=torch.float, device=device
+        ).reshape(
+            1, 1, max_len, 1
+        )  #
+        self.k = k
+
+        # Initialize with shape (1, k, max_len, weather_dim) to avoid unsqueezing later
+        self.frequency = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
+        self.phase = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
+        self.amplitude = nn.Parameter(torch.randn(1, k, max_len, weather_dim) * 0.1)
         self.log_var_prior = nn.Parameter(
             torch.randn(1, max_len, weather_dim) * 0.1 - 1
         )
@@ -51,6 +55,10 @@ class WeatherFormerSinusoid(WeatherFormer):
         self, pretrained_model: "WeatherFormerSinusoid", load_out_proj=True
     ):
         super().load_pretrained(pretrained_model, load_out_proj)
+        if self.k != pretrained_model.k:
+            raise ValueError(
+                f"k mismatch: {self.k} != {pretrained_model.k}. Please set k to the same value."
+            )
         self.frequency = copy.deepcopy(pretrained_model.frequency)
         self.phase = copy.deepcopy(pretrained_model.phase)
         self.amplitude = copy.deepcopy(pretrained_model.amplitude)
@@ -91,15 +99,27 @@ class WeatherFormerSinusoid(WeatherFormer):
 
         # Get the actual sequence length from the input
         seq_len = weather.shape[1]
+        batch_size = weather.shape[0]
 
         # Compute sinusoidal prior: p(z) ~ N(A * sin(theta * pos + phase), sigma^2_p)
-        amplitude = self.amplitude[:, :seq_len, :]
-        phase = self.phase[:, :seq_len, :]
-        frequency = self.frequency[:, :seq_len, :]
+        # Parameters are already shaped as (1, k, max_len, weather_dim)
+        amplitude = self.amplitude[:, :, :seq_len, :]  # (1, k, seq_len, weather_dim)
+        phase = self.phase[:, :, :seq_len, :]  # (1, k, seq_len, weather_dim)
+        frequency = self.frequency[:, :, :seq_len, :]  # (1, k, seq_len, weather_dim)
 
-        pos = self.positions[:, :seq_len, :]
-        pos = pos * 2 * torch.pi * interval.unsqueeze(2) / 365.0
-        mu_p = amplitude * torch.sin(frequency * pos + phase)
-        var_p = torch.exp(self.log_var_prior)[:, :seq_len, :]
+        # pos is (1, seq_len, 1)
+        pos = self.positions[:, :, :seq_len, :]
+        # scaled_pos is (1, 1, seq_len, 1) -> (batch_size, 1, seq_len, 1)
+        scaled_pos = pos * 2 * torch.pi * interval.view(batch_size, 1, 1, 1) / 365.0
+
+        # Now broadcasting works directly: (batch_size, k, seq_len, weather_dim)
+        sines = amplitude * torch.sin(frequency * scaled_pos + phase)
+        mu_p = torch.sum(
+            sines, dim=1
+        )  # sum over k dimension -> (batch_size, seq_len, weather_dim)
+        var_p = torch.exp(self.log_var_prior)[:, :seq_len, :].expand(batch_size, -1, -1)
+
+        # Clamp var_p to prevent numerical instability
+        var_p = torch.clamp(var_p, min=1e-6, max=1)
 
         return mu_x, var_x, mu_p, var_p

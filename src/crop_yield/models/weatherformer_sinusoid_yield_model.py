@@ -18,6 +18,7 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         self,
         name: str,
         device: torch.device,
+        k: int,
         weather_dim: int,
         n_past_years: int,
         **model_size_params,
@@ -29,6 +30,7 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         self.weather_model = WeatherFormerSinusoid(
             weather_dim=weather_dim,
             output_dim=weather_dim,
+            k=k,
             device=device,
             **model_size_params,
         )
@@ -53,15 +55,14 @@ class WeatherFormerSinusoidYieldModel(WeatherBERTYieldModel):
         )
 
         # Apply reparameterization trick: z = mu + sigma * epsilon
-        # where epsilon ~ N(0, 1)
-        epsilon = torch.randn_like(mu_x)
+        # where epsilon ~ N(0, 1) only for missing dims
+        epsilon = torch.randn_like(mu_x)  # * weather_feature_mask
         z = mu_x + torch.sqrt(var_x) * epsilon
-
-        z = self._impute_weather(padded_weather, z, weather_feature_mask)
+        z_imputed = self._impute_weather(padded_weather, z, weather_feature_mask)
 
         # we sampled weather, the mask is not necessary
         yield_pred = self.yield_model(
-            z,
+            z_imputed,
             coord,
             year,
             interval,

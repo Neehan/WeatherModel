@@ -18,6 +18,12 @@ TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
 FOLD_IDX = 0
 
 
+def _reset_fold_index():
+    """Reset the global fold index for a new cross-validation run."""
+    global FOLD_IDX
+    FOLD_IDX = 0
+
+
 class WeatherBERTYieldTrainer(BaseTrainer):
     """
     Trainer class for crop yield prediction models.
@@ -59,6 +65,10 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 os.makedirs(self.model_dir)
 
         global FOLD_IDX
+        if FOLD_IDX >= len(TEST_YEARS):
+            raise ValueError(
+                f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
+            )
         self.test_year = TEST_YEARS[FOLD_IDX]
         FOLD_IDX += 1
         self.logger.info(f"Testing on year: {self.test_year}")
@@ -213,6 +223,9 @@ def _run_yield_cross_validation(
         extra_trainer_kwargs: Additional trainer-specific kwargs (optional)
         extra_model_kwargs: Additional model-specific kwargs (optional)
     """
+    # Reset fold index before starting new cross-validation
+    _reset_fold_index()
+
     model_kwargs = {
         "name": model_name,
         "device": setup_params["device"],

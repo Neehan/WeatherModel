@@ -5,8 +5,9 @@ import torch
 import torch.nn as nn
 
 from src.base_models.base_model import BaseModel
+from src.base_models.spatiotemporal_pos_encoding import SpatiotemporalPositionalEncoding
 from src.base_models.vanilla_pos_encoding import VanillaPositionalEncoding
-from src.utils.constants import DEVICE, MAX_CONTEXT_LENGTH
+from src.utils.constants import MAX_CONTEXT_LENGTH
 from src.utils.utils import normalize_year_interval_coords
 
 
@@ -15,18 +16,18 @@ class WeatherBERT(BaseModel):
         self,
         weather_dim,
         output_dim,
+        device,
         num_heads=20,
         num_layers=8,
         hidden_dim_factor=24,
         max_len=MAX_CONTEXT_LENGTH,
-        device=DEVICE,
     ):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
         self.input_dim = (
-            weather_dim + 2 + 1 + 1
-        )  # weather (normalized) + coords/360  + (year-1970)/100 + interval days /30
+            weather_dim + 1 + 2
+        )  # weather (normalized) + (year-1970)/100 + coords
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -34,6 +35,9 @@ class WeatherBERT(BaseModel):
         feedforward_dim = hidden_dim * 4
 
         self.in_proj = nn.Linear(self.input_dim, hidden_dim)
+        # self.positional_encoding = SpatiotemporalPositionalEncoding(
+        #     hidden_dim, max_len=max_len, device=device
+        # )
         self.positional_encoding = VanillaPositionalEncoding(
             hidden_dim, max_len=max_len, device=device
         )
@@ -91,32 +95,22 @@ class WeatherBERT(BaseModel):
         src_key_padding_mask: batch_size x seq_len
         """
         batch_size, seq_len, n_features = weather.shape
-
-        assert (
-            n_features == self.weather_dim
-        ), f"expected {self.weather_dim} weather features but received {n_features} features"
-
-        assert (
-            weather_feature_mask.shape == weather.shape
-        ), f"expected weather_feature_mask shape {weather.shape} but received {weather_feature_mask.shape}"
-
         # normalize year, interval, and coords
         year, interval, coords = normalize_year_interval_coords(year, interval, coords)
 
         # Year is [batch_size, seq_len], add feature dimension to make it [batch_size, seq_len, 1]
         year = year.unsqueeze(2)
 
-        # Expand interval to match weather and coords dimensions
-        interval = interval.unsqueeze(1).expand(batch_size, seq_len, 1)
+        # # Expand interval to match weather and coords dimensions
+        # interval = interval.unsqueeze(1).expand(batch_size, seq_len, 1)
 
         # Expand coords to match sequence length if needed
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
-        # mask the masked dimensions
-        # This forces the model to predict based on context, which is correct BERT behavior
+        # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
 
-        input_tensor = torch.cat([weather, coords, year, interval], dim=2)
+        input_tensor = torch.cat([weather, year, coords], dim=2)
         input_tensor = self.in_proj(input_tensor)
         input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(

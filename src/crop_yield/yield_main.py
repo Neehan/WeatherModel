@@ -74,107 +74,104 @@ parser.add_argument(
 parser.add_argument(
     "--n-mixture-components",
     help="number of gaussian mixture components for WeatherFormerMixture model",
-    default=7,
+    default=3,
     type=int,
 )
 
 
-def main():
+def main(args_dict=None):
     # Setup logging
     setup_logging(rank=0)  # Single GPU, rank always 0
 
-    try:
+    if args_dict is None:
         args_dict = parse_args(parser)
-        seed = args_dict["seed"]
-        # Set up deterministic behavior
-        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.use_deterministic_algorithms(True)
 
-        if args_dict["n_train_years"] < args_dict["n_past_years"] + 1:
-            logging.warning(
-                f"Not enough training data for current year + n_past_years. Required: {args_dict['n_past_years'] + 1}. "
-                f"Available training years: {args_dict['n_train_years']}. "
-                f"Setting n_past_years to {args_dict['n_train_years'] - 1}."
-            )
-            args_dict["n_past_years"] = args_dict["n_train_years"] - 1
+    seed = args_dict["seed"]
+    # Set up deterministic behavior
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
 
-        from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
-            weatherautoencoder_mixture_yield_training_loop,
+    if args_dict["n_train_years"] < args_dict["n_past_years"] + 1:
+        logging.warning(
+            f"Not enough training data for current year + n_past_years. Required: {args_dict['n_past_years'] + 1}. "
+            f"Available training years: {args_dict['n_train_years']}. "
+            f"Setting n_past_years to {args_dict['n_train_years'] - 1}."
         )
-        from src.crop_yield.trainers.weatherautoencoder_sine_yield_trainer import (
-            weatherautoencoder_sine_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
-            weatherautoencoder_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherbert_yield_trainer import (
-            weatherbert_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weathercnn_yield_trainer import (
-            weathercnn_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
-            weatherformer_mixture_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherformer_sinusoid_yield_trainer import (
-            weatherformer_sinusoid_yield_training_loop,
-        )
-        from src.crop_yield.trainers.weatherformer_yield_trainer import (
-            weatherformer_yield_training_loop,
-        )
+        args_dict["n_past_years"] = args_dict["n_train_years"] - 1
 
-        # Determine which training function to use based on model type
-        model_type = args_dict["model"].lower()
+    from src.crop_yield.trainers.weatherautoencoder_mixture_yield_trainer import (
+        weatherautoencoder_mixture_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherautoencoder_sine_yield_trainer import (
+        weatherautoencoder_sine_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
+        weatherautoencoder_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherbert_yield_trainer import (
+        weatherbert_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weathercnn_yield_trainer import (
+        weathercnn_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
+        weatherformer_mixture_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherformer_sinusoid_yield_trainer import (
+        weatherformer_sinusoid_yield_training_loop,
+    )
+    from src.crop_yield.trainers.weatherformer_yield_trainer import (
+        weatherformer_yield_training_loop,
+    )
 
-        if model_type == "weatherbert":
-            cross_validation_results = weatherbert_yield_training_loop(args_dict)
-        elif model_type == "weatherformer":
-            cross_validation_results = weatherformer_yield_training_loop(args_dict)
-        elif model_type == "weatherformersinusoid":
-            cross_validation_results = weatherformer_sinusoid_yield_training_loop(
-                args_dict
-            )
-        elif model_type == "weatherformermixture":
-            cross_validation_results = weatherformer_mixture_yield_training_loop(
-                args_dict
-            )
-        elif model_type == "weatherautoencodermixture":
-            cross_validation_results = weatherautoencoder_mixture_yield_training_loop(
-                args_dict
-            )
-        elif model_type == "weatherautoencoder":
-            cross_validation_results = weatherautoencoder_yield_training_loop(args_dict)
-        elif model_type == "weatherautoencodersine":
-            cross_validation_results = weatherautoencoder_sine_yield_training_loop(
-                args_dict
-            )
-        elif model_type == "weathercnn":
-            cross_validation_results = weathercnn_yield_training_loop(args_dict)
-        else:
-            raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
-            )
+    # Determine which training function to use based on model type
+    model_type = args_dict["model"].lower()
 
-        logger = logging.getLogger(__name__)
-        logger.info("Training completed successfully!")
-
-        # Convert MSE to RMSE for comparison with literature
-        avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) * 11.03
-        std_best_rmse = cross_validation_results["std_best_val_loss"] * 11.03
-        # 11.03 is the std of the dataset yield
-        logger.info(
-            f"Final average best RMSE: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}"
+    if model_type == "weatherbert":
+        cross_validation_results = weatherbert_yield_training_loop(args_dict)
+    elif model_type == "weatherformer":
+        cross_validation_results = weatherformer_yield_training_loop(args_dict)
+    elif model_type == "weatherformersinusoid":
+        cross_validation_results = weatherformer_sinusoid_yield_training_loop(args_dict)
+    elif model_type == "weatherformermixture":
+        cross_validation_results = weatherformer_mixture_yield_training_loop(args_dict)
+    elif model_type == "weatherautoencodermixture":
+        cross_validation_results = weatherautoencoder_mixture_yield_training_loop(
+            args_dict
+        )
+    elif model_type == "weatherautoencoder":
+        cross_validation_results = weatherautoencoder_yield_training_loop(args_dict)
+    elif model_type == "weatherautoencodersine":
+        cross_validation_results = weatherautoencoder_sine_yield_training_loop(
+            args_dict
+        )
+    elif model_type == "weathercnn":
+        cross_validation_results = weathercnn_yield_training_loop(args_dict)
+    else:
+        raise ValueError(
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
         )
 
+    logger = logging.getLogger(__name__)
+    logger.info("Training completed successfully!")
+
+    # Convert MSE to RMSE for comparison with literature
+    avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) * 11.03
+    std_best_rmse = cross_validation_results["std_best_val_loss"] * 11.03
+    # 11.03 is the std of the dataset yield
+    logger.info(f"Final average best RMSE: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}")
+
+    return avg_best_rmse, std_best_rmse
+
+
+if __name__ == "__main__":
+    try:
+        main()
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(f"Training failed with error: {e}")
         raise
-
-
-if __name__ == "__main__":
-    main()

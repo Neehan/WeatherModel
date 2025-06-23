@@ -11,7 +11,6 @@
 
 # Load your environment
 module load miniforge/24.3.0-0
-source activate torch  # Replace with your conda env
 
 echo "======== Starting Single-Node Multi-GPU Training ========"
 torchrun \

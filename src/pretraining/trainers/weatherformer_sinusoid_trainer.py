@@ -1,19 +1,17 @@
-import torch
 import logging
-from typing import Dict, Optional, Tuple
-from src.pretraining.trainers.weatherformer_trainer import WeatherFormerTrainer
-from src.pretraining.models.weatherformer_sinusoid import WeatherFormerSinusoid
-from src.utils.constants import TOTAL_WEATHER_VARS
+
+import torch
 from src.pretraining.dataloader.pretraining_dataloader import streaming_dataloader
-from torch.utils.data import DataLoader
-import math
-import torch.nn as nn
+from src.pretraining.models.weatherformer_sinusoid import WeatherFormerSinusoid
+from src.pretraining.trainers.weatherformer_trainer import WeatherFormerTrainer
+from src.utils.constants import TOTAL_WEATHER_VARS
+from src.utils.losses import compute_gaussian_kl_divergence
 
 
 class WeatherFormerSinusoidTrainer(WeatherFormerTrainer):
     """
     WeatherFormerSinusoid trainer that implements MSE + KL divergence loss.
-    KL divergence is between two multivariate normal distributions.
+    KL divergence is between the posterior and sinusoidal prior distributions.
     """
 
     def __init__(
@@ -21,168 +19,31 @@ class WeatherFormerSinusoidTrainer(WeatherFormerTrainer):
         model: WeatherFormerSinusoid,
         masking_prob: float,
         n_masked_features: int,
-        lam: float,
+        beta: float,
         **kwargs,
     ):
         super().__init__(
             model=model,
             masking_prob=masking_prob,
             n_masked_features=n_masked_features,
+            beta=beta,  # Use lam as beta in parent class
             **kwargs,
         )
-        self.lam = lam
-        self.masking_function = "weatherformer"
-        self.criterion = nn.MSELoss(reduction="mean")
 
-        # override the losses collected to include KL divergence
-        self.output_json["losses"] = {
-            "train": {
-                "total_loss": [],
-                "reconstruction": [],
-                "std_term": [],
-                "kl_term": [],
-            },
-            "val": {
-                "total_loss": [],
-                "reconstruction": [],
-                "kl_term": [],
-                "std_term": [],
-            },
-        }
-        self.output_json["model_config"]["prior_weight"] = lam
-
-    def _compute_gaussian_kl_divergence(
+    def compute_kl_loss(
         self,
-        mu_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior mean
-        var_x: torch.Tensor,  # [batch_size, seq_len, n_features] - posterior variance
-        mu_p: torch.Tensor,  # [batch_size, seq_len, n_features] - prior mean
-        var_p: torch.Tensor,  # [batch_size, seq_len, n_features] - prior variance
-        feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features] - mask for output features
+        weather: torch.Tensor,
+        weather_feature_mask: torch.Tensor,
+        mu_x: torch.Tensor,
+        var_x: torch.Tensor,
+        mu_p: torch.Tensor,
+        var_p: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Compute KL divergence between posterior q(z|x) and sinusoidal prior p(z) for masked features only.
-
-        KL(q(z|x) || p(z)) = 0.5 * [log(var_p/var_x) + var_x/var_p + (mu_x - mu_p)^2/var_p - 1]
-
-        where:
-        - q(z|x) is a diagonal Gaussian N(mu_x, var_x)
-        - p(z) is a diagonal Gaussian N(mu_p, var_p)
-        """
-        # Compute KL divergence for each dimension
-        kl_per_dim = 0.5 * (
-            torch.log(var_p / var_x) + var_x / var_p + (mu_x - mu_p) ** 2 / var_p - 1.0
+        """Compute KL divergence loss between posterior and sinusoidal prior distributions."""
+        kl_term = compute_gaussian_kl_divergence(
+            weather_feature_mask, mu_x, var_x, mu_p, var_p
         )
-
-        # Apply feature mask to only consider masked features
-        kl_masked = kl_per_dim * feature_mask
-
-        # Sum over masked features and average over batch
-        kl_divergence = self._masked_mean(kl_masked, feature_mask, dim=(1, 2)).mean()
-
-        return kl_divergence
-
-    def compute_sinusoid_loss(
-        self,
-        weather: torch.Tensor,  # [batch_size, seq_len, n_features]
-        mu_x: torch.Tensor,  # [batch_size, seq_len, n_features]
-        var_x: torch.Tensor,  # [batch_size, seq_len, n_features]
-        mu_p: torch.Tensor,  # [batch_size, seq_len, n_features]
-        var_p: torch.Tensor,  # [batch_size, seq_len, n_features]
-        feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features]
-        log_losses: bool = False,
-    ):
-        """
-        Compute loss as Gaussian MSE on masked features + lam * KL divergence on masked features.
-        """
-        # 1. Gaussian MSE on masked features: -log p(x|mu_x, var_x) for masked features
-        # Gaussian NLL: 0.5 * log(var) + 0.5 * (x - mu)^2 / var
-        gaussian_nll = 0.5 * torch.log(var_x) + 0.5 * (weather - mu_x) ** 2 / var_x
-        # Apply feature mask and compute mean over masked features
-        masked_gaussian_nll = gaussian_nll * feature_mask
-
-        # mean over all dimensions (batch_size, seq_len, n_features)
-        reconstruction_loss = self._masked_mean(
-            masked_gaussian_nll, feature_mask, dim=(1, 2)
-        ).mean()
-
-        # 2. Standard deviation term: std for masked features
-        std_term = self._masked_mean(torch.sqrt(var_x), feature_mask, dim=(1, 2)).mean()
-
-        # 3. KL divergence term: lam * KL(q(z|x) || p(z)) for masked features only
-        kl_term = self._compute_gaussian_kl_divergence(
-            mu_x, var_x, mu_p, var_p, feature_mask
-        )
-        kl_loss = self.lam * kl_term
-
-        # Total loss
-        total_loss = reconstruction_loss + kl_loss
-
-        if log_losses:
-            self.logger.info(f"Reconstruction Loss: {reconstruction_loss.item():.6f}")
-            self.logger.info(f"Std Term: {std_term.item():.6f}")
-            self.logger.info(f"KL Loss: {kl_loss.item():.6f}")
-            self.logger.info(f"Total Loss: {total_loss.item():.6f}")
-
-        return dict(
-            total_loss=total_loss,
-            reconstruction=reconstruction_loss,
-            kl_term=kl_loss,
-            std_term=std_term,
-        )
-
-    def compute_train_loss(
-        self,
-        weather: torch.Tensor,  # batch_size x seq_len x n_features
-        coords: torch.Tensor,  # batch_size x 2
-        year: torch.Tensor,  # batch_size x seq_len
-        interval: torch.Tensor,  # batch_size
-        feature_mask: torch.Tensor,  # batch_size x seq_len x n_features
-    ) -> Dict[str, torch.Tensor]:
-        """Compute WeatherFormerSinusoid training loss using MSE + KL divergence."""
-
-        # Get model predictions (mu_x, var_x, mu_p, var_p)
-        mu_x, var_x, mu_p, var_p = self.model(
-            weather, coords, year, interval, weather_feature_mask=feature_mask
-        )
-
-        # Compute sinusoid loss
-        loss_dict = self.compute_sinusoid_loss(
-            weather,
-            mu_x,
-            var_x,
-            mu_p,
-            var_p,
-            feature_mask,
-        )
-
-        return loss_dict
-
-    def compute_validation_loss(
-        self,
-        weather: torch.Tensor,  # batch_size x seq_len x n_features
-        coords: torch.Tensor,  # batch_size x 2
-        year: torch.Tensor,  # batch_size x seq_len
-        interval: torch.Tensor,  # batch_size
-        feature_mask: torch.Tensor,  # batch_size x seq_len x n_features
-    ) -> Dict[str, torch.Tensor]:
-        """Compute WeatherFormerSinusoid validation loss using MSE + KL divergence."""
-
-        # Get model predictions (mu_x, var_x, mu_p, var_p)
-        mu_x, var_x, mu_p, var_p = self.model(
-            weather, coords, year, interval, weather_feature_mask=feature_mask
-        )
-
-        # Compute sinusoid loss
-        loss_dict = self.compute_sinusoid_loss(
-            weather,
-            mu_x,
-            var_x,
-            mu_p,
-            var_p,
-            feature_mask,
-        )
-
-        return loss_dict
+        return kl_term
 
 
 def weatherformer_sinusoid_training_loop(args_dict):
@@ -201,6 +62,7 @@ def weatherformer_sinusoid_training_loop(args_dict):
     model = WeatherFormerSinusoid(
         weather_dim=TOTAL_WEATHER_VARS,
         output_dim=TOTAL_WEATHER_VARS,
+        k=args_dict["n_mixture_components"],
         device=device,
         **args_dict["model_size_params"],
     ).to(device)
@@ -218,7 +80,7 @@ def weatherformer_sinusoid_training_loop(args_dict):
         pretrained_model_path=args_dict["pretrained_model_path"],
         masking_prob=args_dict["masking_prob"],
         n_masked_features=args_dict["n_masked_features"],
-        lam=args_dict["prior_weight"],
+        beta=args_dict["beta"],
         resume_from_checkpoint=args_dict.get("resume_from_checkpoint"),
         rank=rank,
         world_size=world_size,
