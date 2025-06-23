@@ -9,10 +9,33 @@
 #SBATCH --mem=64GB                     # Total memory
 #SBATCH -t 24:00:00                    # 24-hour wall time
 
+# Check if two model names are provided
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <model1> <model2>"
+    echo "Example: $0 weatherformer weatherformersinusoid"
+    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, weathercnn"
+    exit 1
+fi
+
+MODEL1=$1
+MODEL2=$2
+
+# Validate model names
+valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "weathercnn")
+if [[ ! " ${valid_models[@]} " =~ " ${MODEL1} " ]]; then
+    echo "Error: Invalid model1 '${MODEL1}'. Valid options: ${valid_models[@]}"
+    exit 1
+fi
+if [[ ! " ${valid_models[@]} " =~ " ${MODEL2} " ]]; then
+    echo "Error: Invalid model2 '${MODEL2}'. Valid options: ${valid_models[@]}"
+    exit 1
+fi
+
 # Load your environment
 module load miniforge/24.3.0-0
 
 echo "======== Starting Parallel Grid Search on 4 GPUs ========"
+echo "Comparing models: ${MODEL1} vs ${MODEL2}"
 
 # Create output and log directories
 mkdir -p data/grid_search
@@ -46,20 +69,20 @@ rm -f log/gpu*.log
 echo "Starting all 4 experiments in parallel..."
 
 # Run all experiments in parallel, each on its own GPU with separate logging
-echo "GPU 0: weatherformersinusoid (no pretraining)"
-run_experiment 0 "weatherformersinusoid" "" &
+echo "GPU 0: ${MODEL1} (no pretraining)"
+run_experiment 0 "$MODEL1" "" &
 PID1=$!
 
-echo "GPU 1: weatherformersinusoid (with pretraining)"
-run_experiment 1 "weatherformersinusoid" "--load-pretrained" &
+echo "GPU 1: ${MODEL1} (with pretraining)"
+run_experiment 1 "$MODEL1" "--load-pretrained" &
 PID2=$!
 
-echo "GPU 2: weatherformermixture (no pretraining)"
-run_experiment 2 "weatherformermixture" "" &
+echo "GPU 2: ${MODEL2} (no pretraining)"
+run_experiment 2 "$MODEL2" "" &
 PID3=$!
 
-echo "GPU 3: weatherformermixture (with pretraining)"
-run_experiment 3 "weatherformermixture" "--load-pretrained" &
+echo "GPU 3: ${MODEL2} (with pretraining)"
+run_experiment 3 "$MODEL2" "--load-pretrained" &
 PID4=$!
 
 # Store all PIDs for monitoring
@@ -108,13 +131,13 @@ kill $MONITOR_PID 2>/dev/null
 
 echo "======== All Grid Search Experiments Completed ========"
 echo "Results saved in data/grid_search/ directory:"
-echo "- grid_search_weatherformersinusoid_not_pretrained.tsv"
-echo "- grid_search_weatherformersinusoid_pretrained.tsv"
-echo "- grid_search_weatherformermixture_not_pretrained.tsv"
-echo "- grid_search_weatherformermixture_pretrained.tsv"
+echo "- grid_search_${MODEL1}_not_pretrained.tsv"
+echo "- grid_search_${MODEL1}_pretrained.tsv"
+echo "- grid_search_${MODEL2}_not_pretrained.tsv"
+echo "- grid_search_${MODEL2}_pretrained.tsv"
 echo ""
 echo "Logs saved in log/ directory:"
-echo "- log/gpu0.log (weatherformersinusoid, no pretraining)"
-echo "- log/gpu1.log (weatherformersinusoid, with pretraining)"
-echo "- log/gpu2.log (weatherformermixture, no pretraining)"
-echo "- log/gpu3.log (weatherformermixture, with pretraining)" 
+echo "- log/gpu0.log (${MODEL1}, no pretraining)"
+echo "- log/gpu1.log (${MODEL1}, with pretraining)"
+echo "- log/gpu2.log (${MODEL2}, no pretraining)"
+echo "- log/gpu3.log (${MODEL2}, with pretraining)" 

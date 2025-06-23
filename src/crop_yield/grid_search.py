@@ -14,6 +14,9 @@ from src.utils.utils import setup_logging, get_model_params
 PRETRAINED_MODEL_PATHS = {
     "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
     "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.1m_latest.pth",
+    "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
+    "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
+    "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
 }
 
 
@@ -99,12 +102,12 @@ class GridSearch:
     def _get_base_config(self) -> Dict:
         """Get base configuration for experiments"""
         # Model-specific configuration
-        if self.model == "weatherformersinusoid":
+        if "sinusoid" in self.model:
             n_mixture_components = 1
-        elif self.model == "weatherformermixture":
+        elif "mixture" in self.model:
             n_mixture_components = 7
         else:
-            raise ValueError(f"Unknown model: {self.model}")
+            n_mixture_components = 1  # Default for other models
 
         base_config = {
             "batch_size": 64,
@@ -297,7 +300,13 @@ def setup_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         required=True,
-        choices=["weatherformersinusoid", "weatherformermixture"],
+        choices=[
+            "weatherformersinusoid",
+            "weatherformermixture",
+            "weatherautoencodermixture",
+            "weatherautoencodersinusoid",
+            "weatherautoencoder",
+        ],
         help="Model to use for experiments",
     )
 
