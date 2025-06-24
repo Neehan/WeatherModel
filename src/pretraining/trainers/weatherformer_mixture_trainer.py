@@ -31,6 +31,7 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
             beta=beta,
             **kwargs,
         )
+        self.output_json["model_config"]["n_mixture_components"] = model.k
 
     def compute_kl_loss(
         self,

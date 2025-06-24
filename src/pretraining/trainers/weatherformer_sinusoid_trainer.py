@@ -29,6 +29,7 @@ class WeatherFormerSinusoidTrainer(WeatherFormerTrainer):
             beta=beta,  # Use lam as beta in parent class
             **kwargs,
         )
+        self.output_json["model_config"]["n_mixture_components"] = model.k
 
     def compute_kl_loss(
         self,

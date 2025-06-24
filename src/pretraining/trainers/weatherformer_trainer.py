@@ -57,8 +57,8 @@ class WeatherFormerTrainer(BaseTrainer):
         Some derived classes may need to override this method."""
 
         # Standard normal prior for VAE: mu_p = 0, var_p = 1
-        mu_p = torch.zeros_like(mu_x).unsqueeze(0)
-        var_p = torch.ones_like(var_x).unsqueeze(0)
+        mu_p = torch.zeros_like(mu_x)
+        var_p = torch.ones_like(var_x)
 
         kl_term = compute_gaussian_kl_divergence(
             weather_feature_mask, mu_x, var_x, mu_p, var_p
