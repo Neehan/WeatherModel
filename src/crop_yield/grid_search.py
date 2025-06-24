@@ -105,7 +105,7 @@ class GridSearch:
         if "sinusoid" in self.model:
             n_mixture_components = 1
         elif "mixture" in self.model:
-            n_mixture_components = 7
+            n_mixture_components = 2
         else:
             n_mixture_components = 1  # Default for other models
 

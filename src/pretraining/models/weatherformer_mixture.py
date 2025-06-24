@@ -9,7 +9,8 @@ from src.utils.constants import MAX_CONTEXT_LENGTH
 
 """
 This class implements the WeatherFormerMixture model, which extends WeatherFormer
-with mixture parameters mu_k and var_k.
+with mixture parameters mu_k and var_k. The mu_k is computed using sinusoidal functions
+while var_k remains learnable.
 """
 
 
@@ -38,19 +39,41 @@ class WeatherFormerMixture(WeatherFormer):
         self.name = "weatherformer_mixture"
         self.k = k
 
-        # Mixture parameters: mu_k and log_var_k of shape (k, max_len, weather_dim)
-        # Initialize mixture means with small random values instead of zeros
-        self.mu_k = nn.Parameter(torch.randn(k, max_len, output_dim) * 0.1)
+        # Position tensor for sinusoidal computation
+        self.positions = torch.arange(max_len, dtype=torch.float, device=device).view(
+            1, 1, max_len, 1
+        )
+
+        # Sinusoidal parameters for mixture means mu_k
+        # Shape: (1, k, 1, output_dim) to avoid unsqueezing later
+        self.frequency = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
+        self.phase = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
+        self.amplitude = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
+
+        # Mixture variances: log_var_k of shape (k, 1, output_dim)
         # Initialize log_var_k to give var_k around 0.1-1.0 range instead of exactly 1.0
-        self.log_var_k = nn.Parameter(torch.randn(k, max_len, output_dim) * 0.1 - 1.0)
+        self.log_var_k = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1 - 1.0)
+
+        # Learnable mixture weights (log-probabilities)
+        # Shape: (1, k) - one weight per mixture component
+        # Initialize to uniform weights: log(1/k) = -log(k)
+        uniform_log_weight = -torch.log(torch.tensor(k, dtype=torch.float32)).item()
+        self.mixture_logits = nn.Parameter(torch.full((1, k), uniform_log_weight))
 
     def load_pretrained(
         self, pretrained_model: "WeatherFormerMixture", load_out_proj=True
     ):
+        if self.k != pretrained_model.k:
+            raise ValueError(
+                f"k mismatch: {self.k} != {pretrained_model.k}. Please ensure the models are compatible."
+            )
         super().load_pretrained(pretrained_model, load_out_proj)
         if load_out_proj:
-            self.mu_k = copy.deepcopy(pretrained_model.mu_k)
+            self.frequency = copy.deepcopy(pretrained_model.frequency)
+            self.phase = copy.deepcopy(pretrained_model.phase)
+            self.amplitude = copy.deepcopy(pretrained_model.amplitude)
             self.log_var_k = copy.deepcopy(pretrained_model.log_var_k)
+            self.mixture_logits = copy.deepcopy(pretrained_model.mixture_logits)
         self.k = pretrained_model.k
 
     def forward(
@@ -61,20 +84,21 @@ class WeatherFormerMixture(WeatherFormer):
         interval: torch.Tensor,
         weather_feature_mask: torch.Tensor,
         src_key_padding_mask: Optional[torch.Tensor] = None,  # batch_size x seq_len
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         weather: batch_size x seq_len x n_features
         coords: batch_size x 2
-        year: batch_size x 2
-        interval: batch_size x 2
+        year: batch_size x seq_len
+        interval: batch_size
         weather_feature_mask: batch_size x seq_len x n_features
         src_key_padding_mask: batch_size x seq_len
 
         Returns:
             mu_x: batch_size x seq_len x n_features
             var_x: batch_size x seq_len x n_features
-            mu_k: k x seq_len x n_features
-            var_k: k x seq_len x n_features
+            mu_k: batch_size x k x seq_len x n_features
+            var_k: batch_size x k x seq_len x n_features
+            mixture_weights: batch_size x k (log probabilities)
         """
         # Call parent WeatherFormer forward method
         mu_x, var_x = super().forward(
@@ -88,15 +112,31 @@ class WeatherFormerMixture(WeatherFormer):
 
         # Get the actual sequence length from the input
         seq_len = weather.shape[1]
+        batch_size = weather.shape[0]
 
-        # Truncate mixture parameters to match runtime sequence length
-        mu_k = self.mu_k[:, :seq_len, :]  # k x seq_len x n_features
-        log_var_k = self.log_var_k[:, :seq_len, :]  # k x seq_len x n_features
+        # [1, k, seq_len, 1]
+        pos = self.positions[:, :, :seq_len, :]
+        # [batch size, k, seq_len, 1]
+        scaled_pos = pos * 2 * torch.pi * interval.view(batch_size, 1, 1, 1) / 365.0
 
-        # Compute var_k from log_var_k
-        var_k = torch.exp(log_var_k)
+        # Compute sinusoidal means for each mixture component
+        # Broadcasting: (batch_size, k, seq_len, output_dim)
+        mu_k = self.amplitude * torch.sin(self.frequency * scaled_pos + self.phase)
+
+        # Compute mixture variances from log_var_k
+        var_k = torch.exp(self.log_var_k)
 
         # Clamp var_k to prevent numerical instability
         var_k = torch.clamp(var_k, min=1e-6, max=1)  # var_k is in [0.01, 1]
 
-        return mu_x, var_x, mu_k, var_k
+        # Expand var_k to include batch dimension
+        var_k = var_k.expand(
+            batch_size, -1, -1, -1
+        )  # (batch_size, k, seq_len, output_dim)
+
+        # Compute mixture weights (log probabilities)
+        log_w_k = torch.log_softmax(self.mixture_logits, dim=1)  # (1,k,)
+        # Expand to batch dimension
+        log_w_k = log_w_k.expand(batch_size, -1)  # (batch_size, k)
+
+        return mu_x, var_x, mu_k, var_k, log_w_k

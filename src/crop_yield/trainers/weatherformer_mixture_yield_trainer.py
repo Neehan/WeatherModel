@@ -36,8 +36,9 @@ class WeatherFormerMixtureYieldTrainer(WeatherFormerYieldTrainer):
         var_x: torch.Tensor,
         mu_k: torch.Tensor,
         var_k: torch.Tensor,
+        log_w_k: torch.Tensor,
     ) -> torch.Tensor:
-        """Compute KL divergence loss using mixture prior instead of standard normal."""
+        """Compute KL divergence loss using mixture prior with learnable weights."""
         kl_term = compute_mixture_kl_divergence(
             z=z,
             feature_mask=weather_feature_mask,
@@ -45,6 +46,7 @@ class WeatherFormerMixtureYieldTrainer(WeatherFormerYieldTrainer):
             var_x=var_x,
             mu_k=mu_k,
             var_k=var_k,
+            log_w_k=log_w_k,
         )
         return kl_term
 

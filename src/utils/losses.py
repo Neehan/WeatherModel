@@ -52,44 +52,36 @@ def compute_mixture_kl_divergence(
     feature_mask: torch.Tensor,  # [batch_size, seq_len, n_features]
     mu_x: torch.Tensor,  # [batch_size, seq_len, n_features]
     var_x: torch.Tensor,  # [batch_size, seq_len, n_features]
-    mu_k: torch.Tensor,  # [k, seq_len, n_features]
-    var_k: torch.Tensor,  # [k, seq_len, n_features]
+    mu_k: torch.Tensor,  # [batch_size, k, seq_len, n_features]
+    var_k: torch.Tensor,  # [batch_size, k, seq_len, n_features]
+    log_w_k: torch.Tensor,  # [batch_size, k]
 ) -> torch.Tensor:
     """
     Compute KL divergence between a diagonal Gaussian posterior and a mixture of diagonal
     Gaussians prior for masked features only.
 
     KL(q(z|x) || p(z)) = log q(z|x) - log p(z)
-    where p(z) = (1/k) * sum_i N(z; mu_k[i], var_k[i])
+    where p(z) = sum_i w_i * N(z; mu_k[i], var_k[i])
     """
     # Compute log q(z|x) - posterior log-density for masked features only
     log_q_z_x = gaussian_log_likelihood(z, mu_x, var_x, feature_mask, (1, 2))
 
     # Compute log p(z) - mixture prior log-density for masked features only
     # Reshape tensors for broadcasting
-    z_expanded = z.unsqueeze(0)  # [1, batch_size, seq_len, n_features]
-    mu_k_expanded = mu_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
-    var_k_expanded = var_k.unsqueeze(1)  # [k, 1, seq_len, n_features]
+    z_expanded = z.unsqueeze(1)  # [batch_size, 1, seq_len, n_features]
     feature_mask_expanded = feature_mask.unsqueeze(
-        0
-    )  # [1, batch_size, seq_len, n_features]
+        1
+    )  # [batch_size, 1, seq_len, n_features]
 
+    # mu_k and var_k are already [batch_size, k, seq_len, n_features]
     # Compute log-likelihood for each mixture component
     log_component_densities = gaussian_log_likelihood(
-        z_expanded, mu_k_expanded, var_k_expanded, feature_mask_expanded, (2, 3)
-    )
+        z_expanded, mu_k, var_k, feature_mask_expanded, (2, 3)
+    )  # [batch_size, k]
 
-    # Add uniform mixture weights: log(1/k) = -log(k)
-    k = mu_k.shape[0]
-    log_mixture_weights = -torch.log(
-        torch.tensor(k, dtype=torch.float32, device=z.device)
-    )
-
-    # Compute log p(z) = log(sum_i (1/k) * p_i(z)) = logsumexp(log(1/k) + log(p_i(z)))
-    log_p_z = torch.logsumexp(
-        log_mixture_weights + log_component_densities, dim=0
-    )  # [batch_size]
+    # Use learnable mixture weights
+    # Compute log p(z) = log(sum_i w_i * p_i(z)) = logsumexp(log(w_i) + log(p_i(z)))
+    log_p_z = torch.logsumexp(log_w_k + log_component_densities, dim=1)  # [batch_size]
 
     kl_divergence = log_q_z_x - log_p_z
-    kl_clamped = torch.clamp(kl_divergence, min=0.0)
-    return kl_clamped
+    return kl_divergence

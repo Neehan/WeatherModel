@@ -46,8 +46,8 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
         # Prepare weather input using inherited method
 
         # WeatherFormerMixture expects individual arguments, not a tuple
-        # and returns (mu_x, var_x, mu_k, var_k) instead of just weather embeddings
-        mu_x, var_x, mu_k, var_k = self.weather_model(
+        # and returns (mu_x, var_x, mu_k, var_k, log_w_k) instead of just weather embeddings
+        mu_x, var_x, mu_k, var_k, log_w_k = self.weather_model(
             padded_weather,
             coord,
             year=year,
@@ -70,4 +70,4 @@ class WeatherFormerMixtureYieldModel(WeatherBERTYieldModel):
             weather_feature_mask=None,
             y_past=y_past,
         )
-        return yield_pred, z, mu_x, var_x, mu_k, var_k
+        return yield_pred, z, mu_x, var_x, mu_k, var_k, log_w_k
