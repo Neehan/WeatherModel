@@ -13,7 +13,7 @@ from src.utils.utils import setup_logging, get_model_params
 # Pretrained model path mapping - update these paths as needed
 PRETRAINED_MODEL_PATHS = {
     "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
-    "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.0m_latest.pth",
+    "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_1.9m_latest.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
     "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
     "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
@@ -105,7 +105,7 @@ class GridSearch:
         if "sinusoid" in self.model:
             n_mixture_components = 1
         elif "mixture" in self.model:
-            n_mixture_components = 2
+            n_mixture_components = 1
         else:
             n_mixture_components = 1  # Default for other models
 
