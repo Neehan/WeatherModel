@@ -43,8 +43,10 @@ class WeatherFormerMixtureTrainer(WeatherFormerTrainer):
         log_w_k: torch.Tensor,
     ) -> torch.Tensor:
         """Compute KL divergence loss using mixture prior with learnable weights."""
+        epsilon = torch.randn_like(mu_x)
+        z = mu_x + torch.sqrt(var_x) * epsilon
         kl_term = compute_mixture_kl_divergence(
-            z=weather,
+            z=z,
             feature_mask=weather_feature_mask,
             mu_x=mu_x,
             var_x=var_x,
