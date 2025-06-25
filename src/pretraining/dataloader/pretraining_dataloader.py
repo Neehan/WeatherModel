@@ -207,7 +207,7 @@ def streaming_dataloader(
     world_size: int = 1,
     rank: int = 0,
 ):
-    data_loader_dir = DATA_DIR + "nasa_power/pytorch/"
+    data_loader_dir = DATA_DIR + "nasa_power/processed/"
 
     if DRY_RUN:
         train_indices = DRY_RUN_TRAIN_CHUNK_IDS

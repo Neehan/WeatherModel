@@ -251,18 +251,24 @@ def split_train_test_by_year(
             for col in data.columns
             if col not in ["loc_ID", "year", "State", "County", "lat", "lng", "yield"]
         ]
+        # standardize per week per feature
+        # helpful to detect if certain weeks are particularly out of dist compared to
+        # historical data for that week
+        data[cols_to_standardize] = (
+            data[cols_to_standardize] - data[cols_to_standardize].mean()
+        ) / data[cols_to_standardize].std()
 
-        # standardize weather data by variable type
-        data = standardize_weather(data)
+        # # standardize weather data by variable type
+        # data = standardize_weather(data)
 
-        # standardize non-weather data normally
-        non_weather_cols = [
-            col for col in cols_to_standardize if not col.startswith("W_")
-        ]
-        if non_weather_cols:
-            data[non_weather_cols] = (
-                data[non_weather_cols] - data[non_weather_cols].mean()
-            ) / data[non_weather_cols].std()
+        # # standardize non-weather data normally
+        # non_weather_cols = [
+        #     col for col in cols_to_standardize if not col.startswith("W_")
+        # ]
+        # if non_weather_cols:
+        # data[non_weather_cols] = (
+        #     data[non_weather_cols] - data[non_weather_cols].mean()
+        # ) / data[non_weather_cols].std()
 
         # for yield always use same values so RMSEs are comparable across folds
         data["yield"] = (data["yield"] - 38.5) / 11.03
