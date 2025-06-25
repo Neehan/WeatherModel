@@ -45,12 +45,12 @@ class CropDataset(Dataset):
         ]
 
         # Define weather indices used in preprocessing
-        # 7: precipitation
-        # 8: solar radiation
-        # 11: snow depth
-        # 1: max temp
-        # 2: min temp
-        # 29: vap pressure
+        # 7: precipitation (PRECTOTCORR)
+        # 8: solar radiation (ALLSKY_SFC_SW_DWN)
+        # 11: snow depth (SNODP)
+        # 1: max temp (T2M_MAX)
+        # 2: min temp (T2M_MIN)
+        # 29: vapor pressure (VAP)
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
 
         if test_dataset:  # test on specific year
@@ -341,19 +341,24 @@ def standardize_weather_data(data: pd.DataFrame, weather_scalers: dict):
     data = data.copy()
 
     # Map weather indices to NASA POWER parameter names
+    # Based on self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
+    # Converting from Daymet units to NASA POWER units for standardization
     weather_index_to_param = {
-        1: "PRECTOTCORR",  # W_1: precipitation (mm/day)
-        2: "ALLSKY_SFC_SW_DWN",  # W_2: solar radiation (W/m² -> MJ/m²/day)
-        3: "SNODP",  # W_3: snow depth (mm)
-        4: "T2M_MAX",  # W_4: max temp (°C)
-        5: "T2M_MIN",  # W_5: min temp (°C)
-        6: "VPD",  # W_6: vapor pressure (Pa -> kPa)
+        7: "PRECTOTCORR",  # W_1: precipitation (Daymet: mm/day → NASA: mm/day)
+        8: "ALLSKY_SFC_SW_DWN",  # W_2: solar radiation (Daymet: W/m² → NASA: MJ/m²/day)
+        11: "SNODP",  # W_3: snow (Daymet: swe kg/m² → NASA: snow depth cm, swe_mm * 4.5 / 10)
+        1: "T2M_MAX",  # W_4: max temp (Daymet: °C → NASA: °C)
+        2: "T2M_MIN",  # W_5: min temp (Daymet: °C → NASA: °C)
+        29: "VAP",  # W_6: vapor pressure (Daymet: Pa → NASA: kPa)
     }
 
     standardized_params = []
 
     for weather_idx in range(1, 7):  # W_1 to W_6
-        param_name = weather_index_to_param[weather_idx]
+        # Map W_1 to W_6 to the actual weather indices [7, 8, 11, 1, 2, 29]
+        actual_weather_indices = [7, 8, 11, 1, 2, 29]
+        actual_idx = actual_weather_indices[weather_idx - 1]
+        param_name = weather_index_to_param[actual_idx]
 
         # Get all columns for this weather variable at once
         weather_cols = [f"W_{weather_idx}_{week}" for week in range(1, 53)]
@@ -364,12 +369,16 @@ def standardize_weather_data(data: pd.DataFrame, weather_scalers: dict):
             and param_name in weather_scalers["param_means"]
             and param_name in weather_scalers["param_stds"]
         ):
-            # Apply unit conversions before standardization
-            if weather_idx == 2:  # Solar radiation: W/m² to MJ/m²/day
+            # Apply unit conversions from Daymet units to NASA POWER units before standardization
+            if weather_idx == 2:  # Solar radiation: Daymet W/m² to NASA POWER MJ/m²/day
                 data[existing_cols] = (
                     data[existing_cols] * 24 * 3600 / 1e6
                 )  # W/m² to MJ/m²/day
-            elif weather_idx == 6:  # Vapor pressure: Pa to kPa
+            elif weather_idx == 3:  # Snow: Daymet swe kg/m² (mm) to NASA snow depth cm
+                data[existing_cols] = (
+                    data[existing_cols] * 4.5 / 10.0
+                )  # mm * 4.5 / 10 to get cm
+            elif weather_idx == 6:  # Vapor pressure: Daymet Pa to NASA POWER kPa
                 data[existing_cols] = data[existing_cols] / 1000.0  # Pa to kPa
 
             # Standardize using NASA POWER scalers
@@ -377,6 +386,13 @@ def standardize_weather_data(data: pd.DataFrame, weather_scalers: dict):
             nasa_std = weather_scalers["param_stds"][param_name]
             data[existing_cols] = (data[existing_cols] - nasa_mean) / nasa_std
             standardized_params.append(f"W_{weather_idx} -> {param_name}")
+
+            # Log mean and variance after standardization
+            post_std_mean = data[existing_cols].values.mean()
+            post_std_var = data[existing_cols].values.var()
+            logger.info(
+                f"After standardization - {param_name} (W_{weather_idx}): mean={post_std_mean:.4f}, var={post_std_var:.4f}"
+            )
 
     logger.info(
         f"Standardized weather using NASA POWER scalers: {', '.join(standardized_params)}"

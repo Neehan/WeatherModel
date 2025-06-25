@@ -110,6 +110,9 @@ def train_single_crop(crop_type: str, args_dict: dict):
     from src.crop_yield.trainers.weatherformer_yield_trainer import (
         weatherformer_yield_training_loop,
     )
+    from src.crop_yield.dataloader.cropnet_dataloader import (
+        get_crop_rmse_conversion_factor,
+    )
 
     # Create crop-specific args
     crop_args = args_dict.copy()
@@ -119,32 +122,54 @@ def train_single_crop(crop_type: str, args_dict: dict):
     model_type = args_dict["model"].lower()
 
     if model_type == "weatherbert":
-        result = weatherbert_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weatherbert_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     elif model_type == "weatherformer":
-        result = weatherformer_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weatherformer_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     elif model_type == "weatherformersinusoid":
-        result = weatherformer_sinusoid_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weatherformer_sinusoid_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     elif model_type == "weatherformermixture":
-        result = weatherformer_mixture_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weatherformer_mixture_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     elif model_type == "weatherautoencodermixture":
-        result = weatherautoencoder_mixture_yield_training_loop(
+        cross_validation_results = weatherautoencoder_mixture_yield_training_loop(
             crop_args, use_cropnet=True
         )
     elif model_type == "weatherautoencoder":
-        result = weatherautoencoder_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weatherautoencoder_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     elif model_type == "weatherautoencodersine":
-        result = weatherautoencoder_sine_yield_training_loop(
+        cross_validation_results = weatherautoencoder_sine_yield_training_loop(
             crop_args, use_cropnet=True
         )
     elif model_type == "weathercnn":
-        result = weathercnn_yield_training_loop(crop_args, use_cropnet=True)
+        cross_validation_results = weathercnn_yield_training_loop(
+            crop_args, use_cropnet=True
+        )
     else:
         raise ValueError(
             f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
         )
 
+    # Convert MSE to RMSE using crop-specific scaling factor
+    crop_std = get_crop_rmse_conversion_factor(crop_type)
+    avg_best_rmse = cross_validation_results["avg_best_val_loss"] * crop_std
+    std_best_rmse = cross_validation_results["std_best_val_loss"] * crop_std
+
+    logger.info(f"Crop {crop_type} - Using scaling factor (std): {crop_std:.2f}")
+    logger.info(
+        f"Crop {crop_type} - Final RMSE: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}"
+    )
+
     logger.info(f"Completed training for crop: {crop_type}")
-    return result
+    return avg_best_rmse, std_best_rmse
 
 
 def main(args_dict=None):

@@ -11,6 +11,9 @@ from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 
 logger = logging.getLogger(__name__)
 
+# Global variables to store crop-specific scaling factors for RMSE conversion
+CROP_SCALING_FACTORS = {}
+
 
 class CropNetDataset(Dataset):
     def __init__(
@@ -252,7 +255,9 @@ def read_cropnet_dataset(data_dir: str):
 
 
 def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers: dict):
-    """Standardize CropNet data using weather scalers and crop yield mean"""
+    """Standardize CropNet data using weather scalers and crop-specific yield scaling"""
+    global CROP_SCALING_FACTORS
+
     data = data.copy()
 
     # Get crop yield column
@@ -322,16 +327,20 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
                     if col_name in data.columns:
                         data[col_name] = (data[col_name] - mean_val) / std_val
 
-    # Standardize crop yield using dataset mean
+    # Standardize crop yield using crop-specific mean and std
     if crop_yield_col in data.columns:
         crop_mean = data[crop_yield_col].mean()
         crop_std = data[crop_yield_col].std()
+
+        # Store crop-specific scaling factors globally for RMSE conversion
+        CROP_SCALING_FACTORS[crop_type] = {"mean": crop_mean, "std": crop_std}
+
         print(
             f"CROP STATS - {crop_yield_col}: mean={crop_mean:.2f}, std={crop_std:.2f}"
         )
         data[crop_yield_col] = (data[crop_yield_col] - crop_mean) / crop_std
         logger.info(
-            f"Standardized {crop_yield_col} using fixed scaling (mean={crop_mean:.0f}, std={crop_std:.0f})"
+            f"Standardized {crop_yield_col} using crop-specific scaling (mean={crop_mean:.2f}, std={crop_std:.2f})"
         )
 
     return data
@@ -448,3 +457,16 @@ def get_cropnet_train_test_loaders(
     )
 
     return train_loader, test_loader
+
+
+def get_crop_rmse_conversion_factor(crop_type: str) -> float:
+    """Get the RMSE conversion factor (std) for a specific crop type"""
+    global CROP_SCALING_FACTORS
+
+    if crop_type not in CROP_SCALING_FACTORS:
+        raise ValueError(
+            f"Crop scaling factors not found for {crop_type}. "
+            f"Available crops: {list(CROP_SCALING_FACTORS.keys())}"
+        )
+
+    return CROP_SCALING_FACTORS[crop_type]["std"]
