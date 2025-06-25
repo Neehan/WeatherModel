@@ -1,5 +1,6 @@
-from asyncio.log import logger
+import logging
 from typing import Tuple
+import json
 
 import pandas as pd
 import torch
@@ -7,6 +8,8 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
+
+logger = logging.getLogger(__name__)
 
 
 class CropDataset(Dataset):
@@ -221,20 +224,41 @@ def split_train_test_by_year(
     ]  # must be > 1981 otherwise all past data is just 0
 
     if standardize:
+        # Load NASA POWER weather parameter scalers
+        with open(
+            "src/weather_preprocessing/nasa_power/weather_param_scalers.json", "r"
+        ) as f:
+            weather_scalers = json.load(f)
+
+        # Standardize weather data using NASA POWER scalers
+        data = standardize_weather_data(data, weather_scalers)
+
+        # Standardize non-weather columns using dataset statistics
+        weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         cols_to_standardize = [
             col
             for col in data.columns
-            if col not in ["loc_ID", "year", "State", "County", "lat", "lng", "yield"]
+            if col
+            not in ["loc_ID", "year", "State", "County", "lat", "lng", "yield"]
+            + weather_cols
         ]
 
-        # standardize the data
-        data = pd.merge(
-            data[["year", "State", "loc_ID", "lat", "lng", "yield"]],
-            (data[cols_to_standardize] - data[cols_to_standardize].mean())
-            / data[cols_to_standardize].std(),
-            left_index=True,
-            right_index=True,
-        )
+        if cols_to_standardize:
+            # standardize non-weather data (practices, soil, etc.)
+            non_weather_standardized = (
+                data[cols_to_standardize] - data[cols_to_standardize].mean()
+            ) / data[cols_to_standardize].std()
+            data = pd.concat(
+                [
+                    data[
+                        ["year", "State", "loc_ID", "lat", "lng", "yield"]
+                        + weather_cols
+                    ],
+                    non_weather_standardized,
+                ],
+                axis=1,
+            )
+
         # for yield always use same values so RMSEs are comparable across folds
         data["yield"] = (data["yield"] - 38.5) / 11.03
 
@@ -310,3 +334,51 @@ def get_train_test_loaders(
     )
 
     return train_loader, test_loader
+
+
+def standardize_weather_data(data: pd.DataFrame, weather_scalers: dict):
+    """Standardize weather data using NASA POWER scalers"""
+    data = data.copy()
+
+    # Map weather indices to NASA POWER parameter names
+    weather_index_to_param = {
+        1: "PRECTOTCORR",  # W_1: precipitation (mm/day)
+        2: "ALLSKY_SFC_SW_DWN",  # W_2: solar radiation (W/m² -> MJ/m²/day)
+        3: "SNODP",  # W_3: snow depth (mm)
+        4: "T2M_MAX",  # W_4: max temp (°C)
+        5: "T2M_MIN",  # W_5: min temp (°C)
+        6: "VPD",  # W_6: vapor pressure (Pa -> kPa)
+    }
+
+    standardized_params = []
+
+    for weather_idx in range(1, 7):  # W_1 to W_6
+        param_name = weather_index_to_param[weather_idx]
+
+        # Get all columns for this weather variable at once
+        weather_cols = [f"W_{weather_idx}_{week}" for week in range(1, 53)]
+        existing_cols = [col for col in weather_cols if col in data.columns]
+
+        if (
+            existing_cols
+            and param_name in weather_scalers["param_means"]
+            and param_name in weather_scalers["param_stds"]
+        ):
+            # Apply unit conversions before standardization
+            if weather_idx == 2:  # Solar radiation: W/m² to MJ/m²/day
+                data[existing_cols] = (
+                    data[existing_cols] * 24 * 3600 / 1e6
+                )  # W/m² to MJ/m²/day
+            elif weather_idx == 6:  # Vapor pressure: Pa to kPa
+                data[existing_cols] = data[existing_cols] / 1000.0  # Pa to kPa
+
+            # Standardize using NASA POWER scalers
+            nasa_mean = weather_scalers["param_means"][param_name]
+            nasa_std = weather_scalers["param_stds"][param_name]
+            data[existing_cols] = (data[existing_cols] - nasa_mean) / nasa_std
+            standardized_params.append(f"W_{weather_idx} -> {param_name}")
+
+    logger.info(
+        f"Standardized weather using NASA POWER scalers: {', '.join(standardized_params)}"
+    )
+    return data

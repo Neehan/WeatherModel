@@ -23,12 +23,12 @@ class WeatherCNNYieldTrainer(WeatherBERTYieldTrainer):
     pass  # All functionality inherited from WeatherBERTYieldTrainer
 
 
-def weathercnn_yield_training_loop(args_dict):
+def weathercnn_yield_training_loop(args_dict, use_cropnet: bool):
     """
-    CNN training loop using the WeatherCNNYieldTrainer class.
+    WeatherCNN training loop using the WeatherCNNYieldTrainer class.
     Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     return _run_yield_cross_validation(
         setup_params=setup_params,

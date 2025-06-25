@@ -13,12 +13,12 @@ from src.crop_yield.models.weatherautoencoder_mixture_yield_model import (
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherautoencoder_mixture_yield_training_loop(args_dict):
+def weatherautoencoder_mixture_yield_training_loop(args_dict, use_cropnet: bool):
     """
     WeatherAutoencoderMixture training loop using the WeatherAutoencoderMixtureYieldTrainer class.
     Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     # WeatherAutoencoderMixture-specific trainer kwargs
     extra_trainer_kwargs = {"beta": args_dict["beta"]}

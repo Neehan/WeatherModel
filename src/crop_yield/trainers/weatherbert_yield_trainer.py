@@ -10,6 +10,10 @@ from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
     read_soybean_dataset,
 )
+from src.crop_yield.dataloader.cropnet_dataloader import (
+    get_cropnet_train_test_loaders,
+    read_cropnet_dataset,
+)
 from src.base_trainer.cross_validator import CrossValidator
 import os
 
@@ -45,6 +49,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         n_past_years: int,
         n_train_years: int,
         beta: float,
+        use_cropnet: bool = False,
+        crop_type: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -54,6 +60,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.n_past_years = n_past_years
         self.n_train_years = n_train_years
         self.beta = beta
+        self.use_cropnet = use_cropnet
+        self.crop_type = crop_type
         self.output_json["model_config"]["beta"] = beta
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss(reduction="mean")
@@ -64,14 +72,19 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             if not os.path.exists(self.model_dir):
                 os.makedirs(self.model_dir)
 
-        global FOLD_IDX
-        if FOLD_IDX >= len(TEST_YEARS):
-            raise ValueError(
-                f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
-            )
-        self.test_year = TEST_YEARS[FOLD_IDX]
-        FOLD_IDX += 1
-        self.logger.info(f"Testing on year: {self.test_year}")
+        # For CropNet, use k=1 fold with test year 2021
+        if self.use_cropnet:
+            self.test_year = 2021
+            self.logger.info(f"CropNet mode - Testing on year: {self.test_year}")
+        else:
+            global FOLD_IDX
+            if FOLD_IDX >= len(TEST_YEARS):
+                raise ValueError(
+                    f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
+                )
+            self.test_year = TEST_YEARS[FOLD_IDX]
+            FOLD_IDX += 1
+            self.logger.info(f"Testing on year: {self.test_year}")
 
         # Cache for datasets to avoid recreation during cross-validation
         self.train_loader: Optional[DataLoader] = None
@@ -87,15 +100,30 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         if self.train_loader is not None and self.test_loader is not None:
             return self.train_loader, self.test_loader
 
-        train_loader, test_loader = get_train_test_loaders(
-            self.crop_df,
-            self.n_train_years,
-            self.test_year,
-            self.n_past_years,
-            self.batch_size,
-            shuffle,
-            num_workers=0 if self.world_size > 1 else 8,
-        )
+        if self.use_cropnet:
+            if self.crop_type is None:
+                raise ValueError("crop_type must be specified when using CropNet")
+            train_loader, test_loader = get_cropnet_train_test_loaders(
+                self.crop_df,
+                self.crop_type,
+                self.n_train_years,
+                self.test_year,
+                self.n_past_years,
+                self.batch_size,
+                shuffle,
+                num_workers=0 if self.world_size > 1 else 8,
+            )
+        else:
+            train_loader, test_loader = get_train_test_loaders(
+                self.crop_df,
+                self.n_train_years,
+                self.test_year,
+                self.n_past_years,
+                self.batch_size,
+                shuffle,
+                num_workers=0 if self.world_size > 1 else 8,
+            )
+
         self.train_loader = train_loader
         self.test_loader = test_loader
         return train_loader, test_loader
@@ -172,10 +200,14 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 # =============================================================================
 
 
-def _create_yield_training_setup(args_dict):
+def _create_yield_training_setup(args_dict, use_cropnet: bool):
     """
     Helper function to create common training setup for all yield trainers.
     Returns common parameters needed by all yield training loops.
+
+    Args:
+        args_dict: Arguments dictionary
+        cropnet_df: Optional CropNet DataFrame for CropNet training
     """
     # Get distributed training parameters
     rank = args_dict.get("rank", 0)
@@ -185,11 +217,16 @@ def _create_yield_training_setup(args_dict):
     # Set device for this process
     device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
-    # Read dataset
-    crop_df = read_soybean_dataset(DATA_DIR)
-
-    # Use fixed k-fold cross validation with test years [2015, 2016, 2017, 2018]
-    cross_validation_k = len(TEST_YEARS)
+    if use_cropnet:
+        # Use provided CropNet DataFrame
+        crop_df = read_cropnet_dataset(DATA_DIR)
+        # For CropNet, use k=1 fold (test on 2021)
+        cross_validation_k = 1
+    else:
+        # Read soybean dataset
+        crop_df = read_soybean_dataset(DATA_DIR)
+        # Use fixed k-fold cross validation with test years [2015, 2016, 2017, 2018]
+        cross_validation_k = len(TEST_YEARS)
 
     return {
         "rank": rank,
@@ -199,6 +236,7 @@ def _create_yield_training_setup(args_dict):
         "crop_df": crop_df,
         "cross_validation_k": cross_validation_k,
         "beta": args_dict["beta"],
+        "use_cropnet": use_cropnet,
     }
 
 
@@ -223,8 +261,9 @@ def _run_yield_cross_validation(
         extra_trainer_kwargs: Additional trainer-specific kwargs (optional)
         extra_model_kwargs: Additional model-specific kwargs (optional)
     """
-    # Reset fold index before starting new cross-validation
-    _reset_fold_index()
+    # Reset fold index before starting new cross-validation (only for non-CropNet)
+    if not setup_params["use_cropnet"]:
+        _reset_fold_index()
 
     model_kwargs = {
         "name": model_name,
@@ -242,7 +281,9 @@ def _run_yield_cross_validation(
         "crop_df": setup_params["crop_df"],
         "n_past_years": args_dict["n_past_years"],
         "n_train_years": args_dict["n_train_years"],
-        "beta": setup_params["beta"],
+        "beta": args_dict["beta"],
+        "use_cropnet": setup_params["use_cropnet"],
+        "crop_type": args_dict.get("crop_type"),
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],
@@ -272,12 +313,16 @@ def _run_yield_cross_validation(
     )
 
 
-def weatherbert_yield_training_loop(args_dict):
+def weatherbert_yield_training_loop(args_dict, use_cropnet: bool):
     """
     BERT training loop using the WeatherBertYieldTrainer class.
     Initializes the model internally and handles all training.
+
+    Args:
+        args_dict: Arguments dictionary
+        cropnet_df: Optional CropNet DataFrame for CropNet training
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     return _run_yield_cross_validation(
         setup_params=setup_params,

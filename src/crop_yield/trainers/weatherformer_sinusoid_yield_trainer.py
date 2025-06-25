@@ -48,12 +48,12 @@ class WeatherFormerSinusoidYieldTrainer(WeatherFormerYieldTrainer):
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherformer_sinusoid_yield_training_loop(args_dict):
+def weatherformer_sinusoid_yield_training_loop(args_dict, use_cropnet: bool):
     """
     WeatherFormerSinusoid training loop using the WeatherFormerSinusoidYieldTrainer class.
     Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     # WeatherFormerSinusoid-specific trainer kwargs
     extra_trainer_kwargs = {"beta": args_dict["beta"]}

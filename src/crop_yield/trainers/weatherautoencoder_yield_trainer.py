@@ -17,12 +17,12 @@ class WeatherAutoencoderYieldTrainer(WeatherBERTYieldTrainer):
     pass  # Inherits all functionality from parent
 
 
-def weatherautoencoder_yield_training_loop(args_dict):
+def weatherautoencoder_yield_training_loop(args_dict, use_cropnet: bool):
     """
-    WeatherAutoencoder yield training loop using the WeatherAutoencoderYieldTrainer class.
-    Initializes the model internally and handles all training with cross-validation.
+    WeatherAutoencoder training loop using the WeatherAutoencoderYieldTrainer class.
+    Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     return _run_yield_cross_validation(
         setup_params=setup_params,

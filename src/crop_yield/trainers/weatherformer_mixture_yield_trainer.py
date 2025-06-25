@@ -54,17 +54,15 @@ class WeatherFormerMixtureYieldTrainer(WeatherFormerYieldTrainer):
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherformer_mixture_yield_training_loop(args_dict):
+def weatherformer_mixture_yield_training_loop(args_dict, use_cropnet: bool):
     """
     WeatherFormerMixture training loop using the WeatherFormerMixtureYieldTrainer class.
     Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
-    # WeatherFormerMixture-specific trainer kwargs
+    # WeatherFormerMixture-specific trainer and model kwargs
     extra_trainer_kwargs = {"beta": args_dict["beta"]}
-
-    # WeatherFormerMixture-specific model kwargs
     extra_model_kwargs = {"k": args_dict["n_mixture_components"]}
 
     return _run_yield_cross_validation(

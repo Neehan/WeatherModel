@@ -206,12 +206,12 @@ class WeatherAutoencoderSineYieldTrainer(WeatherBERTYieldTrainer):
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherautoencoder_sine_yield_training_loop(args_dict):
+def weatherautoencoder_sine_yield_training_loop(args_dict, use_cropnet: bool):
     """
     WeatherAutoencoderSine training loop using the WeatherAutoencoderSineYieldTrainer class.
     Initializes the model internally and handles all training.
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     # WeatherAutoencoderSine-specific trainer kwargs
     extra_trainer_kwargs = {"beta": args_dict["beta"]}

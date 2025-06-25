@@ -197,12 +197,16 @@ class WeatherFormerYieldTrainer(WeatherBERTYieldTrainer):
 # =============================================================================
 # PUBLIC API FUNCTIONS (for users)
 # =============================================================================
-def weatherformer_yield_training_loop(args_dict):
+def weatherformer_yield_training_loop(args_dict, use_cropnet: bool):
     """
     WeatherFormer training loop using the WeatherFormerYieldTrainer class.
     Initializes the model internally and handles all training.
+
+    Args:
+        args_dict: Arguments dictionary
+        use_cropnet: Whether to use CropNet training
     """
-    setup_params = _create_yield_training_setup(args_dict)
+    setup_params = _create_yield_training_setup(args_dict, use_cropnet)
 
     # WeatherFormer-specific trainer kwargs
     extra_trainer_kwargs = {"beta": args_dict["beta"]}
