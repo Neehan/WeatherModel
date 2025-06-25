@@ -113,7 +113,7 @@ def create_county_weekly_record(group, year):
     # Check for missing weeks
     available_weeks = set(group["week"].unique())
     missing_weeks = set(range(1, 53)) - available_weeks
-    if missing_weeks and len(missing_weeks) > 10:  # Only warn if many weeks missing
+    if missing_weeks and len(missing_weeks) > 0:  # Only warn if many weeks missing
         print(f"      County {first_row['County']} missing {len(missing_weeks)} weeks")
 
     # Calculate weekly averages for each weather variable
@@ -128,11 +128,7 @@ def create_county_weekly_record(group, year):
             # Calculate weekly values
             for orig_col, new_col in WEATHER_COLUMNS.items():
                 if orig_col in week_data.columns:
-                    if orig_col == "Precipitation (kg m**-2)":
-                        # Sum precipitation instead of average
-                        county_weekly[f"{new_col}_{week}"] = week_data[orig_col].sum()
-                    else:
-                        county_weekly[f"{new_col}_{week}"] = week_data[orig_col].mean()
+                    county_weekly[f"{new_col}_{week}"] = week_data[orig_col].mean()
                 else:
                     county_weekly[f"{new_col}_{week}"] = np.nan
 

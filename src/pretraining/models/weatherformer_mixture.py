@@ -45,14 +45,16 @@ class WeatherFormerMixture(WeatherFormer):
         )
 
         # Sinusoidal parameters for mixture means mu_k
-        # Shape: (1, k, 1, output_dim) to avoid unsqueezing later
-        self.frequency = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
-        self.phase = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
-        self.amplitude = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1)
+        # Shape: (1, k, max_len, output_dim) to avoid unsqueezing later
+        self.frequency = nn.Parameter(torch.randn(1, k, max_len, output_dim) * 0.1)
+        self.phase = nn.Parameter(torch.randn(1, k, max_len, output_dim) * 0.1)
+        self.amplitude = nn.Parameter(torch.randn(1, k, max_len, output_dim) * 0.1)
 
-        # Mixture variances: log_var_k of shape (k, 1, output_dim)
+        # Mixture variances: log_var_k of shape (k, max_len, output_dim)
         # Initialize log_var_k to give var_k around 0.1-1.0 range instead of exactly 1.0
-        self.log_var_k = nn.Parameter(torch.randn(1, k, 1, output_dim) * 0.1 - 1.0)
+        self.log_var_k = nn.Parameter(
+            torch.randn(1, k, max_len, output_dim) * 0.1 - 1.0
+        )
 
         # Learnable mixture weights (log-probabilities)
         # Shape: (1, k) - one weight per mixture component
@@ -116,15 +118,18 @@ class WeatherFormerMixture(WeatherFormer):
 
         # [1, k, seq_len, 1]
         pos = self.positions[:, :, :seq_len, :]
+        amp = self.amplitude[:, :, :seq_len, :]
+        freq = self.frequency[:, :, :seq_len, :]
+        phase = self.phase[:, :, :seq_len, :]
         # [batch size, k, seq_len, 1]
         scaled_pos = pos * 2 * torch.pi * interval.view(batch_size, 1, 1, 1) / 365.0
 
         # Compute sinusoidal means for each mixture component
         # Broadcasting: (batch_size, k, seq_len, output_dim)
-        mu_k = self.amplitude * torch.sin(self.frequency * scaled_pos + self.phase)
+        mu_k = amp * torch.sin(freq * scaled_pos + phase)
 
         # Compute mixture variances from log_var_k
-        var_k = torch.exp(self.log_var_k)
+        var_k = torch.exp(self.log_var_k[:, :, :seq_len, :])
 
         # Clamp var_k to prevent numerical instability
         var_k = torch.clamp(var_k, min=1e-6, max=1)  # var_k is in [0.01, 1]
