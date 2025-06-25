@@ -8,15 +8,6 @@ import numpy as np
 
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 
-# map of Weather indices used in preprocessing
-# 7: precipitation,
-# 8: solar radiation,
-# 11: snow depth,
-# 1: max temp,
-# 2: min temp,
-# 29: vap pressure
-WEATHER_INDICES = [7, 8, 11, 1, 2, 29]
-
 
 class CropDataset(Dataset):
     def __init__(
@@ -57,7 +48,7 @@ class CropDataset(Dataset):
         # 1: max temp
         # 2: min temp
         # 29: vap pressure
-        self.weather_indices = torch.tensor(WEATHER_INDICES)
+        self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
 
         if test_dataset:  # test on specific year
             candidate_data = data[data["year"] == test_year]
@@ -214,64 +205,26 @@ class CropDataset(Dataset):
 
 
 def standardize_weather(data):
-    """Standardize weather columns using pretrained model values where possible."""
+    """Standardize weather columns by variable type instead of individual columns."""
     weather_data = data.copy()
 
-    # Mapping from weather index to pretrained parameters
-    pretrained_mapping = {
-        1: {
-            "param": "T2M_MAX",
-            "mean": 18.30260041421349,
-            "std": 10.990189636080574,
-            "unit_conversion": 1.0,
-        },  # tmax (°C) -> T2M_MAX (°C)
-        2: {
-            "param": "T2M_MIN",
-            "mean": 8.427132042339863,
-            "std": 11.203939112475137,
-            "unit_conversion": 1.0,
-        },  # tmin (°C) -> T2M_MIN (°C)
-        7: {
-            "param": "PRECTOTCORR",
-            "mean": 2.210654302802791,
-            "std": 2.889650001332724,
-            "unit_conversion": 1.0,
-        },  # prcp (mm) -> PRECTOTCORR (mm/day)
-        8: {
-            "param": "ALLSKY_SFC_SW_DWN",
-            "mean": 16.420282455132728,
-            "std": 6.8065283058475625,
-            "unit_conversion": 0.0864,
-        },  # srad (W/m²) -> ALLSKY_SFC_SW_DWN (MJ/m²/day): W/m² * 0.0864 = MJ/m²/day
-        29: {
-            "param": "VAP",
-            "mean": 1.842746592978715,
-            "std": 1.0865278766892634,
-            "unit_conversion": 0.001,
-        },  # vp (Pa) -> VAP (kPa): Pa * 0.001 = kPa
-    }
-
-    # Standardize each weather variable
-    for i, weather_idx in enumerate(WEATHER_INDICES):
-        weather_var = i + 1  # Column names are W_1, W_2, etc.
-        var_cols = [f"W_{weather_var}_{j}" for j in range(1, 53)]
+    # Standardize weather columns by variable type (not by individual column)
+    for weather_var in range(1, 7):  # Weather variables 1-6
+        var_cols = [
+            f"W_{weather_var}_{j}" for j in range(1, 53)
+        ]  # All weeks for this variable
         var_data = weather_data[var_cols]
 
-        if weather_idx in pretrained_mapping:
-            mapping = pretrained_mapping[weather_idx]
-            weather_data[var_cols] = (
-                var_data * mapping["unit_conversion"] - mapping["mean"]
-            ) / mapping["std"]
-            print(
-                f"W_{weather_var} (idx {weather_idx}, {mapping['param']}): pretrained mean={mapping['mean']:.3f}, std={mapping['std']:.3f}"
-            )
-        else:
-            var_mean = var_data.values.mean()
-            var_std = var_data.values.std()
-            weather_data[var_cols] = (var_data - var_mean) / var_std
-            print(
-                f"W_{weather_var} (idx {weather_idx}): dataset mean={var_mean:.3f}, std={var_std:.3f}"
-            )
+        # Calculate mean and std across all columns for this weather variable
+        var_mean = var_data.values.mean()
+        var_std = var_data.values.std()
+
+        print(
+            f"Standardizing weather variable W_{weather_var} with mean {var_mean:.3f} and std {var_std:.3f}"
+        )
+
+        # Standardize all columns for this weather variable using the same mean/std
+        weather_data[var_cols] = (var_data - var_mean) / var_std
 
     return weather_data
 

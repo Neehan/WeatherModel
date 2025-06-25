@@ -197,7 +197,8 @@ def main(args_dict=None):
         args_dict["n_past_years"] = args_dict["n_train_years"] - 1
 
     # Define the 4 crop types
-    crop_types = ["Cotton", "Corn", "Soybeans", "WinterWheat"]
+    # crop_types = ["Cotton", "Corn", "Soybeans", "WinterWheat"]
+    crop_types = ["Corn", "Soybeans", "WinterWheat"]
 
     logger = logging.getLogger(__name__)
     logger.info("Starting CropNet training for all crops...")

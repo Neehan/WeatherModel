@@ -256,6 +256,14 @@ class GridSearch:
             )
 
             for beta in self.beta_values:
+                # Skip beta > 0 for weatherautoencoder since it doesn't use beta parameter
+                if self.model == "weatherautoencoder" and beta > 0:
+                    self.logger.info(
+                        f"Skipping beta={beta} for weatherautoencoder (doesn't use beta parameter)"
+                    )
+                    skipped_experiments += 1
+                    continue
+
                 # Check if this specific (beta, year) experiment already exists
                 if self._experiment_exists(beta, n_train_years):
                     self.logger.info(

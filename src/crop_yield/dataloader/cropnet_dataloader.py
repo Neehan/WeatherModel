@@ -47,16 +47,23 @@ class CropNetDataset(Dataset):
             for week in range(1, 53):  # weeks 1-52
                 self.cropnet_weather_cols.append(f"{var}_{week}")
 
-        # Map CropNet weather variables to WeatherFormer indices
-        # Based on preprocessing in yield_dataloader.py:
-        # 7: precipitation, 8: solar radiation, 11: snow depth, 1: max temp, 2: min temp, 29: vap pressure
+        # Define weather indices used in CropNet (similar to yield_dataloader.py)
+        # Map CropNet variables to specific weather indices
+        # Based on available CropNet variables: temp_avg, temp_max, temp_min, precipitation, humidity, wind_speed, radiation, vpd
+        self.weather_indices = torch.tensor(
+            [0, 1, 2, 4, 7, 8, 23, 30]
+        )  # T2M, T2M_MAX, T2M_MIN, WS2M, PRECTOTCORR, ALLSKY_SFC_SW_DWN, RH2M, VPD
+
+        # Simple mapping from CropNet variable index to weather index
         self.weather_var_mapping = {
-            "temp_max": 1,  # max temp
-            "temp_min": 2,  # min temp
-            "precipitation": 7,  # precipitation
-            "radiation": 8,  # solar radiation (downward shortwave)
-            "vpd": 29,  # vapor pressure deficit
-            "temp_avg": 0,  # use index 0 for average temp (not in original mapping)
+            0: 0,  # temp_avg -> T2M (index 0)
+            1: 1,  # temp_max -> T2M_MAX (index 1)
+            2: 2,  # temp_min -> T2M_MIN (index 2)
+            3: 7,  # precipitation -> PRECTOTCORR (index 7)
+            4: 23,  # humidity -> RH2M (index 23)
+            5: 4,  # wind_speed -> WS2M (index 4)
+            6: 8,  # radiation -> ALLSKY_SFC_SW_DWN (index 8)
+            7: 30,  # vpd -> VPD (index 30)
         }
 
         # Get crop yield column name
@@ -185,24 +192,16 @@ class CropNetDataset(Dataset):
                 (seq_len * n_years, TOTAL_WEATHER_VARS),
             )
 
-            # Map CropNet weather variables to model indices
-            for cropnet_idx, var_name in enumerate(weather_vars):
-                if var_name in self.weather_var_mapping:
-                    model_idx = self.weather_var_mapping[var_name]
-                    padded_weather[:, model_idx] = torch.FloatTensor(
-                        weather[:, cropnet_idx]
-                    )
+            # Map CropNet weather variables to model indices (similar to yield_dataloader.py)
+            padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
 
             # Create weather feature mask - mask out unused features
             weather_feature_mask = torch.ones(
                 TOTAL_WEATHER_VARS,
                 dtype=torch.bool,
             )
-            # Unmask only the features we're using
-            for var_name in self.weather_var_mapping:
-                model_idx = self.weather_var_mapping[var_name]
-                weather_feature_mask[model_idx] = False
-
+            # Unmask the features we're using (set to False to unmask)
+            weather_feature_mask[self.weather_indices] = False
             weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
                 n_years * seq_len, -1
             )
@@ -263,7 +262,7 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
     # Get crop yield column
     crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
 
-    # Standardize weather columns using provided scalers
+    # Define weather variables in CropNet
     weather_vars = [
         "temp_avg",
         "temp_max",
@@ -277,55 +276,57 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
 
     # Map CropNet weather variables to NASA POWER parameter names for scaling
     weather_param_mapping = {
-        "temp_avg": "T2M",
-        "temp_max": "T2M_MAX",
-        "temp_min": "T2M_MIN",
-        "precipitation": "PRECTOTCORR",
-        "humidity": "RH2M",
-        "wind_speed": "WS2M",
-        "radiation": "ALLSKY_SFC_SW_DWN",
-        "vpd": "VPD",
+        0: {
+            "param": "T2M",
+            "unit_conversion": lambda x: x - 273.15,
+        },  # temp_avg: K to C
+        1: {
+            "param": "T2M_MAX",
+            "unit_conversion": lambda x: x - 273.15,
+        },  # temp_max: K to C
+        2: {
+            "param": "T2M_MIN",
+            "unit_conversion": lambda x: x - 273.15,
+        },  # temp_min: K to C
+        3: {
+            "param": "PRECTOTCORR",
+            "unit_conversion": lambda x: x,
+        },  # precipitation: already mm/day
+        4: {"param": "RH2M", "unit_conversion": lambda x: x},  # humidity: already %
+        5: {"param": "WS2M", "unit_conversion": lambda x: x},  # wind_speed: already m/s
+        6: {
+            "param": "ALLSKY_SFC_SW_DWN",
+            "unit_conversion": lambda x: x * 24 * 3600 / 1e6,
+        },  # radiation: W/m² to MJ/m²/day
+        7: {
+            "param": "VPD",
+            "unit_conversion": lambda x: x * 12.0,
+        },  # vpd: scale to match NASA range
     }
 
-    # First, convert CropNet units to NASA POWER units
-    for var in weather_vars:
-        for week in range(1, 53):
-            col_name = f"{var}_{week}"
-            if col_name in data.columns:
-                # Apply unit conversions to match NASA POWER data
-                if var in ["temp_avg", "temp_max", "temp_min"]:
-                    # Convert from Kelvin to Celsius
-                    data[col_name] = data[col_name] - 273.15
-                elif var == "radiation":
-                    # Convert from W/m² to MJ/m²/day
-                    # NASA POWER ALLSKY_SFC_SW_DWN is in MJ/m²/day
-                    data[col_name] = (
-                        data[col_name] * 24 * 3600 / 1e6
-                    )  # W/m² to MJ/m²/day
-                elif var == "vpd":
-                    # CropNet VPD appears to be in different units than NASA POWER
-                    # Scale to match NASA POWER VPD range (mean=1.84, std=1.09)
-                    data[col_name] = (
-                        data[col_name] * 12.0
-                    )  # Scale factor to match NASA range
-                # precipitation, humidity, wind_speed should already be in correct units
+    # Apply unit conversions and standardization
+    for var_idx in range(len(weather_vars)):
+        if var_idx in weather_param_mapping:
+            mapping = weather_param_mapping[var_idx]
+            param_name = mapping["param"]
+            unit_conversion = mapping["unit_conversion"]
 
-    # Now apply NASA POWER standardization (CRITICAL: use NASA means/stds for pretrained model)
-    for var in weather_vars:
-        if var in weather_param_mapping:
-            param_name = weather_param_mapping[var]
             if (
                 param_name in weather_scalers["param_means"]
                 and param_name in weather_scalers["param_stds"]
             ):
+
                 mean_val = weather_scalers["param_means"][param_name]
                 std_val = weather_scalers["param_stds"][param_name]
 
-                # Standardize all weeks using NASA POWER scalers
+                # Apply to all weeks for this variable
                 for week in range(1, 53):
-                    col_name = f"{var}_{week}"
+                    col_name = f"{weather_vars[var_idx]}_{week}"
                     if col_name in data.columns:
-                        data[col_name] = (data[col_name] - mean_val) / std_val
+                        # Apply unit conversion then standardization
+                        data[col_name] = (
+                            unit_conversion(data[col_name]) - mean_val
+                        ) / std_val
 
     # Standardize crop yield using crop-specific mean and std
     if crop_yield_col in data.columns:
@@ -342,6 +343,9 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
         logger.info(
             f"Standardized {crop_yield_col} using crop-specific scaling (mean={crop_mean:.2f}, std={crop_std:.2f})"
         )
+
+    # Fill NaN values with 0
+    data = data.fillna(0)
 
     return data
 
@@ -390,9 +394,6 @@ def split_train_test_by_year(
             weather_scalers = json.load(f)
 
         data = standardize_cropnet_data(data, crop_type, weather_scalers)
-
-    # Fill NaN values with 0
-    # data = data.fillna(0)
 
     train_dataset = CropNetDataset(
         data.copy(),
