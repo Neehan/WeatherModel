@@ -205,26 +205,76 @@ class CropDataset(Dataset):
 
 
 def standardize_weather(data):
-    """Standardize weather columns by variable type instead of individual columns."""
+    """Standardize weather columns using pretrained model values where possible."""
     weather_data = data.copy()
 
-    # Standardize weather columns by variable type (not by individual column)
+    # Mapping from weather variable index to pretrained parameters
+    # Based on weather_indices = [7, 8, 11, 1, 2, 29] in the model
+    pretrained_mapping = {
+        1: {
+            "param": "T2M_MAX",
+            "mean": 18.30260041421349,
+            "std": 10.990189636080574,
+            "unit_conversion": 1.0,
+        },  # tmax (°C) -> T2M_MAX (°C)
+        2: {
+            "param": "T2M_MIN",
+            "mean": 8.427132042339863,
+            "std": 11.203939112475137,
+            "unit_conversion": 1.0,
+        },  # tmin (°C) -> T2M_MIN (°C)
+        7: {
+            "param": "PRECTOTCORR",
+            "mean": 2.210654302802791,
+            "std": 2.889650001332724,
+            "unit_conversion": 1.0,
+        },  # prcp (mm) -> PRECTOTCORR (mm/day)
+        8: {
+            "param": "ALLSKY_SFC_SW_DWN",
+            "mean": 16.420282455132728,
+            "std": 6.8065283058475625,
+            "unit_conversion": 0.0864,
+        },  # srad (W/m²) -> ALLSKY_SFC_SW_DWN (MJ/m²/day): W/m² * 0.0864 = MJ/m²/day
+        29: {
+            "param": "VAP",
+            "mean": 1.842746592978715,
+            "std": 1.0865278766892634,
+            "unit_conversion": 0.001,
+        },  # vp (Pa) -> VAP (kPa): Pa * 0.001 = kPa
+    }
+
+    # Standardize weather columns by variable type
     for weather_var in range(1, 7):  # Weather variables 1-6
         var_cols = [
             f"W_{weather_var}_{j}" for j in range(1, 53)
         ]  # All weeks for this variable
         var_data = weather_data[var_cols]
 
-        # Calculate mean and std across all columns for this weather variable
-        var_mean = var_data.values.mean()
-        var_std = var_data.values.std()
+        if weather_var in pretrained_mapping:
+            # Use pretrained values with unit conversion
+            mapping = pretrained_mapping[weather_var]
+            pretrained_mean = mapping["mean"]
+            pretrained_std = mapping["std"]
+            unit_conversion = mapping["unit_conversion"]
 
-        print(
-            f"Standardizing weather variable W_{weather_var} with mean {var_mean:.3f} and std {var_std:.3f}"
-        )
+            print(
+                f"Using pretrained values for W_{weather_var} ({mapping['param']}): mean={pretrained_mean:.3f}, std={pretrained_std:.3f}, conversion={unit_conversion}"
+            )
 
-        # Standardize all columns for this weather variable using the same mean/std
-        weather_data[var_cols] = (var_data - var_mean) / var_std
+            # Apply unit conversion then standardize using pretrained values
+            weather_data[var_cols] = (
+                var_data * unit_conversion - pretrained_mean
+            ) / pretrained_std
+        else:
+            # Use dataset-specific standardization for variables without pretrained mapping
+            var_mean = var_data.values.mean()
+            var_std = var_data.values.std()
+
+            print(
+                f"Using dataset-specific standardization for W_{weather_var}: mean={var_mean:.3f}, std={var_std:.3f}"
+            )
+
+            weather_data[var_cols] = (var_data - var_mean) / var_std
 
     return weather_data
 
