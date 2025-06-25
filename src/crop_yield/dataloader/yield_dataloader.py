@@ -243,7 +243,7 @@ def split_train_test_by_year(
 
     data = soybean_df[
         soybean_df["year"] > 1981.0
-    ]  # must be > 1981 otherwise all past data is just 0
+    ].copy()  # must be > 1981 otherwise all past data is just 0
 
     if standardize:
         cols_to_standardize = [
