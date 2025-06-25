@@ -8,6 +8,15 @@ import numpy as np
 
 from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
 
+# map of Weather indices used in preprocessing
+# 7: precipitation,
+# 8: solar radiation,
+# 11: snow depth,
+# 1: max temp,
+# 2: min temp,
+# 29: vap pressure
+WEATHER_INDICES = [7, 8, 11, 1, 2, 29]
+
 
 class CropDataset(Dataset):
     def __init__(
@@ -48,7 +57,7 @@ class CropDataset(Dataset):
         # 1: max temp
         # 2: min temp
         # 29: vap pressure
-        self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
+        self.weather_indices = torch.tensor(WEATHER_INDICES)
 
         if test_dataset:  # test on specific year
             candidate_data = data[data["year"] == test_year]
@@ -208,8 +217,7 @@ def standardize_weather(data):
     """Standardize weather columns using pretrained model values where possible."""
     weather_data = data.copy()
 
-    # Mapping from weather variable index to pretrained parameters
-    # Based on weather_indices = [7, 8, 11, 1, 2, 29] in the model
+    # Mapping from weather index to pretrained parameters
     pretrained_mapping = {
         1: {
             "param": "T2M_MAX",
@@ -243,38 +251,27 @@ def standardize_weather(data):
         },  # vp (Pa) -> VAP (kPa): Pa * 0.001 = kPa
     }
 
-    # Standardize weather columns by variable type
-    for weather_var in range(1, 7):  # Weather variables 1-6
-        var_cols = [
-            f"W_{weather_var}_{j}" for j in range(1, 53)
-        ]  # All weeks for this variable
+    # Standardize each weather variable
+    for i, weather_idx in enumerate(WEATHER_INDICES):
+        weather_var = i + 1  # Column names are W_1, W_2, etc.
+        var_cols = [f"W_{weather_var}_{j}" for j in range(1, 53)]
         var_data = weather_data[var_cols]
 
-        if weather_var in pretrained_mapping:
-            # Use pretrained values with unit conversion
-            mapping = pretrained_mapping[weather_var]
-            pretrained_mean = mapping["mean"]
-            pretrained_std = mapping["std"]
-            unit_conversion = mapping["unit_conversion"]
-
-            print(
-                f"Using pretrained values for W_{weather_var} ({mapping['param']}): mean={pretrained_mean:.3f}, std={pretrained_std:.3f}, conversion={unit_conversion}"
-            )
-
-            # Apply unit conversion then standardize using pretrained values
+        if weather_idx in pretrained_mapping:
+            mapping = pretrained_mapping[weather_idx]
             weather_data[var_cols] = (
-                var_data * unit_conversion - pretrained_mean
-            ) / pretrained_std
+                var_data * mapping["unit_conversion"] - mapping["mean"]
+            ) / mapping["std"]
+            print(
+                f"W_{weather_var} (idx {weather_idx}, {mapping['param']}): pretrained mean={mapping['mean']:.3f}, std={mapping['std']:.3f}"
+            )
         else:
-            # Use dataset-specific standardization for variables without pretrained mapping
             var_mean = var_data.values.mean()
             var_std = var_data.values.std()
-
-            print(
-                f"Using dataset-specific standardization for W_{weather_var}: mean={var_mean:.3f}, std={var_std:.3f}"
-            )
-
             weather_data[var_cols] = (var_data - var_mean) / var_std
+            print(
+                f"W_{weather_var} (idx {weather_idx}): dataset mean={var_mean:.3f}, std={var_std:.3f}"
+            )
 
     return weather_data
 
