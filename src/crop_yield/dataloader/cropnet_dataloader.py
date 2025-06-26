@@ -304,26 +304,30 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
         },  # vpd: scale to match NASA range
     }
 
-    # Apply unit conversions and standardization
+    # Apply unit conversions and week-specific standardization
     for var_idx in range(len(weather_vars)):
         if var_idx in weather_param_mapping:
             mapping = weather_param_mapping[var_idx]
             param_name = mapping["param"]
             unit_conversion = mapping["unit_conversion"]
 
-            if (
-                param_name in weather_scalers["param_means"]
-                and param_name in weather_scalers["param_stds"]
-            ):
+            # Apply to all weeks for this variable using week-specific scaling
+            for week in range(1, 53):
+                week_key = f"week_{week}"
+                col_name = f"{weather_vars[var_idx]}_{week}"
 
-                mean_val = weather_scalers["param_means"][param_name]
-                std_val = weather_scalers["param_stds"][param_name]
+                if col_name in data.columns and week_key in weather_scalers:
+                    week_scalers = weather_scalers[week_key]
 
-                # Apply to all weeks for this variable
-                for week in range(1, 53):
-                    col_name = f"{weather_vars[var_idx]}_{week}"
-                    if col_name in data.columns:
-                        # Apply unit conversion then standardization
+                    if (
+                        param_name in week_scalers["param_means"]
+                        and param_name in week_scalers["param_stds"]
+                    ):
+
+                        mean_val = week_scalers["param_means"][param_name]
+                        std_val = week_scalers["param_stds"][param_name]
+
+                        # Apply unit conversion then week-specific standardization
                         data[col_name] = (
                             unit_conversion(data[col_name]) - mean_val
                         ) / std_val
@@ -389,7 +393,7 @@ def split_train_test_by_year(
     if standardize:
         # Load weather parameter scalers
         with open(
-            "src/weather_preprocessing/nasa_power/weather_param_scalers.json", "r"
+            "data/nasa_power/processed/weekly_weather_param_scalers.json", "r"
         ) as f:
             weather_scalers = json.load(f)
 
