@@ -3,15 +3,15 @@ import logging
 import torch
 import argparse
 import pandas as pd
-from datetime import datetime
 import copy
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Tuple, Optional
 
 from src.crop_yield.yield_main import main as yield_main_func
 from src.utils.utils import setup_logging, get_model_params
 
 # Pretrained model path mapping - update these paths as needed
 PRETRAINED_MODEL_PATHS = {
+    "weatherformer": "data/trained_models/pretraining/weatherformer_1.9m_latest.pth",
     "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
     "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_1.9m_latest.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
@@ -309,6 +309,7 @@ def setup_args() -> argparse.Namespace:
         "--model",
         required=True,
         choices=[
+            "weatherformer",
             "weatherformersinusoid",
             "weatherformermixture",
             "weatherautoencodermixture",

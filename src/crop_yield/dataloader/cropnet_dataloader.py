@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Tuple
 
@@ -253,8 +252,8 @@ def read_cropnet_dataset(data_dir: str):
     return cropnet_df
 
 
-def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers: dict):
-    """Standardize CropNet data using weather scalers and crop-specific yield scaling"""
+def standardize_cropnet_data(data: pd.DataFrame, crop_type: str):
+    """Standardize CropNet data using computed mean and std per week"""
     global CROP_SCALING_FACTORS
 
     data = data.copy()
@@ -274,63 +273,88 @@ def standardize_cropnet_data(data: pd.DataFrame, crop_type: str, weather_scalers
         "vpd",
     ]
 
-    # Map CropNet weather variables to NASA POWER parameter names for scaling
+    # Map CropNet weather variables to unit conversions
     weather_param_mapping = {
         0: {
-            "param": "T2M",
             "unit_conversion": lambda x: x - 273.15,
         },  # temp_avg: K to C
         1: {
-            "param": "T2M_MAX",
             "unit_conversion": lambda x: x - 273.15,
         },  # temp_max: K to C
         2: {
-            "param": "T2M_MIN",
             "unit_conversion": lambda x: x - 273.15,
         },  # temp_min: K to C
         3: {
-            "param": "PRECTOTCORR",
             "unit_conversion": lambda x: x,
         },  # precipitation: already mm/day
-        4: {"param": "RH2M", "unit_conversion": lambda x: x},  # humidity: already %
-        5: {"param": "WS2M", "unit_conversion": lambda x: x},  # wind_speed: already m/s
+        4: {"unit_conversion": lambda x: x},  # humidity: already %
+        5: {"unit_conversion": lambda x: x},  # wind_speed: already m/s
         6: {
-            "param": "ALLSKY_SFC_SW_DWN",
             "unit_conversion": lambda x: x * 24 * 3600 / 1e6,
         },  # radiation: W/m² to MJ/m²/day
         7: {
-            "param": "VPD",
             "unit_conversion": lambda x: x * 12.0,
         },  # vpd: scale to match NASA range
     }
 
-    # Apply unit conversions and week-specific standardization
+    # Track which weather columns were processed
+    processed_columns = set()
+    expected_columns = set()
+
+    # Generate expected column names
+    for var_idx, var_name in enumerate(weather_vars):
+        for week in range(1, 53):
+            expected_columns.add(f"{var_name}_{week}")
+
+    # Apply unit conversions and compute week-specific standardization
     for var_idx in range(len(weather_vars)):
-        if var_idx in weather_param_mapping:
-            mapping = weather_param_mapping[var_idx]
-            param_name = mapping["param"]
-            unit_conversion = mapping["unit_conversion"]
+        if var_idx not in weather_param_mapping:
+            raise ValueError(
+                f"Weather variable index {var_idx} ({weather_vars[var_idx]}) not found in mapping"
+            )
 
-            # Apply to all weeks for this variable using week-specific scaling
-            for week in range(1, 53):
-                week_key = f"week_{week}"
-                col_name = f"{weather_vars[var_idx]}_{week}"
+        mapping = weather_param_mapping[var_idx]
+        unit_conversion = mapping["unit_conversion"]
 
-                if col_name in data.columns and week_key in weather_scalers:
-                    week_scalers = weather_scalers[week_key]
+        # Apply to all weeks for this variable
+        for week in range(1, 53):
+            col_name = f"{weather_vars[var_idx]}_{week}"
 
-                    if (
-                        param_name in week_scalers["param_means"]
-                        and param_name in week_scalers["param_stds"]
-                    ):
+            if col_name not in data.columns:
+                raise ValueError(
+                    f"Expected weather column '{col_name}' not found in data"
+                )
 
-                        mean_val = week_scalers["param_means"][param_name]
-                        std_val = week_scalers["param_stds"][param_name]
+            # Apply unit conversion first
+            data[col_name] = unit_conversion(data[col_name])
 
-                        # Apply unit conversion then week-specific standardization
-                        data[col_name] = (
-                            unit_conversion(data[col_name]) - mean_val
-                        ) / std_val
+            # Compute mean and std for this week's data
+            mean_val = data[col_name].mean()
+            std_val = data[col_name].std()
+
+            # Check for invalid statistics
+            if pd.isna(mean_val) or pd.isna(std_val):
+                raise ValueError(
+                    f"Invalid statistics for column '{col_name}': mean={mean_val}, std={std_val}"
+                )
+
+            # Avoid division by zero
+            if std_val > 0:
+                data[col_name] = (data[col_name] - mean_val) / std_val
+            else:
+                logger.warning(
+                    f"Zero standard deviation for column '{col_name}' (mean={mean_val:.4f}), only centering"
+                )
+                data[col_name] = data[col_name] - mean_val
+
+            processed_columns.add(col_name)
+
+    # Verify all expected weather columns were processed
+    missing_columns = expected_columns - processed_columns
+    if missing_columns:
+        raise ValueError(f"Weather columns not processed: {sorted(missing_columns)}")
+
+    logger.info(f"Successfully standardized {len(processed_columns)} weather columns")
 
     # Standardize crop yield using crop-specific mean and std
     if crop_yield_col in data.columns:
@@ -391,13 +415,7 @@ def split_train_test_by_year(
     )
 
     if standardize:
-        # Load weather parameter scalers
-        with open(
-            "data/nasa_power/processed/weekly_weather_param_scalers.json", "r"
-        ) as f:
-            weather_scalers = json.load(f)
-
-        data = standardize_cropnet_data(data, crop_type, weather_scalers)
+        data = standardize_cropnet_data(data, crop_type)
 
     train_dataset = CropNetDataset(
         data.copy(),
