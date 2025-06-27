@@ -56,6 +56,7 @@ class CrossValidator:
         self.logger.info(f"Starting {self.k_folds}-fold cross validation")
 
         fold_results = []
+        fold_training_stats = []
         total_best_val_loss = 0.0
 
         for fold in range(self.k_folds):
@@ -81,6 +82,11 @@ class CrossValidator:
             # Extract results from this fold
             fold_results.append(best_loss)
 
+            # Extract training statistics if available (for yield prediction)
+            training_stats = getattr(trainer, "training_stats", None)
+            if training_stats:
+                fold_training_stats.append(training_stats)
+
             total_best_val_loss += best_loss
 
             self.logger.info(
@@ -88,7 +94,9 @@ class CrossValidator:
             )
 
         # Aggregate results across all folds
-        aggregated_results = self._aggregate_results(fold_results, total_best_val_loss)
+        aggregated_results = self._aggregate_results(
+            fold_results, total_best_val_loss, fold_training_stats
+        )
 
         self.logger.info(
             f"Cross validation completed. Average best val loss: {aggregated_results['avg_best_val_loss']:.4f}"
@@ -97,7 +105,10 @@ class CrossValidator:
         return aggregated_results
 
     def _aggregate_results(
-        self, fold_results: List[float], total_best_val_loss: float
+        self,
+        fold_results: List[float],
+        total_best_val_loss: float,
+        fold_training_stats: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
         Aggregate results across all folds.
@@ -105,6 +116,7 @@ class CrossValidator:
         Args:
             fold_results: List of best validation losses from each fold
             total_best_val_loss: Sum of best validation losses across folds
+            fold_training_stats: List of training statistics from each fold
 
         Returns:
             Aggregated results dictionary
@@ -117,9 +129,18 @@ class CrossValidator:
         # Calculate standard deviation of best validation losses
         std_best_val_loss = np.std(fold_results)
 
+        # Calculate average training statistics if available
+        avg_training_stats = {}
+        if fold_training_stats:
+            for stat in fold_training_stats[0]:
+                avg_training_stats[stat] = np.mean(
+                    [stats[stat] for stats in fold_training_stats]
+                )
+
         return {
             "avg_best_val_loss": avg_best_val_loss,
             "std_best_val_loss": std_best_val_loss,
             "fold_results": fold_results,
             "n_folds": n_folds,
+            "avg_training_stats": avg_training_stats,
         }

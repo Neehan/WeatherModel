@@ -255,6 +255,11 @@ def split_train_test_by_year(
         soybean_df["year"] > 1981.0
     ].copy()  # must be > 1981 otherwise all past data is just 0
 
+    # Calculate training data statistics for proper standardization
+    train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
+
+    training_stats = {}
+
     if standardize:
         cols_to_standardize = [
             col
@@ -271,29 +276,29 @@ def split_train_test_by_year(
                 "corn_yield",
             ]
         ]
-        # standardize per week per feature
+        # standardize per week per feature using training data statistics
         # helpful to detect if certain weeks are particularly out of dist compared to
         # historical data for that week
-        data[cols_to_standardize] = (
-            data[cols_to_standardize] - data[cols_to_standardize].mean()
-        ) / data[cols_to_standardize].std()
+        train_mean = train_data[cols_to_standardize].mean()
+        train_std = train_data[cols_to_standardize].std()
+        data[cols_to_standardize] = (data[cols_to_standardize] - train_mean) / train_std
 
-        # # standardize weather data by variable type
-        # data = standardize_weather(data)
-
-        # # standardize non-weather data normally
-        # non_weather_cols = [
-        #     col for col in cols_to_standardize if not col.startswith("W_")
-        # ]
-        # if non_weather_cols:
-        # data[non_weather_cols] = (
-        #     data[non_weather_cols] - data[non_weather_cols].mean()
-        # ) / data[non_weather_cols].std()
-
-        # Use crop-specific yield statistics from constants
+        # Calculate crop yield statistics from training data only
         yield_col = f"{crop_type}_yield"
-        crop_mean = CROP_YIELD_STATS[crop_type]["mean"]
-        crop_std = CROP_YIELD_STATS[crop_type]["std"]
+        crop_mean = train_data[yield_col].mean()
+        crop_std = train_data[yield_col].std()
+
+        # Store training statistics for RMSE conversion
+        training_stats = {
+            "crop_mean": crop_mean,
+            "crop_std": crop_std,
+        }
+
+        logger.info(
+            f"Training data statistics for {crop_type}: mean={crop_mean:.3f}, std={crop_std:.3f}"
+        )
+
+        # Apply training data normalization to entire dataset
         data[yield_col] = (data[yield_col] - crop_mean) / crop_std
 
     data = data.fillna(0)
@@ -315,8 +320,8 @@ def split_train_test_by_year(
         crop_type=crop_type,
     )
 
-    # Return the train and test datasets
-    return train_dataset, test_dataset
+    # Return the train and test datasets along with training statistics
+    return train_dataset, test_dataset, training_stats
 
 
 def read_soybean_dataset(data_dir: str):
@@ -335,7 +340,7 @@ def get_train_test_loaders(
     shuffle: bool,
     num_workers: int,
     crop_type: str,
-) -> Tuple[DataLoader, DataLoader]:
+) -> Tuple[DataLoader, DataLoader, dict]:
 
     if n_train_years <= 1:
         raise ValueError(
@@ -351,7 +356,7 @@ def get_train_test_loaders(
         )
         n_past_years = n_train_years - 1
 
-    train_dataset, test_dataset = split_train_test_by_year(
+    train_dataset, test_dataset, training_stats = split_train_test_by_year(
         crop_df,
         n_train_years,
         test_year,
@@ -373,4 +378,4 @@ def get_train_test_loaders(
         batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader, training_stats
