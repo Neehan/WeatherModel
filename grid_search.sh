@@ -5,20 +5,21 @@
 #SBATCH -N 1                            # Single node
 #SBATCH --ntasks=4                      # Four tasks (one per GPU)
 #SBATCH --cpus-per-task=4              # 4 CPU threads per task
-#SBATCH --gres=gpu:h100:4              # Request 4 GPUs
+#SBATCH --gres=gpu:l40s:4              # Request 4 GPUs
 #SBATCH --mem=64GB                     # Total memory
 #SBATCH -t 24:00:00                    # 24-hour wall time
 
-# Check if two model names are provided
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <model1> <model2>"
-    echo "Example: $0 weatherformer weatherformersinusoid"
+# Check if three arguments are provided
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <model1> <model2> <crop_type>"
+    echo "Example: $0 weatherformer weatherformersinusoid corn"
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, weathercnn"
     exit 1
 fi
 
 MODEL1=$1
 MODEL2=$2
+CROP_TYPE=$3
 
 # Validate model names
 valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "weathercnn")
@@ -36,6 +37,7 @@ module load miniforge/24.3.0-0
 
 echo "======== Starting Parallel Grid Search on 4 GPUs ========"
 echo "Comparing models: ${MODEL1} vs ${MODEL2}"
+echo "Crop type: ${CROP_TYPE}"
 
 # Create output and log directories
 mkdir -p data/grid_search
@@ -56,6 +58,7 @@ run_experiment() {
     
     CUDA_VISIBLE_DEVICES=$gpu_id python -m src.crop_yield.grid_search \
         --model "$model" \
+        --crop-type "$CROP_TYPE" \
         $pretrained_flag \
         --output-dir data/grid_search \
         >> "$log_file" 2>&1
