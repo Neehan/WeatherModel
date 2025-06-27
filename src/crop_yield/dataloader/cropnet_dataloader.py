@@ -73,29 +73,32 @@ class CropNetDataset(Dataset):
         if missing_cols:
             logger.warning(f"Missing data found in columns: {missing_cols}")
 
-        # If test dataset, aggregate entire dataset by county first
+        # Handle test vs training dataset differently
         if test_dataset:
-            # Aggregate all data by county before any filtering
+            # For test dataset: aggregate by county and year to average multiple weather stations
+            # First, filter to relevant years (we need historical data for lookups)
+            # Aggregate by county (fips) and year - averaging weather data from multiple stations
             agg_dict = {
                 "state": "first",
                 "county": "first",
-                "lat": "mean",
+                "lat": "mean",  # Average coordinates across weather stations
                 "lon": "mean",
-                self.crop_yield_col: "first",
+                self.crop_yield_col: "first",  # Yield is the same for all stations in a county
             }
             for col in self.weather_cols:
                 if col in data.columns:
-                    agg_dict[col] = "mean"
+                    agg_dict[col] = "mean"  # Average weather across stations
 
-            # Aggregate entire dataset by county
+            # Aggregate by county and year
             data = data.groupby(["year", "fips"]).agg(agg_dict).reset_index()
             # Use fips as location identifier for aggregated data
             data["loc_id"] = data["fips"]
 
-            # Now filter to test year
+            # Now filter to test year for candidates
             candidate_data = data[data["year"] == test_year].copy()
         else:
-            # For training: keep duplicates, use coordinates as location ID
+            # For training: keep duplicates (multiple weather stations per county)
+            # This provides more training data as requested
             data = data.copy()
             data["loc_id"] = data["lat"].astype(str) + "_" + data["lon"].astype(str)
 
@@ -149,6 +152,9 @@ class CropNetDataset(Dataset):
                 (data_sorted["year"] <= year) & (data_sorted["loc_id"] == loc_id)
             ].tail(n_past_years + 1)
 
+            if len(query_data) < n_past_years + 1:
+                continue
+
             # Extract weather data (8 variables, 52 weeks)
             weather_data = query_data[self.weather_cols].values.astype("float32")
             weather = weather_data.reshape(
@@ -157,9 +163,6 @@ class CropNetDataset(Dataset):
 
             # Get coordinates and year data
             year_data = query_data["year"].values.astype("float32")
-            coord = torch.FloatTensor(
-                query_data[["lat", "lon"]].values.astype("float32")
-            )
 
             # Get yields
             y = (
@@ -177,7 +180,8 @@ class CropNetDataset(Dataset):
                 continue
 
             # Handle NaN values and replace current year yield with previous year
-            y_past_series = pd.Series(y_past).ffill()
+            # this does not affect target year since that has already been filtered
+            y_past_series = pd.Series(y_past).ffill().bfill()
             y_past = y_past_series.values.astype("float32")
             y_past[-1] = y_past[-2]
 
@@ -194,9 +198,6 @@ class CropNetDataset(Dataset):
             # Reshape weather data
             weather = weather.transpose(0, 2, 1)  # (n_years, seq_len, n_features)
             weather = weather.reshape(n_years * seq_len, n_features)
-
-            # Process coordinates
-            coord_processed = coord[0, :]  # Use first coordinate
 
             # Expand year to match sequence length
             week_fractions = torch.arange(1, seq_len + 1, dtype=torch.float32) / seq_len
@@ -220,6 +221,12 @@ class CropNetDataset(Dataset):
             interval = torch.full((1,), 7, dtype=torch.float32)
             practices = torch.zeros((n_years, 14), dtype=torch.float32)
             soil = torch.zeros((n_years, 11, 6), dtype=torch.float32)
+
+            # all coords for the same location multiple year
+            coord = torch.FloatTensor(
+                query_data[["lat", "lon"]].values.astype("float32")
+            )
+            coord_processed = coord[0, :]  # Use first coordinate
 
             self.data.append(
                 (
