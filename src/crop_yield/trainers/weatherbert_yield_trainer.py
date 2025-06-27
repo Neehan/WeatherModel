@@ -16,7 +16,6 @@ from src.crop_yield.dataloader.cropnet_dataloader import (
 )
 from src.base_trainer.cross_validator import CrossValidator
 import os
-import logging
 
 # Test years for 5-fold cross validation
 TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
@@ -96,12 +95,14 @@ class WeatherBERTYieldTrainer(BaseTrainer):
     # =============================================================================
 
     def get_dataloaders(self, shuffle: bool = False) -> Tuple[DataLoader, DataLoader]:
-        """Get train and validation data loaders - IMPLEMENTATION OF ABSTRACT METHOD."""
-        # Use cached loaders if available and shuffle hasn't changed
+        """Get data loaders for training/validation - IMPLEMENTATION OF ABSTRACT METHOD."""
+
         if self.train_loader is not None and self.test_loader is not None:
             return self.train_loader, self.test_loader
 
         if self.use_cropnet:
+            if self.crop_type is None:
+                raise ValueError("crop_type must be specified when using CropNet")
             train_loader, test_loader = get_cropnet_train_test_loaders(
                 self.crop_df,
                 self.crop_type,
@@ -113,7 +114,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 num_workers=0 if self.world_size > 1 else 8,
             )
         else:
-            train_loader, test_loader, training_stats = get_train_test_loaders(
+            train_loader, test_loader = get_train_test_loaders(
                 self.crop_df,
                 self.n_train_years,
                 self.test_year,
@@ -123,8 +124,6 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 num_workers=0 if self.world_size > 1 else 8,
                 crop_type=self.crop_type,
             )
-            # Store training statistics for RMSE conversion
-            self.training_stats = training_stats
 
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -310,28 +309,9 @@ def _run_yield_cross_validation(
         k_folds=setup_params["cross_validation_k"],
     )
 
-    # Run cross-validation
-    cross_validation_results = cross_validator.run_cross_validation(
+    return cross_validator.run_cross_validation(
         use_optimal_lr=args_dict["use_optimal_lr"]
     )
-
-    # Convert MSE to RMSE using training data statistics
-    crop_std = cross_validation_results["avg_training_stats"]["crop_std"]
-
-    # Convert normalized RMSE to RMSE in original units
-    # Note: validation loss is already RMSE (sqrt applied in compute_validation_loss)
-    avg_best_rmse = cross_validation_results["avg_best_val_loss"] * crop_std
-    std_best_rmse = cross_validation_results["std_best_val_loss"] * crop_std
-
-    logger = logging.getLogger(__name__)
-    logger.info(f"Using training data std for RMSE conversion: {crop_std:.3f}")
-    logger.info(f"Final average best RMSE: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}")
-
-    # Update results with RMSE values
-    cross_validation_results["avg_best_rmse"] = avg_best_rmse
-    cross_validation_results["std_best_rmse"] = std_best_rmse
-
-    return cross_validation_results
 
 
 def weatherbert_yield_training_loop(args_dict, use_cropnet: bool):

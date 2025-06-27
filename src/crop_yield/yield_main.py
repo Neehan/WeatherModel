@@ -179,11 +179,11 @@ def main(args_dict=None):
     logger = logging.getLogger(__name__)
     logger.info("Training completed successfully!")
 
-    # Use RMSE values from cross-validation results
+    # Convert MSE to RMSE for comparison with literature
     crop_type = args_dict["crop_type"]
-    avg_best_rmse = cross_validation_results["avg_best_rmse"]
-    std_best_rmse = cross_validation_results["std_best_rmse"]
-
+    crop_std = CROP_YIELD_STATS[crop_type]["std"]
+    avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) * crop_std
+    std_best_rmse = cross_validation_results["std_best_val_loss"] * crop_std
     logger.info(
         f"Final average best RMSE for {crop_type}: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}"
     )
