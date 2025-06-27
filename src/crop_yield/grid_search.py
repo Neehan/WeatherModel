@@ -24,10 +24,15 @@ class GridSearch:
     """Grid search for crop yield prediction models"""
 
     def __init__(
-        self, model: str, load_pretrained: bool, output_dir: str = "data/grid_search"
+        self,
+        model: str,
+        load_pretrained: bool,
+        crop_type: str,
+        output_dir: str = "data/grid_search",
     ):
         self.model = model
         self.load_pretrained = load_pretrained
+        self.crop_type = crop_type
         self.output_dir = output_dir
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
@@ -47,13 +52,13 @@ class GridSearch:
         self.existing_results = self._load_existing_results()
 
         self.logger.info(
-            f"Initialized GridSearch for {model} ({'with' if load_pretrained else 'without'} pretraining)"
+            f"Initialized GridSearch for {model} ({'with' if load_pretrained else 'without'} pretraining) on {crop_type}"
         )
         self.logger.info(f"Results will be saved to: {self.output_file}")
 
     def _get_output_filename(self) -> str:
         """Generate output filename based on model and pretrained setting"""
-        filename = f"grid_search_{self.model}_{self.method}.tsv"
+        filename = f"grid_search_{self.model}_{self.method}_{self.crop_type}.tsv"
         return os.path.join(self.output_dir, filename)
 
     def _load_existing_results(self) -> pd.DataFrame:
@@ -120,6 +125,7 @@ class GridSearch:
             "use_optimal_lr": False,
             "seed": 1234,
             "model": self.model,
+            "crop_type": self.crop_type,
             "n_mixture_components": n_mixture_components,
             "model_size_params": get_model_params("small"),
         }
@@ -324,6 +330,13 @@ def setup_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--crop-type",
+        required=True,
+        choices=["soybean", "corn"],
+        help="Crop type to predict: soybean or corn",
+    )
+
+    parser.add_argument(
         "--output-dir",
         default="data/grid_search",
         help="Directory to save results (default: data/grid_search)",
@@ -339,6 +352,7 @@ def main():
     grid_search = GridSearch(
         model=args.model,
         load_pretrained=args.load_pretrained,
+        crop_type=args.crop_type,
         output_dir=args.output_dir,
     )
 
