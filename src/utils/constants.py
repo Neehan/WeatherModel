@@ -18,10 +18,13 @@ DRY_RUN = os.environ.get("DRY_RUN", "False").lower() in ("true", "1", "t")
 # Crop yield statistics (mean and std for normalization)
 CROP_YIELD_STATS = {
     "soybean": {
-        "mean": 37.36,
-        "std": 11.11,
+        "mean": [],
+        "std": [],
     },
-    "corn": {"mean": 116.97, "std": 47.17},
+    "corn": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31

@@ -254,7 +254,6 @@ def split_train_test_by_year(
     data = soybean_df[
         soybean_df["year"] > 1981.0
     ].copy()  # must be > 1981 otherwise all past data is just 0
-
     if standardize:
         cols_to_standardize = [
             col
@@ -267,34 +266,25 @@ def split_train_test_by_year(
                 "County",
                 "lat",
                 "lng",
-                "soybean_yield",
-                "corn_yield",
             ]
         ]
+        train_data = data[data["year"] < test_year]
+        train_mean, train_std = (
+            train_data[cols_to_standardize].mean(),
+            train_data[cols_to_standardize].std(),
+        )
         # standardize per week per feature
         # helpful to detect if certain weeks are particularly out of dist compared to
         # historical data for that week
-        data[cols_to_standardize] = (
-            data[cols_to_standardize] - data[cols_to_standardize].mean()
-        ) / data[cols_to_standardize].std()
+        data[cols_to_standardize] = (data[cols_to_standardize] - train_mean) / train_std
 
-        # # standardize weather data by variable type
-        # data = standardize_weather(data)
-
-        # # standardize non-weather data normally
-        # non_weather_cols = [
-        #     col for col in cols_to_standardize if not col.startswith("W_")
-        # ]
-        # if non_weather_cols:
-        # data[non_weather_cols] = (
-        #     data[non_weather_cols] - data[non_weather_cols].mean()
-        # ) / data[non_weather_cols].std()
-
-        # Use crop-specific yield statistics from constants
+        # save crop-specific yield statistics from constants
         yield_col = f"{crop_type}_yield"
-        crop_mean = CROP_YIELD_STATS[crop_type]["mean"]
-        crop_std = CROP_YIELD_STATS[crop_type]["std"]
-        data[yield_col] = (data[yield_col] - crop_mean) / crop_std
+        print(
+            f"Saving mean ({train_mean[yield_col]:.3f}) and std ({train_std[yield_col]:.3f}) from training data for {crop_type}"
+        )
+        CROP_YIELD_STATS[crop_type]["mean"].append(train_mean[yield_col])
+        CROP_YIELD_STATS[crop_type]["std"].append(train_std[yield_col])
 
     data = data.fillna(0)
 

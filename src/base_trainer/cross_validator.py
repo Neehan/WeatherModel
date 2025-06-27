@@ -89,11 +89,6 @@ class CrossValidator:
 
         # Aggregate results across all folds
         aggregated_results = self._aggregate_results(fold_results, total_best_val_loss)
-
-        self.logger.info(
-            f"Cross validation completed. Average best val loss: {aggregated_results['avg_best_val_loss']:.4f}"
-        )
-
         return aggregated_results
 
     def _aggregate_results(
@@ -111,15 +106,7 @@ class CrossValidator:
         """
         n_folds = len(fold_results)
 
-        # Calculate averages
-        avg_best_val_loss = total_best_val_loss / n_folds
-
-        # Calculate standard deviation of best validation losses
-        std_best_val_loss = np.std(fold_results)
-
         return {
-            "avg_best_val_loss": avg_best_val_loss,
-            "std_best_val_loss": std_best_val_loss,
             "fold_results": fold_results,
             "n_folds": n_folds,
         }
