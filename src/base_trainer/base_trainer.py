@@ -335,7 +335,7 @@ class BaseTrainer(ABC):
         # Create optimizer with current model parameters (which should be pretrained if provided)
         self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
         self.scheduler = utils.get_scheduler(
-            self.optimizer, num_warmup_epochs, decay_factor
+            self.optimizer, num_warmup_epochs, decay_factor, self.num_epochs
         )
 
     def _setup_logging_and_output(self):
@@ -488,9 +488,15 @@ class BaseTrainer(ABC):
                 f"Cleaning up {len(files_to_remove)} numbered checkpoint and model files..."
             )
             for file_path in files_to_remove:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    self.logger.debug(f"Removed: {os.path.basename(file_path)}")
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except OSError as e:
+                    self.logger.warning(
+                        f"Failed to remove {os.path.basename(file_path)}: {e}"
+                    )
+                    # Continue with other files instead of failing the entire training
+
             self.logger.info(
                 "Cleanup completed. Only latest checkpoint and model files remain."
             )

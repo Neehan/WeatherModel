@@ -1,5 +1,6 @@
 import logging
-from typing import Tuple
+from typing import Tuple, Dict, Any
+from abc import ABC, abstractmethod
 
 import pandas as pd
 import torch
@@ -14,24 +15,11 @@ logger = logging.getLogger(__name__)
 CROP_SCALING_FACTORS = {}
 
 
-class CropNetDataset(Dataset):
-    def __init__(
-        self,
-        data,
-        crop_type,
-        start_year,
-        test_year,
-        test_dataset=False,
-        n_past_years=5,
-        test_gap=0,
-    ):
-        self.crop_type = crop_type
+class BaseDataProcessor(ABC):
+    """Base class for data processing operations"""
 
-        # Map CropNet weather columns to model indices
-        # CropNet has 8 weather variables for 52 weeks each
-        # temp_avg, temp_max, temp_min, precipitation, humidity, wind_speed, radiation, vpd
-        self.cropnet_weather_cols = []
-        weather_vars = [
+    def __init__(self):
+        self.weather_vars = [
             "temp_avg",
             "temp_max",
             "temp_min",
@@ -41,192 +29,356 @@ class CropNetDataset(Dataset):
             "radiation",
             "vpd",
         ]
+        self.weather_indices = torch.tensor([0, 1, 2, 4, 7, 8, 23, 30])
 
-        for var in weather_vars:
-            for week in range(1, 53):  # weeks 1-52
-                self.cropnet_weather_cols.append(f"{var}_{week}")
+    def get_weather_columns(self) -> list:
+        """Get all weather column names for 52 weeks"""
+        weather_cols = []
+        for var in self.weather_vars:
+            for week in range(1, 53):
+                weather_cols.append(f"{var}_{week}")
+        return weather_cols
 
-        # Define weather indices used in CropNet (similar to yield_dataloader.py)
-        # Map CropNet variables to specific weather indices
-        # Based on available CropNet variables: temp_avg, temp_max, temp_min, precipitation, humidity, wind_speed, radiation, vpd
-        self.weather_indices = torch.tensor(
-            [0, 1, 2, 4, 7, 8, 23, 30]
-        )  # T2M, T2M_MAX, T2M_MIN, WS2M, PRECTOTCORR, ALLSKY_SFC_SW_DWN, RH2M, VPD
+    def get_crop_yield_column(self, crop_type: str) -> str:
+        """Get crop yield column name"""
+        return f"{crop_type.lower().replace('winter', 'winter ')}_yield"
 
-        # Simple mapping from CropNet variable index to weather index
-        self.weather_var_mapping = {
-            0: 0,  # temp_avg -> T2M (index 0)
-            1: 1,  # temp_max -> T2M_MAX (index 1)
-            2: 2,  # temp_min -> T2M_MIN (index 2)
-            3: 7,  # precipitation -> PRECTOTCORR (index 7)
-            4: 23,  # humidity -> RH2M (index 23)
-            5: 4,  # wind_speed -> WS2M (index 4)
-            6: 8,  # radiation -> ALLSKY_SFC_SW_DWN (index 8)
-            7: 30,  # vpd -> VPD (index 30)
+
+class WeatherDataProcessor(BaseDataProcessor):
+    """Handles weather data aggregation and standardization"""
+
+    def aggregate_weather_by_county(
+        self, data: pd.DataFrame, crop_type: str
+    ) -> pd.DataFrame:
+        """Aggregate multiple weather records per county to single record"""
+        crop_yield_col = self.get_crop_yield_column(crop_type)
+        weather_cols = self.get_weather_columns()
+
+        # Group by year and fips, then average coordinates and weather data
+        agg_dict = {
+            "state": "first",
+            "county": "first",
+            "lat": "mean",
+            "lon": "mean",
+            crop_yield_col: "first",  # Yield should be same for all records in county
         }
 
-        # Get crop yield column name
-        crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
+        # Add weather columns to aggregation
+        for col in weather_cols:
+            if col in data.columns:
+                agg_dict[col] = "mean"
 
-        if test_dataset:  # test on specific year
-            candidate_data = data[data["year"] == test_year]
-        else:  # train on years from start_year to year before test_year - test_gap
-            candidate_data = data[
-                (data["year"] >= start_year) & (data["year"] < test_year - test_gap)
-            ]
+        aggregated = data.groupby(["year", "fips"]).agg(agg_dict).reset_index()
 
-        # Filter to only include counties that have yield data for this crop in test year (2021)
+        logger.info(
+            f"Aggregated {len(data)} records to {len(aggregated)} county-level records"
+        )
+        return aggregated
+
+    def standardize_weather_data(
+        self, data: pd.DataFrame, crop_type: str
+    ) -> pd.DataFrame:
+        """Standardize weather data and crop yields"""
+        data = data.copy()
+        weather_cols = self.get_weather_columns()
+
+        # Weather parameter mappings for unit conversion
+        weather_param_mapping = {
+            0: {"unit_conversion": lambda x: x - 273.15},  # temp_avg: K to C
+            1: {"unit_conversion": lambda x: x - 273.15},  # temp_max: K to C
+            2: {"unit_conversion": lambda x: x - 273.15},  # temp_min: K to C
+            3: {"unit_conversion": lambda x: x},  # precipitation: mm/day
+            4: {"unit_conversion": lambda x: x},  # humidity: %
+            5: {"unit_conversion": lambda x: x},  # wind_speed: m/s
+            6: {
+                "unit_conversion": lambda x: x * 24 * 3600 / 1e6
+            },  # radiation: W/m² to MJ/m²/day
+            7: {
+                "unit_conversion": lambda x: x * 12.0
+            },  # vpd: scale to match NASA range
+        }
+
+        # Process each weather variable
+        for var_idx, var_name in enumerate(self.weather_vars):
+            if var_idx not in weather_param_mapping:
+                raise ValueError(
+                    f"Weather variable index {var_idx} ({var_name}) not found in mapping"
+                )
+
+            unit_conversion = weather_param_mapping[var_idx]["unit_conversion"]
+
+            for week in range(1, 53):
+                col_name = f"{var_name}_{week}"
+                if col_name not in data.columns:
+                    continue
+
+                # Apply unit conversion
+                data[col_name] = unit_conversion(data[col_name])
+
+                # Standardize
+                mean_val = data[col_name].mean()
+                std_val = data[col_name].std()
+
+                if pd.isna(mean_val) or pd.isna(std_val):
+                    raise ValueError(
+                        f"Invalid statistics for column '{col_name}': mean={mean_val}, std={std_val}"
+                    )
+
+                if std_val > 0:
+                    data[col_name] = (data[col_name] - mean_val) / std_val
+                else:
+                    logger.warning(f"Zero std for column '{col_name}', only centering")
+                    data[col_name] = data[col_name] - mean_val
+
+        # Standardize crop yield
+        crop_yield_col = self.get_crop_yield_column(crop_type)
+        if crop_yield_col in data.columns:
+            crop_mean = data[crop_yield_col].mean()
+            crop_std = data[crop_yield_col].std()
+
+            CROP_SCALING_FACTORS[crop_type] = {"mean": crop_mean, "std": crop_std}
+            print(
+                f"CROP STATS - {crop_yield_col}: mean={crop_mean:.2f}, std={crop_std:.2f}"
+            )
+
+            data[crop_yield_col] = (data[crop_yield_col] - crop_mean) / crop_std
+            logger.info(f"Standardized {crop_yield_col} using crop-specific scaling")
+
+        # Fill NaN values
+        data = data.fillna(0)
+        return data
+
+
+class CropNetDatasetBuilder(BaseDataProcessor):
+    """Builds CropNet datasets with proper train/test handling"""
+
+    def __init__(self, weather_processor: WeatherDataProcessor):
+        super().__init__()
+        self.weather_processor = weather_processor
+
+    def filter_valid_locations(
+        self, data: pd.DataFrame, crop_type: str, test_year: int
+    ) -> pd.DataFrame:
+        """Filter to only include counties with yield data in test year"""
+        crop_yield_col = self.get_crop_yield_column(crop_type)
+
         test_year_data = data[data["year"] == test_year]
         valid_locations = test_year_data[test_year_data[crop_yield_col].notna()][
             "fips"
         ].unique()
 
-        # Filter candidate data to only these valid locations
-        candidate_data = candidate_data[candidate_data["fips"].isin(valid_locations)]
+        filtered_data = data[data["fips"].isin(valid_locations)]
+        logger.info(
+            f"Filtered to {len(valid_locations)} valid counties with {len(filtered_data)} records"
+        )
 
-        # Filter to only include cases where we have complete historical data
+        return filtered_data
+
+    def prepare_data_for_dataset(
+        self,
+        data: pd.DataFrame,
+        crop_type: str,
+        start_year: int,
+        test_year: int,
+        is_test: bool,
+        test_gap: int = 0,
+    ) -> pd.DataFrame:
+        """Prepare data for dataset creation"""
+        # Filter by year range
+        if is_test:
+            candidate_data = data[data["year"] == test_year].copy()
+        else:
+            candidate_data = data[
+                (data["year"] >= start_year) & (data["year"] < test_year - test_gap)
+            ].copy()
+
+        # For test dataset, aggregate multiple weather records per county
+        if is_test:
+            candidate_data = self.weather_processor.aggregate_weather_by_county(
+                candidate_data, crop_type
+            )
+
+        return candidate_data
+
+    def has_sufficient_history(
+        self, data: pd.DataFrame, row: pd.Series, n_past_years: int
+    ) -> bool:
+        """Check if location has sufficient historical data"""
+        year, fips = row["year"], row["fips"]
+        loc_data = data[data["fips"] == fips]
+        loc_data_up_to_year = loc_data[loc_data["year"] <= year]
+        return len(loc_data_up_to_year.tail(n_past_years + 1)) == n_past_years + 1
+
+    def create_sample_data(
+        self, query_data: pd.DataFrame, crop_type: str, n_past_years: int
+    ) -> tuple:
+        """Create a single sample's data tensors"""
+        crop_yield_col = self.get_crop_yield_column(crop_type)
+        weather_cols = self.get_weather_columns()
+
+        # Extract weather data (8 variables, 52 weeks)
+        weather_data = query_data[weather_cols].values.astype("float32")
+        weather = weather_data.reshape((-1, 8, 52))  # n_years x 8 variables x 52 weeks
+
+        # Get coordinates and year data
+        year_data = query_data["year"].values.astype("float32")
+        coord = torch.FloatTensor(query_data[["lat", "lon"]].values.astype("float32"))
+
+        # Get yields
+        y = query_data.iloc[-1:][crop_yield_col].values.astype("float32").copy()
+        y_past = query_data[crop_yield_col].values.astype("float32")
+
+        if len(y_past) <= 1:
+            raise ValueError(
+                f"Only 1 year of yield data. y_past value set to previous year."
+            )
+
+        # Handle NaN values and replace current year yield with previous year
+        y_past_series = pd.Series(y_past).ffill()
+        y_past = y_past_series.values.astype("float32")
+        y_past[-1] = y_past[-2]
+
+        return self._process_weather_tensor(
+            weather, year_data, coord, y_past, y, n_past_years
+        )
+
+    def _process_weather_tensor(
+        self,
+        weather: np.ndarray,
+        year_data: np.ndarray,
+        coord: torch.Tensor,
+        y_past: np.ndarray,
+        y: np.ndarray,
+        n_past_years: int,
+    ) -> tuple:
+        """Process weather data into model format"""
+        n_years, n_features, seq_len = weather.shape
+
+        # Check context length constraint
+        if n_years * seq_len > MAX_CONTEXT_LENGTH:
+            raise ValueError(
+                f"n_years * seq_len = {n_years * seq_len} > MAX_CONTEXT_LENGTH = {MAX_CONTEXT_LENGTH}"
+            )
+
+        # Reshape weather data
+        weather = weather.transpose(0, 2, 1)  # (n_years, seq_len, n_features)
+        weather = weather.reshape(n_years * seq_len, n_features)
+
+        # Process coordinates
+        coord_processed = coord[0, :]  # Use first coordinate (same for all years)
+
+        # Expand year to match sequence length
+        week_fractions = torch.arange(1, seq_len + 1, dtype=torch.float32) / seq_len
+        year_expanded = torch.FloatTensor(year_data).unsqueeze(
+            1
+        ) + week_fractions.unsqueeze(0)
+        year_expanded = year_expanded.contiguous().view(n_years * seq_len)
+
+        # Create padded weather with specific indices
+        padded_weather = torch.zeros((seq_len * n_years, TOTAL_WEATHER_VARS))
+        padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
+
+        # Create weather feature mask
+        weather_feature_mask = torch.ones(TOTAL_WEATHER_VARS, dtype=torch.bool)
+        weather_feature_mask[self.weather_indices] = False
+        weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
+            n_years * seq_len, -1
+        )
+
+        # Create temporal interval and dummy data
+        interval = torch.full((1,), 7, dtype=torch.float32)
+        practices = torch.zeros((n_years, 14), dtype=torch.float32)
+        soil = torch.zeros((n_years, 11, 6), dtype=torch.float32)
+
+        return (
+            padded_weather,
+            coord_processed,
+            year_expanded,
+            interval,
+            weather_feature_mask,
+            practices,
+            soil,
+            y_past,
+            y,
+        )
+
+
+class CropNetDataset(Dataset):
+    """CropNet Dataset class"""
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        crop_type: str,
+        start_year: int,
+        test_year: int,
+        test_dataset: bool = False,
+        n_past_years: int = 5,
+        test_gap: int = 0,
+    ):
+
+        self.crop_type = crop_type
+        self.weather_processor = WeatherDataProcessor()
+        self.dataset_builder = CropNetDatasetBuilder(self.weather_processor)
+
+        # Filter to valid locations and prepare data
+        data = self.dataset_builder.filter_valid_locations(data, crop_type, test_year)
+        candidate_data = self.dataset_builder.prepare_data_for_dataset(
+            data, crop_type, start_year, test_year, test_dataset, test_gap
+        )
+
+        # Filter to locations with sufficient history
         data_sorted = data.sort_values(["fips", "year"])
-
-        def has_sufficient_history(row):
-            year, fips = row["year"], row["fips"]
-            loc_data = data_sorted[data_sorted["fips"] == fips]
-            loc_data_up_to_year = loc_data[loc_data["year"] <= year]
-            return len(loc_data_up_to_year.tail(n_past_years + 1)) == n_past_years + 1
-
-        # Apply vectorized check
-        mask = candidate_data.apply(has_sufficient_history, axis=1)
+        mask = candidate_data.apply(
+            lambda row: self.dataset_builder.has_sufficient_history(
+                data_sorted, row, n_past_years
+            ),
+            axis=1,
+        )
         valid_candidates = candidate_data[mask]
 
         self.index = valid_candidates[["year", "fips"]].reset_index(drop=True)
 
-        dataset_name = "train" if not test_dataset else "test"
+        dataset_name = "test" if test_dataset else "train"
+        year_info = (
+            f"test year {test_year}"
+            if test_dataset
+            else f"training years {start_year}-{test_year-test_gap-1}"
+        )
         logger.info(
-            f"Creating {dataset_name} dataloader for {crop_type} with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)}."
+            f"Creating {dataset_name} dataloader for {crop_type} with {len(self.index)} samples for {year_info}"
         )
 
+        self._build_dataset(data_sorted, n_past_years)
+
+    def _build_dataset(self, data: pd.DataFrame, n_past_years: int):
+        """Build the dataset samples"""
         self.data = []
         total_samples = len(self.index)
         samples_to_process = total_samples // 20 if DRY_RUN else total_samples
 
         if total_samples == 0:
-            logger.warning(
-                f"No samples found for {dataset_name} dataset for {crop_type}!"
-            )
+            logger.warning(f"No samples found for dataset!")
             return
 
-        # Debug: Print some sample data statistics
         logger.info(f"Processing {samples_to_process} samples out of {total_samples}")
 
         for idx in range(min(samples_to_process, total_samples)):
             year, fips = self.index.iloc[idx].values.astype("int")
-            # Get exactly n_past_years + 1 years of data for this location
+
+            # Get historical data for this location
             query_data = data[(data["year"] <= year) & (data["fips"] == fips)].tail(
                 n_past_years + 1
             )
 
-            # Extract weather data (8 variables, 52 weeks)
-            weather_data = query_data[self.cropnet_weather_cols].values.astype(
-                "float32"
-            )
-            weather = weather_data.reshape(
-                (-1, 8, 52)
-            )  # n_years x 8 variables x 52 weeks
-
-            # Get coordinates and year data
-            year_data = query_data["year"].values.astype("float32")
-            coord = torch.FloatTensor(
-                query_data[["lat", "lon"]].values.astype("float32")
-            )
-
-            # Get the true yield for this crop
-            y = query_data.iloc[-1:][crop_yield_col].values.astype("float32").copy()
-            y_past = query_data[crop_yield_col].values.astype("float32")
-
-            if len(y_past) <= 1:
-                raise ValueError(
-                    f"Only 1 year of yield data for location {fips} in year {year}. "
-                    f"y_past value set to previous year."
+            try:
+                sample_data = self.dataset_builder.create_sample_data(
+                    query_data, self.crop_type, n_past_years
                 )
-
-            # Handle any remaining NaN values in y_past with forward fill
-            y_past_series = pd.Series(y_past).ffill()
-            y_past = y_past_series.values.astype("float32")
-
-            # Replace current year yield with previous year yield for y_past
-            y_past[-1] = y_past[-2]
-
-            # Preprocess weather data for the model
-            n_years, n_features, seq_len = weather.shape
-
-            # Check context length constraint
-            if n_years * seq_len > MAX_CONTEXT_LENGTH:
-                raise ValueError(
-                    f"n_years * seq_len = {n_years * seq_len} is greater than MAX_CONTEXT_LENGTH = {MAX_CONTEXT_LENGTH}"
-                )
-
-            # Transpose and reshape weather data: (n_years, n_features, seq_len) -> (n_years * seq_len, n_features)
-            weather = weather.transpose(0, 2, 1)  # (n_years, seq_len, n_features)
-            weather = weather.reshape(
-                n_years * seq_len, n_features
-            )  # (n_years * seq_len, n_features)
-
-            # Process coordinates - use only the first coordinate (same for all years in this location)
-            coord_processed = coord[0, :]  # (2,)
-
-            # Expand year to match the sequence length
-            week_fractions = (
-                torch.arange(1, seq_len + 1, dtype=torch.float32) / seq_len
-            )  # [seq_len]
-            year_expanded = torch.FloatTensor(year_data).unsqueeze(
-                1
-            ) + week_fractions.unsqueeze(  # [n_years, 1]
-                0
-            )  # [1, seq_len]  # [n_years, seq_len]
-            year_expanded = year_expanded.contiguous().view(
-                n_years * seq_len
-            )  # [n_years * seq_len]
-
-            # Create padded weather with specific weather indices
-            padded_weather = torch.zeros(
-                (seq_len * n_years, TOTAL_WEATHER_VARS),
-            )
-
-            # Map CropNet weather variables to model indices (similar to yield_dataloader.py)
-            padded_weather[:, self.weather_indices] = torch.FloatTensor(weather)
-
-            # Create weather feature mask - mask out unused features
-            weather_feature_mask = torch.ones(
-                TOTAL_WEATHER_VARS,
-                dtype=torch.bool,
-            )
-            # Unmask the features we're using (set to False to unmask)
-            weather_feature_mask[self.weather_indices] = False
-            weather_feature_mask = weather_feature_mask.unsqueeze(0).expand(
-                n_years * seq_len, -1
-            )
-
-            # Create temporal interval (weekly data)
-            interval = torch.full((1,), 7, dtype=torch.float32)
-
-            # For CropNet, we don't have practice and soil data, so create dummy data
-            practices = torch.zeros((n_years, 14), dtype=torch.float32)  # 14 practices
-            soil = torch.zeros(
-                (n_years, 11, 6), dtype=torch.float32
-            )  # 11 measurements, 6 depths
-
-            self.data.append(
-                (
-                    padded_weather,  # (n_years * 52, TOTAL_WEATHER_VARS)
-                    coord_processed,  # (2,)
-                    year_expanded,  # (n_years * 52,)
-                    interval,  # (1,)
-                    weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
-                    practices,  # (n_years, 14) - dummy for CropNet
-                    soil,  # (n_years, 11, 6) - dummy for CropNet
-                    y_past,  # (n_years,)
-                    y,  # (1,)
-                )
-            )
+                self.data.append(sample_data)
+            except Exception as e:
+                logger.warning(f"Failed to create sample for {fips} in {year}: {e}")
+                continue
 
     def __len__(self):
         return len(self.data)
@@ -244,138 +396,12 @@ class CropNetDataset(Dataset):
         )
 
 
-def read_cropnet_dataset(data_dir: str):
+def read_cropnet_dataset(data_dir: str) -> pd.DataFrame:
     """Read the combined CropNet dataset"""
     full_filename = "CropNet/combined_cropnet_data.csv"
     cropnet_df = pd.read_csv(data_dir + full_filename)
     cropnet_df = cropnet_df.sort_values(["fips", "year"])
     return cropnet_df
-
-
-def standardize_cropnet_data(data: pd.DataFrame, crop_type: str):
-    """Standardize CropNet data using computed mean and std per week"""
-    global CROP_SCALING_FACTORS
-
-    data = data.copy()
-
-    # Get crop yield column
-    crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
-
-    # Define weather variables in CropNet
-    weather_vars = [
-        "temp_avg",
-        "temp_max",
-        "temp_min",
-        "precipitation",
-        "humidity",
-        "wind_speed",
-        "radiation",
-        "vpd",
-    ]
-
-    # Map CropNet weather variables to unit conversions
-    weather_param_mapping = {
-        0: {
-            "unit_conversion": lambda x: x - 273.15,
-        },  # temp_avg: K to C
-        1: {
-            "unit_conversion": lambda x: x - 273.15,
-        },  # temp_max: K to C
-        2: {
-            "unit_conversion": lambda x: x - 273.15,
-        },  # temp_min: K to C
-        3: {
-            "unit_conversion": lambda x: x,
-        },  # precipitation: already mm/day
-        4: {"unit_conversion": lambda x: x},  # humidity: already %
-        5: {"unit_conversion": lambda x: x},  # wind_speed: already m/s
-        6: {
-            "unit_conversion": lambda x: x * 24 * 3600 / 1e6,
-        },  # radiation: W/m² to MJ/m²/day
-        7: {
-            "unit_conversion": lambda x: x * 12.0,
-        },  # vpd: scale to match NASA range
-    }
-
-    # Track which weather columns were processed
-    processed_columns = set()
-    expected_columns = set()
-
-    # Generate expected column names
-    for var_idx, var_name in enumerate(weather_vars):
-        for week in range(1, 53):
-            expected_columns.add(f"{var_name}_{week}")
-
-    # Apply unit conversions and compute week-specific standardization
-    for var_idx in range(len(weather_vars)):
-        if var_idx not in weather_param_mapping:
-            raise ValueError(
-                f"Weather variable index {var_idx} ({weather_vars[var_idx]}) not found in mapping"
-            )
-
-        mapping = weather_param_mapping[var_idx]
-        unit_conversion = mapping["unit_conversion"]
-
-        # Apply to all weeks for this variable
-        for week in range(1, 53):
-            col_name = f"{weather_vars[var_idx]}_{week}"
-
-            if col_name not in data.columns:
-                raise ValueError(
-                    f"Expected weather column '{col_name}' not found in data"
-                )
-
-            # Apply unit conversion first
-            data[col_name] = unit_conversion(data[col_name])
-
-            # Compute mean and std for this week's data
-            mean_val = data[col_name].mean()
-            std_val = data[col_name].std()
-
-            # Check for invalid statistics
-            if pd.isna(mean_val) or pd.isna(std_val):
-                raise ValueError(
-                    f"Invalid statistics for column '{col_name}': mean={mean_val}, std={std_val}"
-                )
-
-            # Avoid division by zero
-            if std_val > 0:
-                data[col_name] = (data[col_name] - mean_val) / std_val
-            else:
-                logger.warning(
-                    f"Zero standard deviation for column '{col_name}' (mean={mean_val:.4f}), only centering"
-                )
-                data[col_name] = data[col_name] - mean_val
-
-            processed_columns.add(col_name)
-
-    # Verify all expected weather columns were processed
-    missing_columns = expected_columns - processed_columns
-    if missing_columns:
-        raise ValueError(f"Weather columns not processed: {sorted(missing_columns)}")
-
-    logger.info(f"Successfully standardized {len(processed_columns)} weather columns")
-
-    # Standardize crop yield using crop-specific mean and std
-    if crop_yield_col in data.columns:
-        crop_mean = data[crop_yield_col].mean()
-        crop_std = data[crop_yield_col].std()
-
-        # Store crop-specific scaling factors globally for RMSE conversion
-        CROP_SCALING_FACTORS[crop_type] = {"mean": crop_mean, "std": crop_std}
-
-        print(
-            f"CROP STATS - {crop_yield_col}: mean={crop_mean:.2f}, std={crop_std:.2f}"
-        )
-        data[crop_yield_col] = (data[crop_yield_col] - crop_mean) / crop_std
-        logger.info(
-            f"Standardized {crop_yield_col} using crop-specific scaling (mean={crop_mean:.2f}, std={crop_std:.2f})"
-        )
-
-    # Fill NaN values with 0
-    data = data.fillna(0)
-
-    return data
 
 
 def split_train_test_by_year(
@@ -387,35 +413,17 @@ def split_train_test_by_year(
     n_past_years: int = 5,
 ):
     """Split CropNet data into train/test by year for specific crop"""
-    # Calculate start year
     start_year = test_year - n_train_years
-
-    # Filter data to relevant years
     data = cropnet_df[cropnet_df["year"] >= start_year].copy()
 
-    # Get crop yield column name
-    crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
-
-    # Filter to only include counties that have yield data for this crop in test year (2021) FIRST
-    test_year_data = data[data["year"] == test_year]
-    valid_locations = test_year_data[test_year_data[crop_yield_col].notna()][
-        "fips"
-    ].unique()
-
-    # Filter data to only these valid locations
-    data = data[data["fips"].isin(valid_locations)]
-
-    # THEN forward fill missing yields within each location to handle gaps (but not test year)
-    # Sort by fips and year to ensure proper forward fill
+    # Forward fill missing yields within each location
     data = data.sort_values(["fips", "year"])
+    crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
     data[crop_yield_col] = data.groupby("fips")[crop_yield_col].ffill()
 
-    logger.info(
-        f"After filtering for {crop_type} with test year {test_year}: {len(valid_locations)} valid counties, {len(data)} total records"
-    )
-
     if standardize:
-        data = standardize_cropnet_data(data, crop_type)
+        weather_processor = WeatherDataProcessor()
+        data = weather_processor.standardize_weather_data(data, crop_type)
 
     train_dataset = CropNetDataset(
         data.copy(),
@@ -451,15 +459,12 @@ def get_cropnet_train_test_loaders(
 
     if n_train_years <= 1:
         raise ValueError(
-            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
-            f"Available training years: {n_train_years}."
+            f"Not enough training data. Required: {n_past_years + 1}. Available: {n_train_years}"
         )
 
     if n_train_years < n_past_years + 1:
         logger.warning(
-            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
-            f"Available training years: {n_train_years}. "
-            f"Setting n_past_years to {n_train_years - 1}."
+            f"Adjusting n_past_years from {n_past_years} to {n_train_years - 1}"
         )
         n_past_years = n_train_years - 1
 
@@ -488,8 +493,7 @@ def get_crop_rmse_conversion_factor(crop_type: str) -> float:
 
     if crop_type not in CROP_SCALING_FACTORS:
         raise ValueError(
-            f"Crop scaling factors not found for {crop_type}. "
-            f"Available crops: {list(CROP_SCALING_FACTORS.keys())}"
+            f"Crop scaling factors not found for {crop_type}. Available: {list(CROP_SCALING_FACTORS.keys())}"
         )
 
     return CROP_SCALING_FACTORS[crop_type]["std"]

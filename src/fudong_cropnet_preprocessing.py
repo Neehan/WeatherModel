@@ -89,32 +89,38 @@ def filter_daily_weather_data(year_data):
 
 
 def calculate_weekly_weather_averages(daily_data, year):
-    """Calculate weekly weather averages for each county"""
+    """Calculate weekly weather averages for each unique coordinate point"""
     weekly_data = []
-    for fips, group in daily_data.groupby("FIPS Code"):
-        county_weekly = create_county_weekly_record(group, year)
-        weekly_data.append(county_weekly)
+    # Group by FIPS Code AND coordinates to keep all weather measurement points
+    for (fips, lat, lon), group in daily_data.groupby(
+        ["FIPS Code", "Lat (llcrnr)", "Lon (llcrnr)"]
+    ):
+        coord_weekly = create_coordinate_weekly_record(group, year, fips, lat, lon)
+        weekly_data.append(coord_weekly)
 
     return weekly_data
 
 
-def create_county_weekly_record(group, year):
-    """Create weekly weather record for a single county"""
+def create_coordinate_weekly_record(group, year, fips, lat, lon):
+    """Create weekly weather record for a single coordinate point within a county"""
     first_row = group.iloc[0]
-    county_weekly = {
+
+    coord_weekly = {
         "year": year,
         "state": first_row["State"],
         "county": first_row["County"],
-        "fips": first_row["FIPS Code"],
-        "lat": first_row["Lat (llcrnr)"],
-        "lon": first_row["Lon (llcrnr)"],
+        "fips": fips,
+        "lat": lat,
+        "lon": lon,
     }
 
     # Check for missing weeks
     available_weeks = set(group["week"].unique())
     missing_weeks = set(range(1, 53)) - available_weeks
     if missing_weeks and len(missing_weeks) > 0:  # Only warn if many weeks missing
-        print(f"      County {first_row['County']} missing {len(missing_weeks)} weeks")
+        print(
+            f"      County {first_row['County']} coord ({lat:.3f}, {lon:.3f}) missing {len(missing_weeks)} weeks"
+        )
 
     # Calculate weekly averages for each weather variable
     for week in range(1, 53):  # weeks 1-52
@@ -123,16 +129,16 @@ def create_county_weekly_record(group, year):
         if week_data.empty:
             # Fill missing weeks with NaN
             for orig_col, new_col in WEATHER_COLUMNS.items():
-                county_weekly[f"{new_col}_{week}"] = np.nan
+                coord_weekly[f"{new_col}_{week}"] = np.nan
         else:
-            # Calculate weekly values
+            # Calculate weekly values for this specific coordinate
             for orig_col, new_col in WEATHER_COLUMNS.items():
                 if orig_col in week_data.columns:
-                    county_weekly[f"{new_col}_{week}"] = week_data[orig_col].mean()
+                    coord_weekly[f"{new_col}_{week}"] = week_data[orig_col].mean()
                 else:
-                    county_weekly[f"{new_col}_{week}"] = np.nan
+                    coord_weekly[f"{new_col}_{week}"] = np.nan
 
-    return county_weekly
+    return coord_weekly
 
 
 def process_weather_for_state_year(state_path, state_dir, year):
