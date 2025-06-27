@@ -4,25 +4,23 @@ import os
 import torch
 import torch.distributed as dist
 import logging
-import math
-
 from argparse import ArgumentParser
 
 
-def get_scheduler(optimizer, num_warmup_epochs, decay_factor, total_epochs):
-    # Cosine annealing scheduler with warm-up
-    def _lr_lambda(current_epoch):
-        if current_epoch < num_warmup_epochs:
-            # Warmup phase: linear increase from 0 to 1
-            return float(current_epoch) / float(max(1, num_warmup_epochs))
-        else:
-            # Cosine annealing phase: standard cosine from 1 to 0
-            progress = (current_epoch - num_warmup_epochs) / max(
-                1, total_epochs - num_warmup_epochs
-            )
-            return 0.5 * (1 + math.cos(math.pi * progress))
+def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
+    # Warm-up and decay function for scheduler
+    def _lr_lambda(num_warmup_epochs=15, decay_factor=0.99):
+        def lr_function(current_epoch):
+            if current_epoch < num_warmup_epochs:
+                return float(current_epoch) / float(max(1, num_warmup_epochs))
+            else:
+                return decay_factor ** (current_epoch - num_warmup_epochs)
 
-    return optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
+        return lr_function
+
+    return optim.lr_scheduler.LambdaLR(
+        optimizer, _lr_lambda(num_warmup_epochs, decay_factor)
+    )
 
 
 def normalize_year_interval_coords(year, interval, coords):

@@ -335,7 +335,9 @@ class BaseTrainer(ABC):
         # Create optimizer with current model parameters (which should be pretrained if provided)
         self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
         self.scheduler = utils.get_scheduler(
-            self.optimizer, num_warmup_epochs, decay_factor, self.num_epochs
+            self.optimizer,
+            num_warmup_epochs,
+            decay_factor,
         )
 
     def _setup_logging_and_output(self):
