@@ -97,6 +97,10 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
     def get_dataloaders(self, shuffle: bool = False) -> Tuple[DataLoader, DataLoader]:
         """Get train and validation data loaders - IMPLEMENTATION OF ABSTRACT METHOD."""
+        # Use cached loaders if available and shuffle hasn't changed
+        if self.train_loader is not None and self.test_loader is not None:
+            return self.train_loader, self.test_loader
+
         if self.use_cropnet:
             train_loader, test_loader = get_cropnet_train_test_loaders(
                 self.crop_df,
