@@ -6,7 +6,12 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 
-from src.utils.constants import DRY_RUN, MAX_CONTEXT_LENGTH, TOTAL_WEATHER_VARS
+from src.utils.constants import (
+    DRY_RUN,
+    MAX_CONTEXT_LENGTH,
+    TOTAL_WEATHER_VARS,
+    CROP_YIELD_STATS,
+)
 
 
 class CropDataset(Dataset):
@@ -18,7 +23,11 @@ class CropDataset(Dataset):
         test_dataset=False,
         n_past_years=5,
         test_gap=0,
+        crop_type="soybean",
     ):
+        self.crop_type = crop_type
+        self.yield_col = f"{crop_type}_yield"
+
         self.weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
         self.practice_cols = [f"P_{i}" for i in range(1, 15)]
         soil_measurements = [
@@ -76,7 +85,7 @@ class CropDataset(Dataset):
 
         dataset_name = "train" if not test_dataset else "test"
         logger.info(
-            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)}."
+            f"Creating {dataset_name} dataloader with {len(self.index)} samples for {'test year ' + str(test_year) if test_dataset else 'training years ' + str(start_year) + '-' + str(test_year-test_gap-1)} using {crop_type} yield."
         )
 
         self.data = []
@@ -113,8 +122,8 @@ class CropDataset(Dataset):
             )
 
             # get the true yield
-            y = query_data.iloc[-1:]["yield"].values.astype("float32").copy()
-            y_past = query_data["yield"].values.astype("float32")
+            y = query_data.iloc[-1:][self.yield_col].values.astype("float32").copy()
+            y_past = query_data[self.yield_col].values.astype("float32")
             if len(y_past) <= 1:
                 raise ValueError(
                     f"Only 1 year of yield data for location {loc_ID} in year {year}. "
@@ -233,8 +242,9 @@ def split_train_test_by_year(
     soybean_df: pd.DataFrame,
     n_train_years: int,
     test_year: int,
-    standardize: bool = True,
-    n_past_years: int = 5,
+    standardize: bool,
+    n_past_years: int,
+    crop_type: str,
 ):
     # you need n_train_years + 1 years of data
     # n_train years to have at least one training datapoint
@@ -249,7 +259,17 @@ def split_train_test_by_year(
         cols_to_standardize = [
             col
             for col in data.columns
-            if col not in ["loc_ID", "year", "State", "County", "lat", "lng", "yield"]
+            if col
+            not in [
+                "loc_ID",
+                "year",
+                "State",
+                "County",
+                "lat",
+                "lng",
+                "soybean_yield",
+                "corn_yield",
+            ]
         ]
         # standardize per week per feature
         # helpful to detect if certain weeks are particularly out of dist compared to
@@ -270,8 +290,11 @@ def split_train_test_by_year(
         #     data[non_weather_cols] - data[non_weather_cols].mean()
         # ) / data[non_weather_cols].std()
 
-        # for yield always use same values so RMSEs are comparable across folds
-        data["yield"] = (data["yield"] - 38.5) / 11.03
+        # Use crop-specific yield statistics from constants
+        yield_col = f"{crop_type}_yield"
+        crop_mean = CROP_YIELD_STATS[crop_type]["mean"]
+        crop_std = CROP_YIELD_STATS[crop_type]["std"]
+        data[yield_col] = (data[yield_col] - crop_mean) / crop_std
 
     data = data.fillna(0)
 
@@ -281,9 +304,15 @@ def split_train_test_by_year(
         test_year,
         test_dataset=False,
         n_past_years=n_past_years,
+        crop_type=crop_type,
     )
     test_dataset = CropDataset(
-        data.copy(), start_year, test_year, test_dataset=True, n_past_years=n_past_years
+        data.copy(),
+        start_year,
+        test_year,
+        test_dataset=True,
+        n_past_years=n_past_years,
+        crop_type=crop_type,
     )
 
     # Return the train and test datasets
@@ -291,9 +320,7 @@ def split_train_test_by_year(
 
 
 def read_soybean_dataset(data_dir: str):
-    full_filename = (
-        "khaki_soybeans/soybean_data_soilgrid250_modified_states_9_processed.csv"
-    )
+    full_filename = "khaki_soybeans/khaki_multi_crop_yield.csv"
     soybean_df = pd.read_csv(data_dir + full_filename)
     soybean_df = soybean_df.sort_values(["loc_ID", "year"])
     return soybean_df
@@ -305,8 +332,9 @@ def get_train_test_loaders(
     test_year: int,
     n_past_years: int,
     batch_size: int,
-    shuffle: bool = False,
-    num_workers: int = 8,
+    shuffle: bool,
+    num_workers: int,
+    crop_type: str,
 ) -> Tuple[DataLoader, DataLoader]:
 
     if n_train_years <= 1:
@@ -329,6 +357,7 @@ def get_train_test_loaders(
         test_year,
         standardize=True,
         n_past_years=n_past_years,
+        crop_type=crop_type,
     )
 
     if n_train_years < n_past_years + 1:

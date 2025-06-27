@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 from src.utils.utils import parse_args, setup_logging
+from src.utils.constants import CROP_YIELD_STATS
 
 parser = argparse.ArgumentParser()
 
@@ -76,6 +77,13 @@ parser.add_argument(
     help="number of gaussian mixture components for WeatherFormerMixture model",
     default=3,
     type=int,
+)
+parser.add_argument(
+    "--crop-type",
+    help="crop type to predict: soybean or corn",
+    default="soybean",
+    type=str,
+    choices=["soybean", "corn"],
 )
 
 
@@ -172,10 +180,13 @@ def main(args_dict=None):
     logger.info("Training completed successfully!")
 
     # Convert MSE to RMSE for comparison with literature
-    avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) * 11.03
-    std_best_rmse = cross_validation_results["std_best_val_loss"] * 11.03
-    # 11.03 is the std of the dataset yield
-    logger.info(f"Final average best RMSE: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}")
+    crop_type = args_dict["crop_type"]
+    crop_std = CROP_YIELD_STATS[crop_type]["std"]
+    avg_best_rmse = (cross_validation_results["avg_best_val_loss"]) * crop_std
+    std_best_rmse = cross_validation_results["std_best_val_loss"] * crop_std
+    logger.info(
+        f"Final average best RMSE for {crop_type}: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}"
+    )
 
     return avg_best_rmse, std_best_rmse
 

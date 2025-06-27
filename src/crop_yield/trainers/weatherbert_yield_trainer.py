@@ -49,8 +49,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         n_past_years: int,
         n_train_years: int,
         beta: float,
-        use_cropnet: bool = False,
-        crop_type: Optional[str] = None,
+        use_cropnet: bool,
+        crop_type: str,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,6 +122,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 self.batch_size,
                 shuffle,
                 num_workers=0 if self.world_size > 1 else 8,
+                crop_type=self.crop_type,
             )
 
         self.train_loader = train_loader
@@ -283,7 +284,7 @@ def _run_yield_cross_validation(
         "n_train_years": args_dict["n_train_years"],
         "beta": args_dict["beta"],
         "use_cropnet": setup_params["use_cropnet"],
-        "crop_type": args_dict.get("crop_type"),
+        "crop_type": args_dict["crop_type"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],

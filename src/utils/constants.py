@@ -15,6 +15,14 @@ STDOUT = os.environ.get("STDOUT", "False").lower() in ("true", "1", "t")
 # Read the TEST_ENV environment variable
 DRY_RUN = os.environ.get("DRY_RUN", "False").lower() in ("true", "1", "t")
 
+# Crop yield statistics (mean and std for normalization)
+CROP_YIELD_STATS = {
+    "soybean": {
+        "mean": 37.36,
+        "std": 11.11,
+    },
+    "corn": {"mean": 116.97, "std": 47.17},
+}
 
 TOTAL_WEATHER_VARS = 31
 MAX_GRANULARITY_DAYS = 31
