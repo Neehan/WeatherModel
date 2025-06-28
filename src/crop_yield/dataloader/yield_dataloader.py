@@ -241,6 +241,8 @@ def split_train_test_by_year(
                 "County",
                 "lat",
                 "lng",
+                "corn_yield",
+                "soybean_yield",
             ]
         ]
         # helpful to detect if certain weeks are particularly out of dist compared to
