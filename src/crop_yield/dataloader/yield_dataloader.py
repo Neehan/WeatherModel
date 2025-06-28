@@ -248,6 +248,8 @@ def split_train_test_by_year(
             train_data[cols_to_standardize].mean().fillna(0),
             train_data[cols_to_standardize].std().fillna(1),
         )
+        print(train_mean)
+        print(train_std)
         # standardize per week per feature
         # helpful to detect if certain weeks are particularly out of dist compared to
         # historical data for that week
