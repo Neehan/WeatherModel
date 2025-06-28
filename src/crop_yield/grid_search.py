@@ -17,6 +17,7 @@ PRETRAINED_MODEL_PATHS = {
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
     "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
     "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
+    "weathercnn": None,
 }
 
 
@@ -279,9 +280,9 @@ class GridSearch:
 
             for beta in self.beta_values:
                 # Skip beta > 0 for weatherautoencoder since it doesn't use beta parameter
-                if self.model == "weatherautoencoder" and beta > 0:
+                if self.model in ["weatherautoencoder", "weathercnn"] and beta > 0:
                     self.logger.info(
-                        f"Skipping beta={beta} for weatherautoencoder (doesn't use beta parameter)"
+                        f"Skipping beta={beta} for {self.model} (doesn't use beta parameter)"
                     )
                     skipped_experiments += 1
                     continue
@@ -339,6 +340,7 @@ def setup_args() -> argparse.Namespace:
             "weatherautoencodermixture",
             "weatherautoencodersinusoid",
             "weatherautoencoder",
+            "weathercnn",
         ],
         help="Model to use for experiments",
     )
