@@ -260,6 +260,7 @@ def split_train_test_by_year(
             train_data[yield_col].mean(),
             train_data[yield_col].std(),
         )
+        data[yield_col] = (data[yield_col] - yield_mean) / yield_std
         print(
             f"Saving mean ({yield_mean:.3f}) and std ({yield_std:.3f}) from training data for {crop_type}"
         )
