@@ -243,27 +243,26 @@ def split_train_test_by_year(
                 "lng",
             ]
         ]
-        train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
-        train_mean, train_std = (
-            train_data[cols_to_standardize].mean().fillna(0),
-            train_data[cols_to_standardize].std().fillna(1),
-        )
-        print(train_mean)
-        print(train_std)
-        # standardize per week per feature
         # helpful to detect if certain weeks are particularly out of dist compared to
         # historical data for that week
-        data[cols_to_standardize] = (data[cols_to_standardize] - train_mean) / train_std
+        data[cols_to_standardize] = (
+            data[cols_to_standardize] - data[cols_to_standardize].mean()
+        ) / data[cols_to_standardize].std()
         # Fill any NaN values that result from division by zero with 0
         data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
 
         # save crop-specific yield statistics from constants
         yield_col = f"{crop_type}_yield"
-        print(
-            f"Saving mean ({train_mean[yield_col]:.3f}) and std ({train_std[yield_col]:.3f}) from training data for {crop_type}"
+        train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
+        yield_mean, yield_std = (
+            train_data[yield_col].mean(),
+            train_data[yield_col].std(),
         )
-        CROP_YIELD_STATS[crop_type]["mean"].append(train_mean[yield_col])
-        CROP_YIELD_STATS[crop_type]["std"].append(train_std[yield_col])
+        print(
+            f"Saving mean ({yield_mean:.3f}) and std ({yield_std:.3f}) from training data for {crop_type}"
+        )
+        CROP_YIELD_STATS[crop_type]["mean"].append(yield_mean)
+        CROP_YIELD_STATS[crop_type]["std"].append(yield_std)
 
     data = data.fillna(0)
 
