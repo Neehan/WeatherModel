@@ -213,31 +213,6 @@ class CropDataset(Dataset):
         )
 
 
-def standardize_weather(data):
-    """Standardize weather columns by variable type instead of individual columns."""
-    weather_data = data.copy()
-
-    # Standardize weather columns by variable type (not by individual column)
-    for weather_var in range(1, 7):  # Weather variables 1-6
-        var_cols = [
-            f"W_{weather_var}_{j}" for j in range(1, 53)
-        ]  # All weeks for this variable
-        var_data = weather_data[var_cols]
-
-        # Calculate mean and std across all columns for this weather variable
-        var_mean = var_data.values.mean()
-        var_std = var_data.values.std()
-
-        print(
-            f"Standardizing weather variable W_{weather_var} with mean {var_mean:.3f} and std {var_std:.3f}"
-        )
-
-        # Standardize all columns for this weather variable using the same mean/std
-        weather_data[var_cols] = (var_data - var_mean) / var_std
-
-    return weather_data
-
-
 def split_train_test_by_year(
     soybean_df: pd.DataFrame,
     n_train_years: int,
@@ -277,6 +252,8 @@ def split_train_test_by_year(
         # helpful to detect if certain weeks are particularly out of dist compared to
         # historical data for that week
         data[cols_to_standardize] = (data[cols_to_standardize] - train_mean) / train_std
+        # Fill any NaN values that result from division by zero with 0
+        data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
 
         # save crop-specific yield statistics from constants
         yield_col = f"{crop_type}_yield"
