@@ -182,15 +182,26 @@ def main(args_dict=None):
     kfold_results = cross_validation_results["fold_results"]
     fold_stds = CROP_YIELD_STATS[args_dict["crop_type"]]["std"]
 
+    # Compute RMSE in bu/acre
     best_rmse_bu_acre = [result * std for result, std in zip(kfold_results, fold_stds)]
     avg_best_rmse = float(np.mean(best_rmse_bu_acre))
     std_best_rmse = float(np.std(best_rmse_bu_acre))
 
+    # Compute R² for each fold: R² = 1 - (RMSE/std)²
+    r_squared_values = [
+        1 - (rmse / std) ** 2 for rmse, std in zip(best_rmse_bu_acre, fold_stds)
+    ]
+    avg_r_squared = float(np.mean(r_squared_values))
+    std_r_squared = float(np.std(r_squared_values))
+
     logger.info(
         f"Final average best RMSE for {args_dict['crop_type']}: {avg_best_rmse:.3f} ± {std_best_rmse:.3f}"
     )
+    logger.info(
+        f"Final average R² for {args_dict['crop_type']}: {avg_r_squared:.3f} ± {std_r_squared:.3f}"
+    )
 
-    return avg_best_rmse, std_best_rmse
+    return avg_best_rmse, std_best_rmse, avg_r_squared, std_r_squared
 
 
 if __name__ == "__main__":

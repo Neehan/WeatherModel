@@ -140,7 +140,7 @@ class GridSearch:
 
     def _run_single_experiment(
         self, config: Dict
-    ) -> Tuple[Optional[float], Optional[float]]:
+    ) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """Run a single experiment with given configuration"""
         experiment_name = (
             f"{config['model']}_beta_{config['beta']}_years_{config['n_train_years']}_"
@@ -150,18 +150,20 @@ class GridSearch:
         self.logger.info(f"Starting experiment: {experiment_name}")
 
         try:
-            avg_rmse, std_rmse = yield_main_func(config)
+            avg_rmse, std_rmse, avg_r2, std_r2 = yield_main_func(config)
             self.logger.info(
-                f"Completed {experiment_name}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}"
+                f"Completed {experiment_name}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
             )
-            return avg_rmse, std_rmse
+            return avg_rmse, std_rmse, avg_r2, std_r2
         except Exception as e:
             self.logger.error(f"Failed experiment {experiment_name}: {str(e)}")
-            return None, None
+            return None, None, None, None
 
     def _run_beta_experiments(
         self, beta: float
-    ) -> Dict[int, Tuple[Optional[float], Optional[float]]]:
+    ) -> Dict[
+        int, Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]
+    ]:
         """Run experiments for a single beta value across all year values"""
         base_config = self._get_base_config()
         base_config["beta"] = beta
@@ -179,13 +181,18 @@ class GridSearch:
             config = copy.deepcopy(base_config)
             config["n_train_years"] = n_train_years
 
-            avg_rmse, std_rmse = self._run_single_experiment(config)
-            results[n_train_years] = (avg_rmse, std_rmse)
+            avg_rmse, std_rmse, avg_r2, std_r2 = self._run_single_experiment(config)
+            results[n_train_years] = (avg_rmse, std_rmse, avg_r2, std_r2)
 
         return results
 
     def _save_results(
-        self, beta: float, results: Dict[int, Tuple[Optional[float], Optional[float]]]
+        self,
+        beta: float,
+        results: Dict[
+            int,
+            Tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
+        ],
     ):
         """Save experiment results to TSV file"""
         if not results:  # No new results to save
@@ -205,33 +212,42 @@ class GridSearch:
             if mask.any():
                 # Update existing row with only the new results
                 row_idx = df[mask].index[0]
-                for n_years, (mean_rmse, std_rmse) in results.items():
+                for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
                     year_col = f"year_{n_years}"
+                    year_r2_col = f"year_{n_years}_r2"
                     if mean_rmse is not None and std_rmse is not None:
                         df.loc[row_idx, year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                        df.loc[row_idx, year_r2_col] = f"{mean_r2:.3f} ± {std_r2:.3f}"
                     else:
                         df.loc[row_idx, year_col] = "FAILED"
+                        df.loc[row_idx, year_r2_col] = "FAILED"
             else:
                 # Create new row with only the attempted experiments
                 new_row = {"model": self.model, "method": self.method, "beta": beta}
-                for n_years, (mean_rmse, std_rmse) in results.items():
+                for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
                     year_col = f"year_{n_years}"
+                    year_r2_col = f"year_{n_years}_r2"
                     if mean_rmse is not None and std_rmse is not None:
                         new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                        new_row[year_r2_col] = f"{mean_r2:.3f} ± {std_r2:.3f}"
                     else:
                         new_row[year_col] = "FAILED"
+                        new_row[year_r2_col] = "FAILED"
 
                 new_df = pd.DataFrame([new_row])
                 df = pd.concat([df, new_df], ignore_index=True)
         else:
             # Empty DataFrame - create new row with only attempted experiments
             new_row = {"model": self.model, "method": self.method, "beta": beta}
-            for n_years, (mean_rmse, std_rmse) in results.items():
+            for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
                 year_col = f"year_{n_years}"
+                year_r2_col = f"year_{n_years}_r2"
                 if mean_rmse is not None and std_rmse is not None:
                     new_row[year_col] = f"{mean_rmse:.3f} ± {std_rmse:.3f}"
+                    new_row[year_r2_col] = f"{mean_r2:.3f} ± {std_r2:.3f}"
                 else:
                     new_row[year_col] = "FAILED"
+                    new_row[year_r2_col] = "FAILED"
 
             new_df = pd.DataFrame([new_row])
             df = pd.concat([df, new_df], ignore_index=True)
@@ -287,10 +303,12 @@ class GridSearch:
                 base_config["beta"] = beta
                 base_config["n_train_years"] = n_train_years
 
-                avg_rmse, std_rmse = self._run_single_experiment(base_config)
+                avg_rmse, std_rmse, avg_r2, std_r2 = self._run_single_experiment(
+                    base_config
+                )
 
                 # Save result immediately
-                results = {n_train_years: (avg_rmse, std_rmse)}
+                results = {n_train_years: (avg_rmse, std_rmse, avg_r2, std_r2)}
                 self._save_results(beta, results)
 
                 completed_experiments += 1
