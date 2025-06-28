@@ -268,7 +268,7 @@ def split_train_test_by_year(
                 "lng",
             ]
         ]
-        train_data = data[data["year"] < test_year]
+        train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
         train_mean, train_std = (
             train_data[cols_to_standardize].mean(),
             train_data[cols_to_standardize].std(),
