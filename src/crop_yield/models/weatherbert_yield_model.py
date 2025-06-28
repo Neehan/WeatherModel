@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -74,12 +74,23 @@ class WeatherBERTYieldModel(BaseModel):
             + imputed_weather * weather_feature_mask
         )
 
-    def load_pretrained(self, pretrained_model: WeatherBERT):
+    def load_pretrained(
+        self, pretrained_model: Union[WeatherBERT, "WeatherBERTYieldModel"]
+    ):
         """
         override the load_pretrained method from BaseModel to load the weather model
         """
         self.logger.info(f"provided model class: {pretrained_model.__class__.__name__}")
-        self.weather_model.load_pretrained(pretrained_model, load_out_proj=True)
+        if isinstance(pretrained_model, WeatherBERT):
+            weather_model = pretrained_model
+        elif isinstance(pretrained_model, WeatherBERTYieldModel):
+            weather_model = pretrained_model.weather_model
+        else:
+            raise ValueError(
+                f"provided model class: {pretrained_model.__class__.__name__} is not supported"
+            )
+
+        self.weather_model.load_pretrained(weather_model, load_out_proj=True)
 
     def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """

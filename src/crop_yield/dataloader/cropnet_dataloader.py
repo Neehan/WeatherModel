@@ -50,14 +50,12 @@ class CropNetDataset(Dataset):
         # Determine target year for prediction
         if test_dataset:
             target_year = test_year  # predict test_year
+            target_year_data = data[data["year"] == target_year]
         else:
             target_year = test_year - 1  # predict year before test_year
+            target_year_data = data
 
-        # First filter: only keep counties that have yield data for target year
-        target_year_data = data[data["year"] == target_year]
-        valid_counties = target_year_data[
-            target_year_data[self.crop_yield_col].notna()
-        ]["fips"].unique()
+        valid_counties = target_year_data["fips"].unique()
         data = data[data["fips"].isin(valid_counties)].copy()
 
         logger.info(

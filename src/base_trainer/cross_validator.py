@@ -105,8 +105,12 @@ class CrossValidator:
             Aggregated results dictionary
         """
         n_folds = len(fold_results)
+        avg_best_val_loss = np.mean(fold_results)
+        std_best_val_loss = np.std(fold_results)
 
         return {
+            "avg_best_val_loss": avg_best_val_loss,
+            "std_best_val_loss": std_best_val_loss,
             "fold_results": fold_results,
             "n_folds": n_folds,
         }

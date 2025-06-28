@@ -23,9 +23,3 @@ class WeatherAutoencoderYieldModel(WeatherBERTYieldModel):
             device=device,
             **model_size_params,
         )
-
-    def load_pretrained(self, pretrained_model: WeatherAutoencoder):
-        """
-        Load pretrained WeatherAutoencoder model
-        """
-        return super().load_pretrained(pretrained_model)
