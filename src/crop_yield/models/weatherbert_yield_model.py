@@ -48,11 +48,18 @@ class WeatherBERTYieldModel(BaseModel):
         self.weather_model_frozen = False
 
     def _load_pretrained_seq_model(self):
-        """Load pretrained seq model using hardcoded path pattern"""
-        seq_model_path = f"data/trained_models/yield_pretraining/seq_{self.crop_type}_yield_model_38.4k_latest.pth"
-        self.logger.info(f"Loading pretrained seq model from {seq_model_path}")
-        checkpoint = torch.load(seq_model_path, map_location=self.device)
-        self.seq_model.load_pretrained(checkpoint)
+        crop_type = self.crop_type.lower()
+        if crop_type == "soybeans":
+            crop_type = "soybean"
+        if crop_type == "winterwheat":
+            crop_type = "winter_wheat"
+        else:
+            crop_type = None
+        if crop_type is not None:
+            seq_model_path = f"data/trained_models/yield_pretraining/seq_{crop_type}_yield_model_38.4k_latest.pth"
+            self.logger.info(f"Loading pretrained seq model from {seq_model_path}")
+            checkpoint = torch.load(seq_model_path, map_location=self.device)
+            self.seq_model.load_pretrained(checkpoint)
 
     def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """
