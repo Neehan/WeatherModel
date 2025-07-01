@@ -35,9 +35,9 @@ class TransformerEncoder(nn.Module):
         self.attn_layer = nn.Linear(hidden_dim, 1)  # Learnable attention layer
         self.fc = nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, input_tensor, coord, mask=None, return_sequence=False):
+    def forward(self, input_tensor, coord=None, mask=None, return_sequence=False):
         embedded_tensor = self.embedding(input_tensor)
-        encoded_tensor = self.positional_encoding(embedded_tensor, coord)
+        encoded_tensor = self.positional_encoding(embedded_tensor)
         encoded_tensor = self.transformer_encoder(
             encoded_tensor, src_key_padding_mask=mask
         )
