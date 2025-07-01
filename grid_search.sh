@@ -9,10 +9,11 @@
 #SBATCH --mem=64GB                     # Total memory
 #SBATCH -t 24:00:00                    # 24-hour wall time
 
-# Check if three arguments are provided
-if [ $# -ne 3 ]; then
-    echo "Usage: $0 <model1> <model2> <crop_type>"
+# Check if at least three arguments are provided
+if [ $# -lt 3 ]; then
+    echo "Usage: $0 <model1> <model2> <crop_type> [additional_python_args...]"
     echo "Example: $0 weatherformer weatherformersinusoid corn"
+    echo "Example: $0 weatherformer weatherformersinusoid corn --batch-size 128 --init-lr 0.001"
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, weathercnn"
     exit 1
 fi
@@ -20,6 +21,8 @@ fi
 MODEL1=$1
 MODEL2=$2
 CROP_TYPE=$3
+# Get all arguments after the first 3
+EXTRA_ARGS="${@:4}"
 
 # Validate model names
 valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "weathercnn")
@@ -38,6 +41,9 @@ module load miniforge/24.3.0-0
 echo "======== Starting Parallel Grid Search on 4 GPUs ========"
 echo "Comparing models: ${MODEL1} vs ${MODEL2}"
 echo "Crop type: ${CROP_TYPE}"
+if [ -n "$EXTRA_ARGS" ]; then
+    echo "Extra arguments: ${EXTRA_ARGS}"
+fi
 
 # Create output and log directories
 mkdir -p data/grid_search
@@ -61,6 +67,7 @@ run_experiment() {
         --crop-type "$CROP_TYPE" \
         $pretrained_flag \
         --output-dir data/grid_search \
+        $EXTRA_ARGS \
         >> "$log_file" 2>&1
     
     echo "$(date): Completed ${model} ${pretrained_flag} on GPU ${gpu_id}" | tee -a "$log_file"

@@ -29,12 +29,16 @@ class GridSearch:
         model: str,
         load_pretrained: bool,
         crop_type: str,
+        batch_size: int,
+        init_lr: float,
         output_dir: str = "data/grid_search",
     ):
         self.model = model
         self.load_pretrained = load_pretrained
         self.crop_type = crop_type
         self.output_dir = output_dir
+        self.batch_size = batch_size
+        self.init_lr = init_lr
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
         # Grid search parameters
@@ -116,10 +120,10 @@ class GridSearch:
             n_mixture_components = 1  # Default for other models
 
         base_config = {
-            "batch_size": 64,
+            "batch_size": self.batch_size,
             "n_past_years": 6,
             "n_epochs": 40,
-            "init_lr": 0.0005,
+            "init_lr": self.init_lr,
             "decay_factor": 0.95,
             "n_warmup_epochs": 10,
             "model_size": "small",
@@ -362,6 +366,20 @@ def setup_args() -> argparse.Namespace:
         help="Directory to save results (default: data/grid_search)",
     )
 
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        help="Batch size for training (default: 64)",
+    )
+
+    parser.add_argument(
+        "--init-lr",
+        type=float,
+        default=0.0005,
+        help="Initial learning rate (default: 0.0005)",
+    )
+
     return parser.parse_args()
 
 
@@ -373,6 +391,8 @@ def main():
         model=args.model,
         load_pretrained=args.load_pretrained,
         crop_type=args.crop_type,
+        batch_size=args.batch_size,
+        init_lr=args.init_lr,
         output_dir=args.output_dir,
     )
 
