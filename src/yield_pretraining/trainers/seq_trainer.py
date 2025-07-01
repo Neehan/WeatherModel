@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 from typing import Dict, Tuple, Optional
 from torch.utils.data import DataLoader
+import os
 
 from src.base_trainer.base_trainer import BaseTrainer
 from src.yield_pretraining.models.seq_model import SeqModel
 from src.yield_pretraining.dataloader.seq_dataloader import SeqDataloader
+from src.utils.constants import DATA_DIR
 
 
 class SeqTrainer(BaseTrainer):
@@ -15,6 +17,12 @@ class SeqTrainer(BaseTrainer):
 
         # Call parent constructor with all kwargs
         super().__init__(model=model, **kwargs)
+
+        # Override model directory for yield prediction
+        if self.rank == 0:
+            self.model_dir = DATA_DIR + "trained_models/yield_pretraining/"
+            if not os.path.exists(self.model_dir):
+                os.makedirs(self.model_dir)
 
         # Store dataloader
         self.dataloader = dataloader
