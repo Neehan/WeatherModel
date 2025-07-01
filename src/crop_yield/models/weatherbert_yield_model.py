@@ -40,7 +40,7 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim + past yields
+            nn.Linear(weather_dim + n_past_years, 120),  # weather_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
@@ -90,7 +90,8 @@ class WeatherBERTYieldModel(BaseModel):
         """
 
         # first predict current year's yield from past yield alone
-        y_past_augmented = self._get_seq_output(year, coord, interval, y_past)
+        # y_past_augmented = self._get_seq_output(year, coord, interval, y_past)
+        y_past_augmented = y_past[:, :-1]
         # Apply attention to reduce sequence dimension
         # Compute attention weights
         attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
@@ -103,7 +104,7 @@ class WeatherBERTYieldModel(BaseModel):
             weather * attention_weights, dim=1
         )  # batch_size x weather_dim
         mlp_input = torch.cat([weather_attended, y_past_augmented], dim=1)
-        return self.yield_mlp(mlp_input)
+        return y_past[:, -1] + self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
         """
