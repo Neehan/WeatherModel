@@ -40,7 +40,7 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim + n_past_years, 120),  # weather_dim
+            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim
             nn.GELU(),
             nn.Linear(120, 1),
         )
