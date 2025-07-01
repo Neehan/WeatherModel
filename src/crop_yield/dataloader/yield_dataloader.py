@@ -255,10 +255,10 @@ def split_train_test_by_year(
 
         # save crop-specific yield statistics from constants
         yield_col = f"{crop_type}_yield"
-        # train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
+        train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
         yield_mean, yield_std = (
-            data[yield_col].mean(),
-            data[yield_col].std(),
+            train_data[yield_col].mean(),
+            train_data[yield_col].std(),
         )
         data[yield_col] = (data[yield_col] - yield_mean) / yield_std
         print(
