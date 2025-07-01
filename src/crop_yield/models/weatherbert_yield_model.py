@@ -40,7 +40,7 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim
+            nn.Linear(weather_dim + n_past_years, 120),  # weather_dim
             nn.GELU(),
             nn.Linear(120, 1),
         )
@@ -94,8 +94,8 @@ class WeatherBERTYieldModel(BaseModel):
         )  # batch_size x n_past_years (yearly intervals)
 
         # Get seq model prediction
-        seq_output = self.seq_model(year, coord, period, y_past)  # batch_size x 1
-        mlp_input = torch.cat([weather_attended, y_past, seq_output], dim=1)
+        # seq_output = self.seq_model(year, coord, period, y_past)  # batch_size x 1
+        mlp_input = torch.cat([weather_attended, y_past], dim=1)
         return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
