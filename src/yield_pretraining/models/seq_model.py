@@ -41,7 +41,7 @@ class SeqModel(BaseModel):
         x = self.encoder(x)
 
         # Add the predicted change in yield to the last past yield
-        return past_yield[:, -1:, 0] + x
+        return x
 
     def load_pretrained(self, pretrained_model: "SeqModel"):
         """Load weights from a pretrained SeqModel by deep copying each layer."""
