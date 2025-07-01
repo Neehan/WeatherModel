@@ -2,13 +2,11 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import os
 
 from src.base_models.base_model import BaseModel
-from src.crop_yield.models.weathercnn_yield_model import WeatherCNNYieldModel
 from src.pretraining.models.weatherbert import WeatherBERT
 from src.yield_pretraining.models.seq_model import SeqModel
-from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
+from src.utils.utils import normalize_year_interval_coords
 
 
 class WeatherBERTYieldModel(BaseModel):
@@ -40,7 +38,7 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim + n_past_years, 120),  # weather_dim + past yields
+            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
@@ -62,6 +60,10 @@ class WeatherBERTYieldModel(BaseModel):
             self.seq_model.load_pretrained(checkpoint)
 
     def _get_seq_output(self, year, coord, period, y_past):
+        """
+        do yield prediction based on past yields only
+        """
+
         batch_size, n_past_years = y_past.shape
         year = year.reshape(batch_size, n_past_years, -1)
         coord = coord.unsqueeze(1).expand(batch_size, n_past_years - 1, 2)
@@ -72,6 +74,8 @@ class WeatherBERTYieldModel(BaseModel):
         period = torch.ones(
             batch_size, n_past_years - 1, device=y_past.device
         )  # batch_size x n_past_years (yearly intervals)
+
+        year, period, coord = normalize_year_interval_coords(year, period, coord)
 
         # Get seq model prediction
         seq_output = self.seq_model(year, coord, period, y_past)  # batch_size x 1
@@ -90,8 +94,7 @@ class WeatherBERTYieldModel(BaseModel):
         """
 
         # first predict current year's yield from past yield alone
-        # y_past_augmented = self._get_seq_output(year, coord, interval, y_past)
-        y_past_augmented = y_past[:, :-1]
+        y_past_augmented = self._get_seq_output(year, coord, interval, y_past)
         # Apply attention to reduce sequence dimension
         # Compute attention weights
         attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
@@ -104,7 +107,7 @@ class WeatherBERTYieldModel(BaseModel):
             weather * attention_weights, dim=1
         )  # batch_size x weather_dim
         mlp_input = torch.cat([weather_attended, y_past_augmented], dim=1)
-        return y_past[:, -1] + self.yield_mlp(mlp_input)
+        return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
         """
