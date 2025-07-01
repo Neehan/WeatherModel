@@ -337,6 +337,7 @@ class BaseTrainer(ABC):
         self.scheduler = utils.get_scheduler(
             self.optimizer,
             num_warmup_epochs,
+            self.num_epochs,
             decay_factor,
         )
 

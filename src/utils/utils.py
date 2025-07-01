@@ -5,21 +5,39 @@ import torch
 import torch.distributed as dist
 import logging
 from argparse import ArgumentParser
+import math
 
 
-def get_scheduler(optimizer, num_warmup_epochs, decay_factor):
-    # Warm-up and decay function for scheduler
-    def _lr_lambda(num_warmup_epochs=15, decay_factor=0.99):
+def get_scheduler(optimizer, num_warmup_epochs, total_epochs, decay_factor=None):
+    """
+    Create a learning rate scheduler with warmup followed by cosine annealing.
+
+    Args:
+        optimizer: PyTorch optimizer
+        num_warmup_epochs: Number of epochs for linear warmup
+        total_epochs: Total number of training epochs
+        decay_factor: Kept for backward compatibility, not used in cosine annealing
+
+    Returns:
+        PyTorch LR scheduler
+    """
+
+    def _cosine_annealing_lr(num_warmup_epochs, total_epochs):
         def lr_function(current_epoch):
             if current_epoch < num_warmup_epochs:
+                # Linear warmup
                 return float(current_epoch) / float(max(1, num_warmup_epochs))
             else:
-                return decay_factor ** (current_epoch - num_warmup_epochs)
+                # Cosine annealing after warmup
+                progress = (current_epoch - num_warmup_epochs) / (
+                    total_epochs - num_warmup_epochs
+                )
+                return 0.5 * (1.0 + math.cos(math.pi * progress))
 
         return lr_function
 
     return optim.lr_scheduler.LambdaLR(
-        optimizer, _lr_lambda(num_warmup_epochs, decay_factor)
+        optimizer, _cosine_annealing_lr(num_warmup_epochs, total_epochs)
     )
 
 
