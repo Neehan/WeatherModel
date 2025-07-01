@@ -175,6 +175,18 @@ class SeqDataloader:
         # Create train/test split by year
         self.train_data, self.test_data = self._create_train_test_split()
 
+        # Create datasets once during initialization
+        self.train_dataset = SeqDataset(
+            self.train_data, n_past_years=self.n_past_years, yield_stats=None
+        )
+
+        # Create test dataset using train yield statistics
+        self.test_dataset = SeqDataset(
+            self.test_data,
+            n_past_years=self.n_past_years,
+            yield_stats=self.train_dataset.yield_stats,
+        )
+
     def _create_train_test_split(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Create train/test split by year."""
         train_data = self.data[self.data["Year"] <= self.test_year_cutoff]
@@ -183,21 +195,9 @@ class SeqDataloader:
         return train_data, test_data
 
     def get_dataloaders(self, shuffle: bool = True) -> Tuple[DataLoader, DataLoader]:
-        """Get train and test dataloaders."""
-        # Create train dataset and compute yield statistics
-        train_dataset = SeqDataset(
-            self.train_data, n_past_years=self.n_past_years, yield_stats=None
-        )
-
-        # Create test dataset using train yield statistics
-        test_dataset = SeqDataset(
-            self.test_data,
-            n_past_years=self.n_past_years,
-            yield_stats=train_dataset.yield_stats,
-        )
-
+        """Get train and test dataloaders using pre-created datasets."""
         train_loader = DataLoader(
-            train_dataset,
+            self.train_dataset,
             batch_size=self.batch_size,
             shuffle=shuffle,
             num_workers=2,
@@ -205,7 +205,7 @@ class SeqDataloader:
         )
 
         test_loader = DataLoader(
-            test_dataset,
+            self.test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=4,
@@ -216,7 +216,4 @@ class SeqDataloader:
 
     def get_yield_stats(self) -> Dict:
         """Get the computed yield statistics for denormalization."""
-        train_dataset = SeqDataset(
-            self.train_data, n_past_years=self.n_past_years, yield_stats=None
-        )
-        return train_dataset.yield_stats
+        return self.train_dataset.yield_stats
