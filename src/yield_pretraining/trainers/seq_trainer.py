@@ -52,6 +52,6 @@ class SeqTrainer(BaseTrainer):
         """Compute validation loss for a batch."""
         with torch.no_grad():
             predictions = self.model(years, coords, periods, past_yields)
-            loss = self.criterion(predictions.squeeze(), target_yields).item()
+            loss = self.criterion(predictions.squeeze(), target_yields)
             # return rmse in val
             return {"total_loss": loss**0.5}
