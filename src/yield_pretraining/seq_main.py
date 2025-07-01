@@ -32,10 +32,16 @@ parser.add_argument(
     help="Years > this value go to test set",
 )
 parser.add_argument(
-    "--n-past-years",
-    default=5,
+    "--known-years",
+    default=7,
     type=int,
-    help="Number of past years to use for prediction",
+    help="Number of known datapoints in the small history",
+)
+parser.add_argument(
+    "--total-years",
+    default=10,
+    type=int,
+    help="Total sequence length after backward expansion",
 )
 parser.add_argument(
     "--num-epochs", default=50, type=int, help="Number of training epochs"
@@ -70,7 +76,8 @@ def main():
         crop_type=args_dict["crop_type"],
         batch_size=args_dict["batch_size"],
         test_year_cutoff=args_dict["test_year_cutoff"],
-        n_past_years=args_dict["n_past_years"],
+        known_years=args_dict["known_years"],
+        total_years=args_dict["total_years"],
     )
 
     # Create trainer

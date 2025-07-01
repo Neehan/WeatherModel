@@ -28,7 +28,9 @@ class SeqTrainer(BaseTrainer):
         self.dataloader = dataloader
 
         # Initialize loss function
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.MSELoss(
+            reduction="none"
+        )  # Use reduction='none' for masking
 
         # override the losses collected
         self.output_json["losses"] = {
@@ -47,19 +49,49 @@ class SeqTrainer(BaseTrainer):
         return self.dataloader.get_dataloaders(shuffle=shuffle)
 
     def compute_train_loss(
-        self, years, coords, periods, past_yields, target_yields
+        self, years, coords, periods, yields, yield_mask, padding_mask
     ) -> Dict[str, torch.Tensor]:
         """Compute training loss for a batch."""
-        predictions = self.model(years, coords, periods, past_yields)
-        loss = self.criterion(predictions.squeeze(), target_yields)
+        predictions = self.model(
+            years, coords, periods, yields, yield_mask, padding_mask
+        )
+
+        # Compute loss only on masked (unknown) yields
+        loss_per_element = self.criterion(predictions, yields)
+
+        # Apply inverse mask to compute loss only on unknown yields (yield_mask=False)
+        masked_loss = loss_per_element * (~yield_mask).float()
+
+        # Average over valid (non-masked) positions
+        num_masked = (~yield_mask).float().sum()
+        if num_masked > 0:
+            loss = masked_loss.sum() / num_masked
+        else:
+            loss = torch.tensor(0.0, device=predictions.device)
+
         return {"total_loss": loss}
 
     def compute_validation_loss(
-        self, years, coords, periods, past_yields, target_yields
+        self, years, coords, periods, yields, yield_mask, padding_mask
     ) -> Dict[str, torch.Tensor]:
         """Compute validation loss for a batch."""
         with torch.no_grad():
-            predictions = self.model(years, coords, periods, past_yields)
-            loss = self.criterion(predictions.squeeze(), target_yields)
+            predictions = self.model(
+                years, coords, periods, yields, yield_mask, padding_mask
+            )
+
+            # Compute loss only on masked (unknown) yields
+            loss_per_element = self.criterion(predictions, yields)
+
+            # Apply inverse mask to compute loss only on unknown yields (yield_mask=False)
+            masked_loss = loss_per_element * (~yield_mask).float()
+
+            # Average over valid (non-masked) positions
+            num_masked = (~yield_mask).float().sum()
+            if num_masked > 0:
+                loss = masked_loss.sum() / num_masked
+            else:
+                loss = torch.tensor(0.0, device=predictions.device)
+
             # return rmse in val
             return {"total_loss": loss**0.5}
