@@ -23,10 +23,13 @@ class WeatherAutoencoderMixtureYieldModel(WeatherAutoencoderYieldModel):
         k: int,
         weather_dim: int,
         n_past_years: int,
+        crop_type: str,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
+        super().__init__(
+            name, device, weather_dim, n_past_years, crop_type, **model_size_params
+        )
         self.name = "weatherautoencoder_mixture_yield"
 
         # Replace the WeatherBERT with WeatherAutoencoder

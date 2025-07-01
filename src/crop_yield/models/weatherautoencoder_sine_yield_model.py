@@ -22,14 +22,17 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         device: torch.device,
         weather_dim: int,
         n_past_years: int,
+        crop_type: str,
         **model_size_params,
     ):
         # Call parent init but override the weather model
-        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
+        super().__init__(
+            name, device, weather_dim, n_past_years, crop_type, **model_size_params
+        )
         self.name = "weatherautoencoder_sine_yield"
 
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
-        max_len = self.yield_model.max_len
+        max_len = self.weather_model.max_len
         self.positions = (
             torch.arange(max_len, dtype=torch.float, device=device)
             .unsqueeze(0)

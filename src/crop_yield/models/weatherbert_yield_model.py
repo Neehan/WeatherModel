@@ -2,10 +2,12 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+import os
 
 from src.base_models.base_model import BaseModel
 from src.crop_yield.models.weathercnn_yield_model import WeatherCNNYieldModel
 from src.pretraining.models.weatherbert import WeatherBERT
+from src.yield_pretraining.models.seq_model import SeqModel
 from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 
 
@@ -16,36 +18,51 @@ class WeatherBERTYieldModel(BaseModel):
         device: torch.device,
         weather_dim: int,
         n_past_years: int,
+        crop_type: str,
         **model_size_params,
     ):
         super().__init__(name)
+        self.crop_type = crop_type
+        self.device = device
         self.weather_model = WeatherBERT(
             weather_dim=weather_dim,
             output_dim=weather_dim,
             device=device,
             **model_size_params,
         )
-        # self.yield_model = WeatherCNNYieldModel(
-        #     name=f"{name}_cnn",
-        #     device=device,
-        #     weather_dim=weather_dim,
-        #     n_past_years=n_past_years,
-        #     **model_size_params,
-        # )
+
+        # Initialize seq model for y_past processing
+        self.seq_model = SeqModel(name=f"seq_{crop_type}_yield_model", device=device)
+
         # Attention mechanism to reduce sequence dimension
         self.weather_attention = nn.Sequential(
             nn.Linear(weather_dim, 16), nn.GELU(), nn.Linear(16, 1)
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(weather_dim + n_past_years + 1, 120),  # weather_dim + past yields
+            nn.Linear(weather_dim, 120),  # weather_dim
             nn.GELU(),
             nn.Linear(120, 1),
         )
 
         self.weather_model_frozen = False
 
+    def _load_pretrained_seq_model(self):
+        """Load pretrained seq model using hardcoded path pattern"""
+        seq_model_path = f"data/trained_models/yield_pretraining/seq_{self.crop_type}_yield_model_38.4k_latest.pth"
+        self.logger.info(f"Loading pretrained seq model from {seq_model_path}")
+        checkpoint = torch.load(seq_model_path, map_location=self.device)
+        self.seq_model.load_pretrained(checkpoint)
+
     def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
+        """
+        weather: batch_size x seq_len x weather_dim
+        coord: batch_size x 2
+        year: batch_size x seq_len
+        interval: batch_size x 1
+        weather_feature_mask: batch_size x seq_len x weather_dim
+        y_past: batch_size x n_past_years
+        """
         # Apply attention to reduce sequence dimension
         # Compute attention weights
         attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
@@ -58,8 +75,20 @@ class WeatherBERTYieldModel(BaseModel):
             weather * attention_weights, dim=1
         )  # batch_size x weather_dim
 
-        mlp_input = torch.cat([weather_attended, y_past], dim=1)
-        return self.yield_mlp(mlp_input)
+        batch_size, n_past_years = y_past.shape
+        year = year.reshape(batch_size, n_past_years, -1)
+        coord = coord.unsqueeze(1).expand(batch_size, n_past_years - 1, 2)
+
+        # now keep only one entry per year
+        year = year[:, :-1, 0]
+        y_past = y_past[:, :-1]
+        period = torch.ones(
+            batch_size, n_past_years - 1, device=y_past.device
+        )  # batch_size x n_past_years (yearly intervals)
+
+        # Get seq model prediction
+        seq_output = self.seq_model(year, coord, period, y_past)  # batch_size x 1
+        return seq_output + self.yield_mlp(weather_attended)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
         """
@@ -91,6 +120,7 @@ class WeatherBERTYieldModel(BaseModel):
             )
 
         self.weather_model.load_pretrained(weather_model, load_out_proj=True)
+        self._load_pretrained_seq_model()
 
     def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """
