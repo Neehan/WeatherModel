@@ -78,6 +78,13 @@ parser.add_argument(
     default=3,
     type=int,
 )
+parser.add_argument(
+    "--crop-type",
+    help="specific crop type to train (if not provided, trains all crops)",
+    choices=["Cotton", "Corn", "Soybeans", "WinterWheat"],
+    default=None,
+    type=str,
+)
 
 
 def train_single_crop(crop_type: str, args_dict: dict):
@@ -201,7 +208,15 @@ def main(args_dict=None):
     # crop_types = ["Corn", "Soybeans", "WinterWheat"]
 
     logger = logging.getLogger(__name__)
-    logger.info("Starting CropNet training for all crops...")
+
+    # Check if specific crop type was provided
+    if args_dict.get("crop_type"):
+        crop_types = [args_dict["crop_type"]]
+        logger.info(
+            f"Starting CropNet training for specific crop: {args_dict['crop_type']}"
+        )
+    else:
+        logger.info("Starting CropNet training for all crops...")
 
     # Results storage
     all_results = {}
@@ -224,7 +239,10 @@ def main(args_dict=None):
 
     # Print summary results
     logger.info("=" * 60)
-    logger.info("CROPNET TRAINING SUMMARY")
+    if args_dict.get("crop_type"):
+        logger.info(f"CROPNET TRAINING SUMMARY - {args_dict['crop_type']}")
+    else:
+        logger.info("CROPNET TRAINING SUMMARY")
     logger.info("=" * 60)
 
     for crop_type, result in all_results.items():
@@ -234,7 +252,10 @@ def main(args_dict=None):
         else:
             logger.info(f"{crop_type}: FAILED")
 
-    logger.info("CropNet training completed for all crops!")
+    if args_dict.get("crop_type"):
+        logger.info(f"CropNet training completed for {args_dict['crop_type']}!")
+    else:
+        logger.info("CropNet training completed for all crops!")
 
     return all_results
 
