@@ -536,6 +536,29 @@ def combine_data(weather_df, crop_df):
     # Clean up merged data
     merged_df = clean_merged_data(merged_df)
 
+    # CRITICAL: Filter to MMST-ViT counties ONLY
+    target_fips = load_mmst_vit_counties()
+    if target_fips:
+        print(f"Filtering final data to MMST-ViT counties...")
+        before_count = len(merged_df)
+        before_counties = len(merged_df["fips"].unique())
+
+        # Convert target_fips to integers for comparison
+        target_fips_int = set(int(fips) for fips in target_fips)
+        merged_df = merged_df[merged_df["fips"].isin(target_fips_int)]
+
+        after_count = len(merged_df)
+        after_counties = len(merged_df["fips"].unique())
+
+        print(
+            f"Filtered from {before_count} records ({before_counties} counties) to {after_count} records ({after_counties} counties)"
+        )
+
+        if after_counties != 222:
+            print(f"WARNING: Expected 222 MMST-ViT counties but found {after_counties}")
+    else:
+        print("WARNING: Could not load MMST-ViT county list - keeping all data")
+
     # Print results
     print_merge_results(merged_df)
 
@@ -595,26 +618,32 @@ def save_final_data(final_df):
     print(f"Columns: {list(final_df.columns[:15])}...")  # Show first 15 columns
 
 
-def filter_records_with_yields(final_df):
-    """Filter out records where all crop yields are missing"""
-    print("Filtering records to keep only those with at least one crop yield...")
+def report_crop_yield_availability(final_df):
+    """Report on crop yield availability without filtering out records"""
+    print("Reporting crop yield availability (not filtering out any records)...")
 
     crop_cols = [col for col in final_df.columns if col.endswith("_yield")]
 
-    # Count records before filtering
-    records_before = len(final_df)
+    # Count records with and without yields
+    records_total = len(final_df)
+    records_with_yields = len(final_df[final_df[crop_cols].notna().any(axis=1)])
+    records_without_yields = records_total - records_with_yields
 
-    # Keep records where at least one crop yield is not null
-    final_df_filtered = final_df[final_df[crop_cols].notna().any(axis=1)]
+    print(f"Total records: {records_total}")
+    print(f"Records with at least one crop yield: {records_with_yields}")
+    print(f"Records with no crop yields: {records_without_yields}")
 
-    records_after = len(final_df_filtered)
-    records_removed = records_before - records_after
+    # Report by crop type
+    for crop_col in crop_cols:
+        if crop_col in final_df.columns:
+            non_null_count = final_df[crop_col].notna().sum()
+            null_count = final_df[crop_col].isna().sum()
+            print(f"  {crop_col}: {non_null_count} with data, {null_count} missing")
 
-    print(f"Records before filtering: {records_before}")
-    print(f"Records after filtering: {records_after}")
-    print(f"Records removed (no crop yields): {records_removed}")
-
-    return final_df_filtered
+    print(
+        "Note: All records (including those without crop yields) are preserved for weather data."
+    )
+    return final_df  # Return all data unchanged
 
 
 def print_detailed_summary(final_df):
@@ -722,14 +751,14 @@ def main():
     final_df = combine_data(weather_df, crop_df)
 
     if not final_df.empty:
-        # Filter records with yields
-        final_df_filtered = filter_records_with_yields(final_df)
+        # Report crop yield availability
+        final_df = report_crop_yield_availability(final_df)
 
         # Save final data
-        save_final_data(final_df_filtered)
+        save_final_data(final_df)
 
         # Print summary
-        print_final_summary(final_df_filtered)
+        print_final_summary(final_df)
     else:
         print("No data to save")
 

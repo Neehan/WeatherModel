@@ -47,60 +47,67 @@ class CropNetDataset(Dataset):
         # Mapping to pretraining dataset indices (31 weather vars total)
         self.weather_indices = torch.tensor([0, 1, 2, 4, 7, 8, 23, 30])
 
-        # Determine target year for prediction
-        if test_dataset:
-            target_year = test_year  # predict test_year
-            target_year_data = data[data["year"] == target_year]
-        else:
-            target_year = test_year - 1  # predict year before test_year
-            target_year_data = data
-
-        valid_counties = target_year_data["fips"].unique()
+        # STEP 1: Filter by counties that have crop_yield for test year (2021)
+        # Always filter by counties that have yield data for the test year
+        test_year_data = data[data["year"] == test_year]
+        valid_counties = test_year_data[test_year_data[self.crop_yield_col].notna()][
+            "fips"
+        ].unique()
         data = data[data["fips"].isin(valid_counties)].copy()
 
         logger.info(
-            f"Filtered to {len(valid_counties)} counties with yield data for target year {target_year}"
+            f"Filtered to {len(valid_counties)} counties with {self.crop_yield_col} data for test year {test_year}"
         )
 
-        # Forward fill yields within each county to handle missing historical data
+        # STEP 2: Forward fill missing values comprehensively
+        # Sort by county and year for proper forward filling
         data = data.sort_values(["fips", "year"])
+
+        # Forward fill crop yields within each county
         data[self.crop_yield_col] = data.groupby("fips")[self.crop_yield_col].ffill()
+
+        # Forward fill weather data within each county
+        for col in self.weather_cols:
+            if col in data.columns:
+                data[col] = data.groupby("fips")[col].ffill()
+
+        # Forward fill other columns
+        data["lat"] = data.groupby("fips")["lat"].ffill()
+        data["lon"] = data.groupby("fips")["lon"].ffill()
+        data["state"] = data.groupby("fips")["state"].ffill()
+        data["county"] = data.groupby("fips")["county"].ffill()
 
         # Check for any remaining missing data and warn
         missing_cols = data.columns[data.isnull().any()].tolist()
         if missing_cols:
-            logger.warning(f"Missing data found in columns: {missing_cols}")
+            logger.warning(
+                f"Missing data found in columns after forward filling: {missing_cols}"
+            )
 
-        # Handle test vs training dataset differently
+        # STEP 3: Average weather over county for both train and test datasets
+        # Aggregate by county (fips) and year - averaging weather data from multiple stations
+        agg_dict = {
+            "state": "first",
+            "county": "first",
+            "lat": "mean",  # Average coordinates across weather stations
+            "lon": "mean",
+            self.crop_yield_col: "first",  # Yield is the same for all stations in a county
+        }
+        for col in self.weather_cols:
+            if col in data.columns:
+                agg_dict[col] = "mean"  # Average weather across stations
+
+        # Aggregate by county and year for both train and test
+        data = data.groupby(["year", "fips"]).agg(agg_dict).reset_index()
+        # Use fips as location identifier for aggregated data
+        data["loc_id"] = data["fips"]
+
+        # Filter candidates based on dataset type
         if test_dataset:
-            # For test dataset: aggregate by county and year to average multiple weather stations
-            # First, filter to relevant years (we need historical data for lookups)
-            # Aggregate by county (fips) and year - averaging weather data from multiple stations
-            agg_dict = {
-                "state": "first",
-                "county": "first",
-                "lat": "mean",  # Average coordinates across weather stations
-                "lon": "mean",
-                self.crop_yield_col: "first",  # Yield is the same for all stations in a county
-            }
-            for col in self.weather_cols:
-                if col in data.columns:
-                    agg_dict[col] = "mean"  # Average weather across stations
-
-            # Aggregate by county and year
-            data = data.groupby(["year", "fips"]).agg(agg_dict).reset_index()
-            # Use fips as location identifier for aggregated data
-            data["loc_id"] = data["fips"]
-
-            # Now filter to test year for candidates
+            # For test dataset: only test year data
             candidate_data = data[data["year"] == test_year].copy()
         else:
-            # For training: keep duplicates (multiple weather stations per county)
-            # This provides more training data as requested
-            data = data.copy()
-            data["loc_id"] = data["lat"].astype(str) + "_" + data["lon"].astype(str)
-
-            # Filter by year range
+            # For training: filter by year range
             candidate_data = data[
                 (data["year"] >= start_year) & (data["year"] < test_year - test_gap)
             ].copy()
