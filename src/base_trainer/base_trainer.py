@@ -97,9 +97,10 @@ class BaseTrainer(ABC):
             train_loss = self._train_epoch(train_loader)
             val_loss = self._validate_epoch(val_loader)
 
-            # Update best validation loss
+            # Update best validation loss and save best model
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
+                self._save_best_model()
 
             if self.rank == 0:
                 self.logger.info(
@@ -512,3 +513,17 @@ class BaseTrainer(ABC):
         # mask 2 more features every 5 epochs up to 25
         additional_features = (epoch // 5) * 2
         return min(initial_n_masked_features + additional_features, 25)
+
+    def _save_best_model(self):
+        """Save the model with the best validation loss."""
+        if self.rank != 0:
+            return
+
+        model_to_save = self._get_underlying_model()
+        model_name = self.get_model_name()
+        best_model_path = self.model_dir + f"{model_name}_best.pth"
+
+        torch.save(model_to_save, best_model_path)
+        self.logger.info(
+            f"Saved best model with validation loss {self.best_val_loss:.4f} to {best_model_path}"
+        )

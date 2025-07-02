@@ -85,6 +85,12 @@ parser.add_argument(
     type=str,
     choices=["soybean", "corn", "winter_wheat"],
 )
+parser.add_argument(
+    "--test-year",
+    help="specific test year for single-year evaluation (if not provided, uses 5-fold cross validation)",
+    default=None,
+    type=int,
+)
 
 
 def main(args_dict=None):

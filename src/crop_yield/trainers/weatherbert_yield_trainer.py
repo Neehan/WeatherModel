@@ -51,6 +51,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         beta: float,
         use_cropnet: bool,
         crop_type: str,
+        test_year: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -77,14 +78,24 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             self.test_year = 2021
             self.logger.info(f"CropNet mode - Testing on year: {self.test_year}")
         else:
-            global FOLD_IDX
-            if FOLD_IDX >= len(TEST_YEARS):
-                raise ValueError(
-                    f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
+            if test_year is not None:
+                # Single test year mode
+                self.test_year = test_year
+                self.logger.info(
+                    f"Single test year mode - Testing on year: {self.test_year}"
                 )
-            self.test_year = TEST_YEARS[FOLD_IDX]
-            FOLD_IDX += 1
-            self.logger.info(f"Testing on year: {self.test_year}")
+            else:
+                # Cross-validation mode
+                global FOLD_IDX
+                if FOLD_IDX >= len(TEST_YEARS):
+                    raise ValueError(
+                        f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
+                    )
+                self.test_year = TEST_YEARS[FOLD_IDX]
+                FOLD_IDX += 1
+                self.logger.info(
+                    f"Cross-validation mode - Testing on year: {self.test_year}"
+                )
 
         # Cache for datasets to avoid recreation during cross-validation
         self.train_loader: Optional[DataLoader] = None
@@ -208,7 +219,7 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
 
     Args:
         args_dict: Arguments dictionary
-        cropnet_df: Optional CropNet DataFrame for CropNet training
+        use_cropnet: Whether to use CropNet training
     """
     # Get distributed training parameters
     rank = args_dict.get("rank", 0)
@@ -226,8 +237,13 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
     else:
         # Read soybean dataset
         crop_df = read_soybean_dataset(DATA_DIR)
-        # Use fixed k-fold cross validation with test years [2015, 2016, 2017, 2018]
-        cross_validation_k = len(TEST_YEARS)
+        # Check if specific test year is provided
+        if args_dict.get("test_year") is not None:
+            # Single test year mode
+            cross_validation_k = 1
+        else:
+            # Use fixed k-fold cross validation with test years [2014, 2015, 2016, 2017, 2018]
+            cross_validation_k = len(TEST_YEARS)
 
     return {
         "rank": rank,
@@ -238,6 +254,7 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
         "cross_validation_k": cross_validation_k,
         "beta": args_dict["beta"],
         "use_cropnet": use_cropnet,
+        "test_year": args_dict.get("test_year"),
     }
 
 
@@ -262,8 +279,8 @@ def _run_yield_cross_validation(
         extra_trainer_kwargs: Additional trainer-specific kwargs (optional)
         extra_model_kwargs: Additional model-specific kwargs (optional)
     """
-    # Reset fold index before starting new cross-validation (only for non-CropNet)
-    if not setup_params["use_cropnet"]:
+    # Reset fold index before starting new cross-validation (only for multi-fold cross-validation)
+    if not setup_params["use_cropnet"] and setup_params["test_year"] is None:
         _reset_fold_index()
 
     model_kwargs = {
@@ -285,6 +302,7 @@ def _run_yield_cross_validation(
         "beta": args_dict["beta"],
         "use_cropnet": setup_params["use_cropnet"],
         "crop_type": args_dict["crop_type"],
+        "test_year": setup_params["test_year"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],
