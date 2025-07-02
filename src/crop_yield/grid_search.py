@@ -42,7 +42,7 @@ class GridSearch:
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
         # Grid search parameters
-        self.beta_values = [0.0, 1e-4, 1e-3, 1e-2]
+        self.beta_values = [0.0, 1e-5, 1e-4, 1e-3]
         self.n_train_years_values = [5, 10, 20, 30]
 
         # Setup logging
