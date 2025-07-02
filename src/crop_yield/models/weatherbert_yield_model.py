@@ -78,6 +78,9 @@ class WeatherBERTYieldModel(BaseModel):
             weather_model = pretrained_model
         elif isinstance(pretrained_model, WeatherBERTYieldModel):
             weather_model = pretrained_model.weather_model
+            self.weather_attention = pretrained_model.weather_attention
+            self.yield_mlp = pretrained_model.yield_mlp
+
         else:
             raise ValueError(
                 f"provided model class: {pretrained_model.__class__.__name__} is not supported"
