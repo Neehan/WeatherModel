@@ -69,7 +69,7 @@ def weatherformer_mixture_yield_training_loop(args_dict, use_cropnet: bool):
         setup_params=setup_params,
         model_class=WeatherFormerMixtureYieldModel,
         trainer_class=WeatherFormerMixtureYieldTrainer,
-        model_name="weatherformer_mixture_yield",
+        model_name=f"weatherformer_mixture_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
         extra_trainer_kwargs=extra_trainer_kwargs,
         extra_model_kwargs=extra_model_kwargs,

@@ -65,7 +65,7 @@ def weatherformer_sinusoid_yield_training_loop(args_dict, use_cropnet: bool):
         setup_params=setup_params,
         model_class=WeatherFormerSinusoidYieldModel,
         trainer_class=WeatherFormerSinusoidYieldTrainer,
-        model_name="weatherformer_sinusoid_yield",
+        model_name=f"weatherformer_sinusoid_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
         extra_trainer_kwargs=extra_trainer_kwargs,
         extra_model_kwargs=extra_model_kwargs,

@@ -215,7 +215,7 @@ def weatherformer_yield_training_loop(args_dict, use_cropnet: bool):
         setup_params=setup_params,
         model_class=WeatherFormerYieldModel,
         trainer_class=WeatherFormerYieldTrainer,
-        model_name="weatherformer_yield",
+        model_name=f"weatherformer_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
         extra_trainer_kwargs=extra_trainer_kwargs,
     )

@@ -329,6 +329,6 @@ def weatherbert_yield_training_loop(args_dict, use_cropnet: bool):
         setup_params=setup_params,
         model_class=WeatherBERTYieldModel,
         trainer_class=WeatherBERTYieldTrainer,
-        model_name="weatherbert_yield",
+        model_name=f"weatherbert_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
     )

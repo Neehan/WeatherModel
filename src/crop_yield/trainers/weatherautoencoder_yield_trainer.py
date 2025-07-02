@@ -28,6 +28,6 @@ def weatherautoencoder_yield_training_loop(args_dict, use_cropnet: bool):
         setup_params=setup_params,
         model_class=WeatherAutoencoderYieldModel,
         trainer_class=WeatherAutoencoderYieldTrainer,
-        model_name="weatherautoencoder_yield",
+        model_name=f"weatherautoencoder_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
     )
