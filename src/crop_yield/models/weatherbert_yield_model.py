@@ -38,9 +38,7 @@ class WeatherBERTYieldModel(BaseModel):
         )
 
         self.yield_mlp = nn.Sequential(
-            nn.Linear(
-                weather_dim + n_past_years + 1 + 2, 120
-            ),  # weather_dim + past yields
+            nn.Linear(weather_dim + 1, 120),  # weather_dim + past yields
             nn.GELU(),
             nn.Linear(120, 1),
         )
@@ -76,14 +74,9 @@ class WeatherBERTYieldModel(BaseModel):
         period = torch.ones(
             batch_size, n_past_years - 1, device=y_past.device
         )  # batch_size x n_past_years (yearly intervals)
-
-        year, period, coord = normalize_year_interval_coords(year, period, coord)
-
         # Get seq model prediction
         seq_output = self.seq_model(year, coord, period, y_past)  # batch_size x 1
-        # batch size x num years
-        pred_y_past = torch.cat([y_past, seq_output], dim=1)
-        return pred_y_past
+        return seq_output
 
     def yield_model(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """
@@ -94,23 +87,16 @@ class WeatherBERTYieldModel(BaseModel):
         weather_feature_mask: batch_size x seq_len x weather_dim
         y_past: batch_size x n_past_years
         """
-
-        # first predict current year's yield from past yield alone
-        # y_past_augmented = self._get_seq_output(year, coord, interval, y_past)
         # Apply attention to reduce sequence dimension
         # Compute attention weights
         attention_weights = self.weather_attention(weather)  # batch_size x seq_len x 1
-        attention_weights = torch.softmax(
-            attention_weights, dim=1
-        )  # normalize across sequence
+        attention_weights = torch.softmax(attention_weights, dim=1)
 
-        # Apply attention to get weighted sum
-        weather_attended = torch.sum(
-            weather * attention_weights, dim=1
-        )  # batch_size x weather_dim
-        year, interval, coord = normalize_year_interval_coords(year, interval, coord)
+        # Apply attention to get weighted sum # batch_size x weather_dim
+        weather_attended = torch.sum(weather * attention_weights, dim=1)
+        seq_output = self._get_seq_output(year, coord, interval, y_past)
 
-        mlp_input = torch.cat([weather_attended, y_past, coord], dim=1)
+        mlp_input = torch.cat([weather_attended, seq_output], dim=1)
         return self.yield_mlp(mlp_input)
 
     def _impute_weather(self, original_weather, imputed_weather, weather_feature_mask):
