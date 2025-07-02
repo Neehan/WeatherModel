@@ -11,22 +11,19 @@ class SeqDataset(Dataset):
     def __init__(
         self,
         data: pd.DataFrame,
-        known_years: int,
-        total_years: int,
+        n_past_years: int,
         yield_stats: Optional[Dict] = None,
     ):
         """
-        Dataset for corn yield sequence prediction with masked yields.
+        Dataset for corn yield sequence prediction.
 
         Args:
             data: DataFrame with columns [Year, State, County, Value]
-            known_years: Number of known datapoints in the small history
-            total_years: Total sequence length after backward expansion
+            n_past_years: Number of past years to use for prediction
             yield_stats: Pre-computed yield statistics (mean, std)
         """
         self.data = data.copy()
-        self.known_years = known_years
-        self.total_years = total_years
+        self.n_past_years = n_past_years
 
         # Create sequences by county
         self.sequences = self._create_sequences()
@@ -40,22 +37,25 @@ class SeqDataset(Dataset):
         # Setup yield standardization
         if yield_stats is None:
             self.yield_stats = {}
-            self._compute_yield_stats()
+            if yield_stats is None:
+                self._compute_yield_stats()
         else:
             self.yield_stats = yield_stats
 
-        # Standardize yield data
+        # Standardize yield data only
         self._standardize_yields()
 
     def _create_sequences(self) -> List[Dict]:
-        """Create sequences of yield data for each county with masking."""
+        """Create sequences of yield data for each county."""
         sequences = []
 
         # Group by state and county
         grouped = self.data.groupby(["State", "County"])
 
         for (state, county), group in grouped:
-            if len(group) < self.total_years:  # Need at least total_years data points
+            if (
+                len(group) < self.n_past_years + 1
+            ):  # Need at least n_past_years + 1 data points
                 continue
 
             # Sort by year
@@ -66,46 +66,28 @@ class SeqDataset(Dataset):
             lat = group["lat"].iloc[0]
             lng = group["lng"].iloc[0]
 
-            # Create sequences - for each possible set of total_years consecutive points
-            for i in range(len(years) - self.total_years + 1):
-                # Take total_years consecutive points
-                all_years = years[i : i + self.total_years]
-                all_yields = yields[i : i + self.total_years]
+            # Create sequences - for each possible target year, use exactly n_past_years historical points
+            for i in range(self.n_past_years, len(years)):
+                # Use exactly n_past_years historical points
+                past_years = years[i - self.n_past_years : i]
+                past_yields = yields[i - self.n_past_years : i]
+                target_year = years[i]
+                target_yield = yields[i]
 
-                # Create full sequence with known and unknown yields
-                full_yields = np.zeros(self.total_years)
-                mask = np.zeros(
-                    self.total_years, dtype=bool
-                )  # True for known positions
-
-                # Place known yields at the END of the sequence (recent years)
-                known_positions = np.arange(
-                    self.total_years - self.known_years, self.total_years
-                )
-                known_yields = all_yields[
-                    -self.known_years :
-                ]  # Last known_years yields
-                full_yields[known_positions] = known_yields
-                mask[known_positions] = True
-
-                # Fill in the actual yields for the unknown positions (historical years for loss computation)
-                unknown_positions = np.arange(0, self.total_years - self.known_years)
-                unknown_yields = all_yields[
-                    : self.total_years - self.known_years
-                ]  # First (total_years - known_years) yields
-                full_yields[unknown_positions] = unknown_yields
-
-                # Calculate periods between consecutive years (all 1 for yearly data)
-                periods = np.ones(self.total_years - 1)
+                # Calculate periods between points
+                periods = np.diff(past_years)
+                if len(periods) == 0:
+                    periods = np.array([1])  # Default period for single point
 
                 sequences.append(
                     {
                         "state": state,
                         "county": county,
-                        "years": all_years,
-                        "yields": full_yields,
-                        "mask": mask,  # True for known yields, False for masked yields
+                        "past_years": past_years,
+                        "past_yields": past_yields,
                         "periods": periods,
+                        "target_year": target_year,
+                        "target_yield": target_yield,
                         "lat": lat,
                         "lng": lng,
                     }
@@ -118,21 +100,20 @@ class SeqDataset(Dataset):
         all_yields = []
 
         for seq in self.sequences:
-            # Only use known yields for computing statistics
-            known_mask = seq["mask"]
-            known_yields = seq["yields"][known_mask]
-            all_yields.extend(known_yields)
+            all_yields.extend(seq["past_yields"])
+            all_yields.append(seq["target_yield"])
 
         all_yields = np.array(all_yields)
         self.yield_stats = {"mean": np.mean(all_yields), "std": np.std(all_yields)}
 
     def _standardize_yields(self):
-        """Standardize yield values."""
+        """Standardize yield values only."""
         mean = self.yield_stats["mean"]
         std = self.yield_stats["std"]
 
         for seq in self.sequences:
-            seq["yields_std"] = (seq["yields"] - mean) / std
+            seq["past_yields_std"] = (seq["past_yields"] - mean) / std
+            seq["target_yield_std"] = (seq["target_yield"] - mean) / std
 
     def __len__(self):
         return len(self.sequences)
@@ -140,34 +121,29 @@ class SeqDataset(Dataset):
     def __getitem__(self, idx):
         """
         Return a sequence sample.
-        Model expects: year, coords, period, yield, mask
+        Model expects: year, coords, period, past_yield
+        Each should be [batch_size, seq_len] tensors except coords which is [batch_size, seq_len, 2]
         """
         seq = self.sequences[idx]
-        seq_len = self.total_years
+        seq_len = len(seq["past_years"])
 
-        # Prepare input tensors
-        years = torch.tensor(seq["years"], dtype=torch.float32)
-
+        # Prepare input tensors - keep raw values for year, coords, period
+        years = torch.tensor(seq["past_years"], dtype=torch.float32)
         # Use actual lat/lng coordinates for this county
         coords = torch.full((seq_len, 2), fill_value=0.0, dtype=torch.float32)
         coords[:, 0] = seq["lat"]  # latitude
         coords[:, 1] = seq["lng"]  # longitude
 
         # For periods, pad with 0 for first element
-        periods_padded = np.concatenate([[0], seq["periods"]])
+        periods_padded = np.concatenate([[0], seq["periods"]])[:seq_len]
         periods = torch.tensor(periods_padded, dtype=torch.float32)
 
-        # Yields (standardized values)
-        yields = torch.tensor(seq["yields_std"], dtype=torch.float32)
+        # Only standardize yields
+        past_yields = torch.tensor(seq["past_yields_std"], dtype=torch.float32)
 
-        # Mask for known vs unknown yields (True = known, False = masked/unknown)
-        yield_mask = torch.tensor(seq["mask"], dtype=torch.bool)
+        target_yield = torch.tensor(seq["target_yield_std"], dtype=torch.float32)
 
-        # Create padding mask for transformer (True = padding, False = valid)
-        # All positions are valid in our case since we have full sequences
-        padding_mask = torch.zeros(seq_len, dtype=torch.bool)
-
-        return years, coords, periods, yields, yield_mask, padding_mask
+        return years, coords, periods, past_yields, target_yield
 
 
 class SeqDataloader:
@@ -176,25 +152,22 @@ class SeqDataloader:
         crop_type: str,
         batch_size: int,
         test_year_cutoff: int,
-        known_years: int,
-        total_years: int,
+        n_past_years: int,
     ):
         """
-        Dataloader for crop yield sequence data with masking.
+        Dataloader for crop yield sequence data.
 
         Args:
             crop_type: Type of crop (e.g., 'corn', 'winter_wheat')
             batch_size: Batch size for dataloaders
             test_year_cutoff: Years > this value go to test set
-            known_years: Number of known datapoints in the small history
-            total_years: Total sequence length after backward expansion
+            n_past_years: Number of past years to use for each prediction
         """
         self.crop_type = crop_type
         self.data_path = f"data/USDA/{crop_type}_yield_processed.csv"
         self.batch_size = batch_size
         self.test_year_cutoff = test_year_cutoff
-        self.known_years = known_years
-        self.total_years = total_years
+        self.n_past_years = n_past_years
 
         # Load data
         self.data = pd.read_csv(self.data_path)
@@ -204,17 +177,13 @@ class SeqDataloader:
 
         # Create datasets once during initialization
         self.train_dataset = SeqDataset(
-            self.train_data,
-            known_years=self.known_years,
-            total_years=self.total_years,
-            yield_stats=None,
+            self.train_data, n_past_years=self.n_past_years, yield_stats=None
         )
 
         # Create test dataset using train yield statistics
         self.test_dataset = SeqDataset(
             self.test_data,
-            known_years=self.known_years,
-            total_years=self.total_years,
+            n_past_years=self.n_past_years,
             yield_stats=self.train_dataset.yield_stats,
         )
 
