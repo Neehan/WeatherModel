@@ -229,6 +229,19 @@ def split_train_test_by_year(
     data = soybean_df[
         soybean_df["year"] > 1981.0
     ].copy()  # must be > 1981 otherwise all past data is just 0
+
+    # Drop rows with missing yield values for the given crop
+    yield_col = f"{crop_type}_yield"
+    rows_before = len(data)
+    data = data.dropna(subset=[yield_col])
+    rows_after = len(data)
+    rows_dropped = rows_before - rows_after
+
+    if rows_dropped > 0:
+        print(
+            f"Dropped {rows_dropped} rows with missing {yield_col} values ({rows_before} -> {rows_after} rows)"
+        )
+
     if standardize:
         cols_to_standardize = [
             col
@@ -254,7 +267,6 @@ def split_train_test_by_year(
         data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
 
         # save crop-specific yield statistics from constants
-        yield_col = f"{crop_type}_yield"
         train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
         yield_mean, yield_std = (
             train_data[yield_col].mean(),

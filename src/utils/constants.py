@@ -25,6 +25,10 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
+    "winter_wheat": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31
