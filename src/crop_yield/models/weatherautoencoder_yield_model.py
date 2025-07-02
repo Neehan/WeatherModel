@@ -11,13 +11,10 @@ class WeatherAutoencoderYieldModel(WeatherBERTYieldModel):
         device: torch.device,
         weather_dim: int,
         n_past_years: int,
-        crop_type: str,
         **model_size_params,
     ):
         # Call parent constructor but override the weather model
-        super().__init__(
-            name, device, weather_dim, n_past_years, crop_type, **model_size_params
-        )
+        super().__init__(name, device, weather_dim, n_past_years, **model_size_params)
 
         # Replace WeatherBERT with WeatherAutoencoder
         self.weather_model = WeatherAutoencoder(

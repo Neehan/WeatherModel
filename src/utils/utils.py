@@ -42,10 +42,10 @@ def get_scheduler(optimizer, num_warmup_epochs, total_epochs, decay_factor=None)
 
 
 def normalize_year_interval_coords(year, interval, coords):
-    # create copy to avoid in place modification
-    year, interval, coords = year.clone(), interval.clone(), coords.clone()
     year = (year - 1970) / 100.0
     interval = interval / 30.0
+    # Create a copy to avoid in-place modification
+    coords = coords.clone()
     coords[:, 0] = coords[:, 0] / 360.0
     coords[:, 1] = coords[:, 1] / 180.0
     return year, interval, coords
@@ -109,11 +109,10 @@ def parse_args(parser: ArgumentParser) -> dict:
     for arg, value in args_dict.items():
         logger.info(f"{arg}: {value}")
 
-    if hasattr(args, "model_size"):
-        # Model size configuration
-        model_size = args.model_size.lower()
-        model_size_params = get_model_params(model_size)
+    # Model size configuration
+    model_size = args.model_size.lower()
+    model_size_params = get_model_params(model_size)
 
-        args_dict["model_size_params"] = model_size_params
+    args_dict["model_size_params"] = model_size_params
 
     return args_dict
