@@ -129,7 +129,7 @@ class WeatherBERTYieldModel(BaseModel):
             )
 
         self.weather_model.load_pretrained(weather_model, load_out_proj=True)
-        self._load_pretrained_seq_model()
+        # self._load_pretrained_seq_model()
 
     def forward(self, weather, coord, year, interval, weather_feature_mask, y_past):
         """
