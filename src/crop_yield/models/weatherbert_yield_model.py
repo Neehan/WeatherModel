@@ -25,13 +25,6 @@ class WeatherBERTYieldModel(BaseModel):
             device=device,
             **model_size_params,
         )
-        # self.yield_model = WeatherCNNYieldModel(
-        #     name=f"{name}_cnn",
-        #     device=device,
-        #     weather_dim=weather_dim,
-        #     n_past_years=n_past_years,
-        #     **model_size_params,
-        # )
         # Attention mechanism to reduce sequence dimension
         self.weather_attention = nn.Sequential(
             nn.Linear(weather_dim, 16), nn.GELU(), nn.Linear(16, 1)
