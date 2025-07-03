@@ -127,7 +127,6 @@ class CropDataset(Dataset):
             if len(y_past) <= 1:
                 raise ValueError(
                     f"Only 1 year of yield data for location {loc_ID} in year {year}. "
-                    f"y_past value set to -5."
                 )
             # the current year's yield is the target variable, so replace it with last year's yield
             y_past[-1] = y_past[-2]
