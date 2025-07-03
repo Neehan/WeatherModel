@@ -51,10 +51,10 @@ def normalize_year_interval_coords(year, interval, coords):
     interval = interval / 30.0
     # Create a copy to avoid in-place modification
     coords = coords.clone()
-    # goes from -90 to 90 so new range is [0, 1]
-    coords[:, 0] = (coords[:, 0] + 90.0) / 180.0
-    # goes from -180 to 180 so new range [0, 1]
-    coords[:, 1] = (coords[:, 1] + 180.0) / 360.0
+    # goes from -90 to 90 so new range is [-1, 1]
+    coords[:, 0] = coords[:, 0] / 90.0
+    # goes from -180 to 180 so new range [-1, 1]
+    coords[:, 1] = coords[:, 1] / 180.0
     return year, interval, coords
 
 
