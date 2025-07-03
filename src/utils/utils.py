@@ -45,15 +45,11 @@ def normalize_year_interval_coords(year, interval, coords):
     """
     Normalize year, interval, and coordinates to be used in the model.
     """
-    # year is between 1980 and 2020
-    # so this makes the range [0, 1] for 50 years
-    year = (year - 1980) / 50.0
+    year = (year - 1970) / 100.0
     interval = interval / 30.0
     # Create a copy to avoid in-place modification
     coords = coords.clone()
-    # goes from -90 to 90 so new range is [-1, 1]
-    coords[:, 0] = coords[:, 0] / 90.0
-    # goes from -180 to 180 so new range [-1, 1]
+    coords[:, 0] = coords[:, 0] / 360.0
     coords[:, 1] = coords[:, 1] / 180.0
     return year, interval, coords
 
