@@ -19,7 +19,7 @@ parser.add_argument(
 )
 parser.add_argument("--batch-size", help="batch size", default=64, type=int)
 parser.add_argument(
-    "--n-past-years", help="number of past years to look at", default=4, type=int
+    "--n-past-years", help="number of past years to look at", default=3, type=int
 )
 parser.add_argument(
     "--n-epochs", help="number of training epochs", default=40, type=int
