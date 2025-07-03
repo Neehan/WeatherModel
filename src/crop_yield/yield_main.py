@@ -207,7 +207,8 @@ def main(args_dict=None):
         f"Final average R² for {args_dict['crop_type']}: {avg_r_squared:.3f} ± {std_r_squared:.3f}"
     )
 
-    return avg_best_rmse, std_best_rmse, avg_r_squared, std_r_squared
+    # Return individual R² values in addition to aggregated statistics
+    return avg_best_rmse, std_best_rmse, avg_r_squared, std_r_squared, r_squared_values
 
 
 if __name__ == "__main__":

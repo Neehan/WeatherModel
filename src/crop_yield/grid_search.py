@@ -4,7 +4,8 @@ import torch
 import argparse
 import pandas as pd
 import copy
-from typing import Dict, Tuple, Optional
+import json
+from typing import Dict, Tuple, Optional, List
 
 from src.crop_yield.yield_main import main as yield_main_func
 from src.utils.utils import setup_logging, get_model_params
@@ -42,8 +43,8 @@ class GridSearch:
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
         # Grid search parameters
-        self.beta_values = [0.0, 1e-5, 1e-4, 1e-3]
-        self.n_train_years_values = [5, 10, 20, 30]
+        self.beta_values = [0.0, 1e-4, 1e-3]
+        self.n_train_years_values = [5, 15, 30]
 
         # Setup logging
         setup_logging(rank=0)
@@ -52,6 +53,7 @@ class GridSearch:
         # Setup output
         os.makedirs(output_dir, exist_ok=True)
         self.output_file = self._get_output_filename()
+        self.detailed_output_file = self._get_detailed_output_filename()
 
         # Load existing results for resume functionality
         self.existing_results = self._load_existing_results()
@@ -60,10 +62,20 @@ class GridSearch:
             f"Initialized GridSearch for {model} ({'with' if load_pretrained else 'without'} pretraining) on {crop_type}"
         )
         self.logger.info(f"Results will be saved to: {self.output_file}")
+        self.logger.info(
+            f"Detailed results will be saved to: {self.detailed_output_file}"
+        )
 
     def _get_output_filename(self) -> str:
         """Generate output filename based on model and pretrained setting"""
         filename = f"grid_search_{self.model}_{self.method}_{self.crop_type}.tsv"
+        return os.path.join(self.output_dir, filename)
+
+    def _get_detailed_output_filename(self) -> str:
+        """Generate detailed output filename for individual R² values"""
+        filename = (
+            f"grid_search_{self.model}_{self.method}_{self.crop_type}_detailed.json"
+        )
         return os.path.join(self.output_dir, filename)
 
     def _load_existing_results(self) -> pd.DataFrame:
@@ -143,9 +155,13 @@ class GridSearch:
 
         return base_config
 
-    def _run_single_experiment(
-        self, config: Dict
-    ) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    def _run_single_experiment(self, config: Dict) -> Tuple[
+        Optional[float],
+        Optional[float],
+        Optional[float],
+        Optional[float],
+        Optional[List[float]],
+    ]:
         """Run a single experiment with given configuration"""
         experiment_name = (
             f"{config['model']}_beta_{config['beta']}_years_{config['n_train_years']}_"
@@ -155,19 +171,26 @@ class GridSearch:
         self.logger.info(f"Starting experiment: {experiment_name}")
 
         try:
-            avg_rmse, std_rmse, avg_r2, std_r2 = yield_main_func(config)
+            avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = yield_main_func(
+                config
+            )
             self.logger.info(
                 f"Completed {experiment_name}: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
             )
-            return avg_rmse, std_rmse, avg_r2, std_r2
+            return avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values
         except Exception as e:
             self.logger.error(f"Failed experiment {experiment_name}: {str(e)}")
-            return None, None, None, None
+            return None, None, None, None, None
 
-    def _run_beta_experiments(
-        self, beta: float
-    ) -> Dict[
-        int, Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]
+    def _run_beta_experiments(self, beta: float) -> Dict[
+        int,
+        Tuple[
+            Optional[float],
+            Optional[float],
+            Optional[float],
+            Optional[float],
+            Optional[List[float]],
+        ],
     ]:
         """Run experiments for a single beta value across all year values"""
         base_config = self._get_base_config()
@@ -186,8 +209,16 @@ class GridSearch:
             config = copy.deepcopy(base_config)
             config["n_train_years"] = n_train_years
 
-            avg_rmse, std_rmse, avg_r2, std_r2 = self._run_single_experiment(config)
-            results[n_train_years] = (avg_rmse, std_rmse, avg_r2, std_r2)
+            avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = (
+                self._run_single_experiment(config)
+            )
+            results[n_train_years] = (
+                avg_rmse,
+                std_rmse,
+                avg_r2,
+                std_r2,
+                r_squared_values,
+            )
 
         return results
 
@@ -196,10 +227,16 @@ class GridSearch:
         beta: float,
         results: Dict[
             int,
-            Tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
+            Tuple[
+                Optional[float],
+                Optional[float],
+                Optional[float],
+                Optional[float],
+                Optional[List[float]],
+            ],
         ],
     ):
-        """Save experiment results to TSV file"""
+        """Save experiment results to TSV file and detailed JSON file"""
         if not results:  # No new results to save
             return
 
@@ -217,7 +254,13 @@ class GridSearch:
             if mask.any():
                 # Update existing row with only the new results
                 row_idx = df[mask].index[0]
-                for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
+                for n_years, (
+                    mean_rmse,
+                    std_rmse,
+                    mean_r2,
+                    std_r2,
+                    r_squared_values,
+                ) in results.items():
                     year_col = f"year_{n_years}"
                     year_r2_col = f"year_{n_years}_r2"
                     if mean_rmse is not None and std_rmse is not None:
@@ -229,7 +272,13 @@ class GridSearch:
             else:
                 # Create new row with only the attempted experiments
                 new_row = {"model": self.model, "method": self.method, "beta": beta}
-                for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
+                for n_years, (
+                    mean_rmse,
+                    std_rmse,
+                    mean_r2,
+                    std_r2,
+                    r_squared_values,
+                ) in results.items():
                     year_col = f"year_{n_years}"
                     year_r2_col = f"year_{n_years}_r2"
                     if mean_rmse is not None and std_rmse is not None:
@@ -244,7 +293,13 @@ class GridSearch:
         else:
             # Empty DataFrame - create new row with only attempted experiments
             new_row = {"model": self.model, "method": self.method, "beta": beta}
-            for n_years, (mean_rmse, std_rmse, mean_r2, std_r2) in results.items():
+            for n_years, (
+                mean_rmse,
+                std_rmse,
+                mean_r2,
+                std_r2,
+                r_squared_values,
+            ) in results.items():
                 year_col = f"year_{n_years}"
                 year_r2_col = f"year_{n_years}_r2"
                 if mean_rmse is not None and std_rmse is not None:
@@ -259,7 +314,79 @@ class GridSearch:
 
         # Save to file
         df.to_csv(self.output_file, sep="\t", index=False)
+
+        # Save detailed results with individual R² values
+        self._save_detailed_results(beta, results)
+
         self.logger.info(f"Saved results for beta={beta}")
+
+    def _save_detailed_results(
+        self,
+        beta: float,
+        results: Dict[
+            int,
+            Tuple[
+                Optional[float],
+                Optional[float],
+                Optional[float],
+                Optional[float],
+                Optional[List[float]],
+            ],
+        ],
+    ):
+        """Save detailed results with individual R² values to JSON file"""
+        # Load existing detailed results
+        detailed_results = self._load_detailed_results()
+
+        # Create experiment key
+        experiment_key = f"{self.model}_{self.method}_{self.crop_type}_beta_{beta}"
+
+        if experiment_key not in detailed_results:
+            detailed_results[experiment_key] = {}
+
+        # Save individual R² values for each year configuration
+        for n_years, (
+            mean_rmse,
+            std_rmse,
+            mean_r2,
+            std_r2,
+            r_squared_values,
+        ) in results.items():
+            year_key = f"year_{n_years}"
+            if r_squared_values is not None:
+                detailed_results[experiment_key][year_key] = {
+                    "mean_rmse": mean_rmse,
+                    "std_rmse": std_rmse,
+                    "mean_r2": mean_r2,
+                    "std_r2": std_r2,
+                    "individual_r2_values": r_squared_values,
+                    "fold_count": len(r_squared_values),
+                }
+            else:
+                detailed_results[experiment_key][year_key] = {
+                    "mean_rmse": None,
+                    "std_rmse": None,
+                    "mean_r2": None,
+                    "std_r2": None,
+                    "individual_r2_values": None,
+                    "fold_count": 0,
+                    "status": "FAILED",
+                }
+
+        # Save detailed results to JSON file
+        with open(self.detailed_output_file, "w") as f:
+            json.dump(detailed_results, f, indent=2)
+
+    def _load_detailed_results(self) -> Dict:
+        """Load existing detailed results if file exists"""
+        if os.path.exists(self.detailed_output_file):
+            try:
+                with open(self.detailed_output_file, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                self.logger.warning(f"Could not load existing detailed results: {e}")
+                return {}
+        return {}
 
     def run(self):
         """Run the complete grid search"""
@@ -308,12 +435,20 @@ class GridSearch:
                 base_config["beta"] = beta
                 base_config["n_train_years"] = n_train_years
 
-                avg_rmse, std_rmse, avg_r2, std_r2 = self._run_single_experiment(
-                    base_config
+                avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = (
+                    self._run_single_experiment(base_config)
                 )
 
                 # Save result immediately
-                results = {n_train_years: (avg_rmse, std_rmse, avg_r2, std_r2)}
+                results = {
+                    n_train_years: (
+                        avg_rmse,
+                        std_rmse,
+                        avg_r2,
+                        std_r2,
+                        r_squared_values,
+                    )
+                }
                 self._save_results(beta, results)
 
                 completed_experiments += 1
@@ -326,6 +461,9 @@ class GridSearch:
             f"Completed: {completed_experiments}, Skipped: {skipped_experiments}"
         )
         self.logger.info(f"Results saved to: {self.output_file}")
+        self.logger.info(
+            f"Detailed results with individual R² values saved to: {self.detailed_output_file}"
+        )
 
 
 def setup_args() -> argparse.Namespace:
