@@ -45,7 +45,7 @@ def normalize_year_interval_coords(year, interval, coords):
     """
     Normalize year, interval, and coordinates to be used in the model.
     """
-    year = (year - 1970) / 50.0
+    year = (year - 1970) / 100.0
     interval = interval / 30.0
     # Create a copy to avoid in-place modification
     coords = coords.clone()
