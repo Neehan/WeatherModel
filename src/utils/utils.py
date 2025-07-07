@@ -69,9 +69,9 @@ def normalize_year_interval_coords(year, interval, coords):
     # Create a copy to avoid in-place modification
     coords = coords.clone()
     # bring both of them in the same range
-    # training dataset covers 2x more lat than lng
-    coords[:, 0] = coords[:, 0] / 180.0
-    coords[:, 1] = (coords[:, 1] + 75.0) / 180.0
+    # training dataset covers ~1.25x more lat than lng these stds bring them to same range
+    coords[:, 0] = coords[:, 0] / 30.0
+    coords[:, 1] = (coords[:, 1] + 75.0) / 24.0
     return year, interval, coords
 
 

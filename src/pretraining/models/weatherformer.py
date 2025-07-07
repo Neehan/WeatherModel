@@ -1,6 +1,9 @@
+import copy
+from typing import Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple
+
 from src.pretraining.models.weatherbert import WeatherBERT
 from src.utils.constants import MAX_CONTEXT_LENGTH
 
@@ -37,6 +40,22 @@ class WeatherFormer(WeatherBERT):
         # Override the output projection to be 2x the size for mu and sigma
         hidden_dim = hidden_dim_factor * num_heads
         self.out_proj = nn.Linear(hidden_dim, 2 * output_dim)
+
+    def load_pretrained(
+        self,
+        pretrained_model: Union["WeatherBERT", "WeatherFormer"],
+        load_out_proj: bool = True,
+    ):
+        """Load weights from a pretrained WeatherBERT model by deep copying each layer."""
+        if isinstance(pretrained_model, WeatherFormer):
+            super().load_pretrained(pretrained_model, load_out_proj=load_out_proj)
+        elif isinstance(pretrained_model, WeatherBERT):
+            # if weatherbert but not weatherformer, don't load output layer since the output proj layer won't match
+            super().load_pretrained(pretrained_model, load_out_proj=False)
+        else:
+            raise ValueError(
+                f"Expected pretrained model to be either WeatherBERT or WeatherFormer, but got {type(pretrained_model)}"
+            )
 
     def forward(
         self,

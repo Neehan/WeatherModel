@@ -10,6 +10,9 @@ DATA_DIR = "data/nasa_power"
 
 # USA regions only (file IDs 0-33 based on the current dataloader pattern)
 USA_REGIONS = [f"usa_{i}" for i in range(len(GRID["USA"]))]
+CORN_BELT_REGION_IDS = [2, 3, 7, 8, 9, 13, 14, 15, 16, 21, 22, 23, 24, 28, 29]
+USA_REGIONS = [f"usa_{i}" for i in CORN_BELT_REGION_IDS]
+
 
 # Central America regions only (file IDs 34-43 based on the current dataloader pattern)
 CENTRAL_AMERICA_REGIONS = [
@@ -63,9 +66,9 @@ def compute_weekly_scalers():
 
     # Process USA and Central America regions
     process_regions(USA_REGIONS, "USA", "usa", weekly_data)
-    process_regions(
-        CENTRAL_AMERICA_REGIONS, "Central America", "centralamerica", weekly_data
-    )
+    # process_regions(
+    #     CENTRAL_AMERICA_REGIONS, "Central America", "centralamerica", weekly_data
+    # )
     print("Computing statistics per week per feature...")
 
     # Compute mean and std for each week and parameter
