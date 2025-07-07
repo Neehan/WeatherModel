@@ -71,7 +71,7 @@ def normalize_year_interval_coords(year, interval, coords):
     # bring both of them in the same range
     # training dataset covers 2x more lat than lng
     coords[:, 0] = coords[:, 0] / 180.0
-    coords[:, 1] = (coords[:, 1] + 90.0) / 180.0
+    coords[:, 1] = (coords[:, 1] + 75.0) / 180.0
     return year, interval, coords
 
 
