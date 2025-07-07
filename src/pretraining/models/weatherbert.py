@@ -24,7 +24,9 @@ class WeatherBERT(BaseModel):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim  # weather (normalized) + (year-1970)/100 + coords
+        self.input_dim = (
+            weather_dim + 1
+        )  # weather (normalized) + (year-1970)/100 + coords
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -34,7 +36,7 @@ class WeatherBERT(BaseModel):
         self.in_proj = nn.Linear(self.input_dim, hidden_dim)
 
         self.spatiotemporal_embedding = nn.Sequential(
-            nn.Linear(3, hidden_dim // 2),  # 2 for coords + 1 for year
+            nn.Linear(2, hidden_dim // 2),  # 2 for coords + 1 for year
             nn.GELU(),
             nn.Linear(hidden_dim // 2, hidden_dim),
         )
@@ -110,8 +112,8 @@ class WeatherBERT(BaseModel):
         # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
 
-        sp_embed = self.spatiotemporal_embedding(torch.cat([year, coords], dim=2))
-        input_tensor = self.in_proj(weather) + sp_embed
+        sp_embed = self.spatiotemporal_embedding(coords)
+        input_tensor = self.in_proj(torch.cat([weather, year], dim=2)) + sp_embed
         input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(
             input_tensor, src_key_padding_mask=src_key_padding_mask
