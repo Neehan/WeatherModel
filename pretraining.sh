@@ -13,10 +13,44 @@
 module load miniforge/24.3.0-0
 
 echo "======== Starting Single-Node Multi-GPU Training ========"
-torchrun \
-  --nnodes=1 \
-  --nproc-per-node=4 \
-  --rdzv_id=$SLURM_JOB_ID \
-  --rdzv_backend=c10d \
-  --rdzv_endpoint=localhost:29500 \
-  -m src.pretraining.pretraining_main "$@"
+
+# Extract model names from arguments
+models=()
+other_args=()
+collecting_models=true
+
+# Parse arguments: first args are model names, then -- args are parameters
+for arg in "$@"; do
+    if [[ $arg == --* ]]; then
+        collecting_models=false
+        other_args+=("$arg")
+    elif $collecting_models; then
+        models+=("$arg")
+    else
+        other_args+=("$arg")
+    fi
+done
+
+# If no models specified, default to weatherformer
+if [ ${#models[@]} -eq 0 ]; then
+    models=("weatherformer")
+fi
+
+echo "Training models: ${models[*]}"
+echo "Other arguments: ${other_args[*]}"
+
+# Train each model
+for model in "${models[@]}"; do
+    echo "======== Training model: $model ========"
+    torchrun \
+      --nnodes=1 \
+      --nproc-per-node=4 \
+      --rdzv_id=$SLURM_JOB_ID \
+      --rdzv_backend=c10d \
+      --rdzv_endpoint=localhost:29500 \
+      -m src.pretraining.pretraining_main --model "$model" "${other_args[@]}"
+    
+    echo "======== Completed training for model: $model ========"
+done
+
+echo "======== All models training completed ========"

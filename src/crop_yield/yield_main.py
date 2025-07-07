@@ -30,7 +30,7 @@ parser.add_argument(
 parser.add_argument(
     "--decay_factor",
     help="learning rate exponential decay factor",
-    default=0.95,
+    default=None,
     type=float,
 )
 parser.add_argument(
@@ -45,7 +45,7 @@ parser.add_argument(
 parser.add_argument(
     "--model-size",
     help="model size mini (60k) small (2M), medium (8M), and large (56M)",
-    default="mini",
+    default="small",
     type=str,
 )
 parser.add_argument(
@@ -75,7 +75,7 @@ parser.add_argument(
 parser.add_argument(
     "--n-mixture-components",
     help="number of gaussian mixture components for WeatherFormerMixture model",
-    default=3,
+    default=1,
     type=int,
 )
 parser.add_argument(

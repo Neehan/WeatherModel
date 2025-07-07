@@ -10,13 +10,13 @@ import math
 
 def get_scheduler(optimizer, num_warmup_epochs, total_epochs, decay_factor=None):
     """
-    Create a learning rate scheduler with warmup followed by cosine annealing.
+    Create a learning rate scheduler with warmup followed by cosine or exponential annealing.
 
     Args:
         optimizer: PyTorch optimizer
         num_warmup_epochs: Number of epochs for linear warmup
         total_epochs: Total number of training epochs
-        decay_factor: Kept for backward compatibility, not used in cosine annealing
+        decay_factor: If None, use cosine annealing. If provided, use exponential annealing with this decay factor.
 
     Returns:
         PyTorch LR scheduler
@@ -36,9 +36,28 @@ def get_scheduler(optimizer, num_warmup_epochs, total_epochs, decay_factor=None)
 
         return lr_function
 
-    return optim.lr_scheduler.LambdaLR(
-        optimizer, _cosine_annealing_lr(num_warmup_epochs, total_epochs)
-    )
+    def _exponential_annealing_lr(num_warmup_epochs, total_epochs, decay_factor):
+        def lr_function(current_epoch):
+            if current_epoch < num_warmup_epochs:
+                # Linear warmup
+                return float(current_epoch) / float(max(1, num_warmup_epochs))
+            else:
+                # Exponential annealing after warmup
+                epochs_after_warmup = current_epoch - num_warmup_epochs
+                return decay_factor**epochs_after_warmup
+
+        return lr_function
+
+    if decay_factor is None:
+        # Use cosine annealing
+        lr_lambda = _cosine_annealing_lr(num_warmup_epochs, total_epochs)
+    else:
+        # Use exponential annealing
+        lr_lambda = _exponential_annealing_lr(
+            num_warmup_epochs, total_epochs, decay_factor
+        )
+
+    return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
 def normalize_year_interval_coords(year, interval, coords):
@@ -49,6 +68,8 @@ def normalize_year_interval_coords(year, interval, coords):
     interval = interval / 30.0
     # Create a copy to avoid in-place modification
     coords = coords.clone()
+    # coords[:, 0] = (coords[:, 0] - 33.773) / 9.750
+    # coords[:, 1] = (coords[:, 1] + 98.091) / 15.877
     coords[:, 0] = coords[:, 0] / 360.0
     coords[:, 1] = coords[:, 1] / 180.0
     return year, interval, coords

@@ -35,9 +35,13 @@ class WeatherBERT(BaseModel):
         feedforward_dim = hidden_dim * 4
 
         self.in_proj = nn.Linear(self.input_dim, hidden_dim)
-        # self.positional_encoding = SpatiotemporalPositionalEncoding(
-        #     hidden_dim, max_len=max_len, device=device
+
+        # self.spatiotemporal_embedding = nn.Sequential(
+        #     nn.Linear(3, hidden_dim // 2),  # 2 for coords + 1 for year
+        #     nn.GELU(),
+        #     nn.Linear(hidden_dim // 2, hidden_dim),
         # )
+
         self.positional_encoding = VanillaPositionalEncoding(
             hidden_dim, max_len=max_len, device=device
         )
@@ -71,6 +75,9 @@ class WeatherBERT(BaseModel):
         self.in_proj = copy.deepcopy(pretrained_model.in_proj)
         self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
         self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
+        self.spatiotemporal_embedding = copy.deepcopy(
+            pretrained_model.spatiotemporal_embedding
+        )
         if load_out_proj:
             self.logger.info("🔄 Loading out_proj from pretrained model")
             self.out_proj = copy.deepcopy(pretrained_model.out_proj)
@@ -100,15 +107,14 @@ class WeatherBERT(BaseModel):
 
         # Year is [batch_size, seq_len], add feature dimension to make it [batch_size, seq_len, 1]
         year = year.unsqueeze(2)
-
-        # # Expand interval to match weather and coords dimensions
-        # interval = interval.unsqueeze(1).expand(batch_size, seq_len, 1)
-
         # Expand coords to match sequence length if needed
         coords = coords.unsqueeze(1).expand(batch_size, seq_len, 2)
 
         # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
+
+        # sp_embed = self.spatiotemporal_embedding(torch.cat([year, coords], dim=2))
+        # input_tensor = weather + sp_embed
 
         input_tensor = torch.cat([weather, year, coords], dim=2)
         input_tensor = self.in_proj(input_tensor)

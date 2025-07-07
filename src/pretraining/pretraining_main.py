@@ -36,7 +36,7 @@ parser.add_argument(
     default=None,
     type=str,
 )
-parser.add_argument("--batch-size", help="batch size", default=512, type=int)
+parser.add_argument("--batch-size", help="batch size", default=256, type=int)
 parser.add_argument(
     "--n-masked-features",
     help="number of masked features (for weatherformer) the rest of the features are input features",
@@ -44,9 +44,11 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--n-epochs", help="number of training epochs", default=20, type=int
+    "--n-epochs", help="number of training epochs", default=100, type=int
 )
-parser.add_argument("--init-lr", help="initial learning rate", default=1e-4, type=float)
+parser.add_argument(
+    "--init-lr", help="initial learning rate", default=0.0005, type=float
+)
 parser.add_argument(
     "--use-optimal-lr",
     help="enable learning rate finding",
@@ -76,13 +78,13 @@ parser.add_argument(
 parser.add_argument(
     "--n-mixture-components",
     help="number of mixture components (for weatherformermixture)",
-    default=7,
+    default=1,
     type=int,
 )
 parser.add_argument(
     "--beta",
     help="lambda parameter for mixture prior loss weighting (for weatherformermixture)",
-    default=1e-0,
+    default=0.5,
     type=float,
 )
 

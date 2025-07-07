@@ -39,7 +39,7 @@ class BaseTrainer(ABC):
         num_epochs: int,
         init_lr: float = 1e-4,
         num_warmup_epochs: int = 5,
-        decay_factor: float = 0.95,
+        decay_factor: Optional[float] = None,
         pretrained_model_path: Optional[str] = None,
         resume_from_checkpoint: Optional[str] = None,
         rank: int = 0,
@@ -315,7 +315,7 @@ class BaseTrainer(ABC):
             self.batch_size = batch_size // self.world_size
 
     def _setup_training_components(
-        self, init_lr: float, num_warmup_epochs: int, decay_factor: float
+        self, init_lr: float, num_warmup_epochs: int, decay_factor: Optional[float]
     ):
         """
         Setup optimizer and scheduler.
@@ -335,6 +335,14 @@ class BaseTrainer(ABC):
 
         # Create optimizer with current model parameters (which should be pretrained if provided)
         self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
+        if self.rank == 0:
+            if decay_factor is None:
+                self.logger.info("using cosine annealing")
+            else:
+                self.logger.info(
+                    f"using exponential annealing with decay factor {decay_factor}"
+                )
+
         self.scheduler = utils.get_scheduler(
             self.optimizer,
             num_warmup_epochs,

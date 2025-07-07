@@ -11,32 +11,30 @@ DATA_DIR = "data/nasa_power"
 # USA regions only (file IDs 0-33 based on the current dataloader pattern)
 USA_REGIONS = [f"usa_{i}" for i in range(len(GRID["USA"]))]
 
+# Central America regions only (file IDs 34-43 based on the current dataloader pattern)
+CENTRAL_AMERICA_REGIONS = [
+    f"centralamerica_{i}" for i in range(len(GRID["CENTRALAMERICA"]))
+]
+# SOUTH_AMERICA_REGIONS = [f"southamerica_{i}" for i in range(len(GRID["SOUTHAMERICA"]))]
 
-def compute_weekly_scalers():
+
+def process_regions(region_list, region_name, subdirectory, weekly_data):
     """
-    Compute mean and std per week per feature for USA data only.
-    Uses existing processed weekly datasets to avoid memory issues.
+    Process weather data for a list of regions and accumulate weekly statistics.
+
+    Args:
+        region_list: List of region IDs to process
+        region_name: Name of the region for progress display
+        subdirectory: Subdirectory name where CSV files are stored
+        weekly_data: Dictionary to accumulate weekly data
     """
-    print("Computing weekly scalers for USA data...")
-
-    # Initialize storage for all weeks and features
-    weekly_data = {
-        week: {param: [] for param in WEATHER_PARAMS} for week in range(1, 53)
-    }
-
-    # Process each USA region
-    for region_id in tqdm(USA_REGIONS, desc="Processing USA regions"):
+    for region_id in tqdm(region_list, desc=f"Processing {region_name} regions"):
         try:
-            print(f"Loading data for {region_id}")
-
             # Load the weekly CSV data
             weather_df = pd.read_csv(
-                f"{DATA_DIR}/csvs/usa/{region_id}_regional_weekly.csv",
+                f"{DATA_DIR}/csvs/{subdirectory}/{region_id}_regional_weekly.csv",
                 index_col=False,
             )
-
-            print(f"Processing {len(weather_df)} rows for {region_id}")
-
             # Extract data for each week and parameter
             for param in WEATHER_PARAMS:
                 for week in range(1, 53):  # weeks 1-52
@@ -50,6 +48,24 @@ def compute_weekly_scalers():
             print(f"Error processing {region_id}: {e}")
             continue
 
+
+def compute_weekly_scalers():
+    """
+    Compute mean and std per week per feature for USA and Central America data.
+    Uses existing processed weekly datasets to avoid memory issues.
+    """
+    print("Computing weekly scalers for USA and Central America data...")
+
+    # Initialize storage for all weeks and features
+    weekly_data = {
+        week: {param: [] for param in WEATHER_PARAMS} for week in range(1, 53)
+    }
+
+    # Process USA and Central America regions
+    process_regions(USA_REGIONS, "USA", "usa", weekly_data)
+    process_regions(
+        CENTRAL_AMERICA_REGIONS, "Central America", "centralamerica", weekly_data
+    )
     print("Computing statistics per week per feature...")
 
     # Compute mean and std for each week and parameter
@@ -66,10 +82,6 @@ def compute_weekly_scalers():
 
                 weekly_scalers[f"week_{week}"]["param_means"][param] = mean_val
                 weekly_scalers[f"week_{week}"]["param_stds"][param] = std_val
-
-                print(
-                    f"Week {week}, {param}: mean={mean_val:.4f}, std={std_val:.4f}, n_samples={len(values)}"
-                )
             else:
                 print(f"Warning: No data for Week {week}, {param}")
                 # Use global scalers as fallback if available
