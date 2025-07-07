@@ -24,7 +24,9 @@ class WeatherBERT(BaseModel):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim  # weather (normalized) + (year-1970)/100 + coords
+        self.input_dim = (
+            weather_dim + 1 + 2
+        )  # weather (normalized) + (year-1970)/100 + coords
         self.output_dim = output_dim
         self.max_len = max_len
 

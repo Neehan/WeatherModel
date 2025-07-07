@@ -12,7 +12,7 @@ from src.utils.utils import setup_logging, get_model_params
 
 PRETRAINED_MODEL_PATHS = {
     "weatherformer": "data/trained_models/pretraining/weatherformer_2.0m_best.pth",
-    "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_best.pth",
+    "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_2.0m_best.pth",
     "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_best.pth",
     "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.0m_best.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_best.pth",
