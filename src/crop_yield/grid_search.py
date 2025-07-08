@@ -126,7 +126,7 @@ class GridSearch:
         if "sinusoid" in self.model:
             n_mixture_components = 1
         elif "mixture" in self.model:
-            n_mixture_components = 1
+            n_mixture_components = 2
         else:
             n_mixture_components = 1  # Default for other models
 
@@ -135,7 +135,7 @@ class GridSearch:
             "n_past_years": 6,
             "n_epochs": 40,
             "init_lr": self.init_lr,
-            "decay_factor": 0.95,
+            "decay_factor": None,
             "n_warmup_epochs": 10,
             "model_size": "small",
             "use_optimal_lr": False,
