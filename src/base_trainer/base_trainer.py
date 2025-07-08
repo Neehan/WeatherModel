@@ -334,7 +334,7 @@ class BaseTrainer(ABC):
         self.best_val_loss = float("inf")
 
         # Create optimizer with current model parameters (which should be pretrained if provided)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=init_lr)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=init_lr)
         if self.rank == 0:
             if decay_factor is None:
                 self.logger.info("using cosine annealing")
