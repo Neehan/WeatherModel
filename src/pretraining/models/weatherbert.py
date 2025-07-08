@@ -24,7 +24,7 @@ class WeatherBERT(BaseModel):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim + 2 + 1  # weather (normalized) + (year-1970)/100
+        self.input_dim = weather_dim + 1 + 2  # weather (normalized) + (year-1970)/100
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -110,7 +110,7 @@ class WeatherBERT(BaseModel):
         # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
 
-        input_tensor = torch.cat([weather, coords, year], dim=2)
+        input_tensor = torch.cat([weather, year, coords], dim=2)
         input_tensor = self.in_proj(input_tensor)
         input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(

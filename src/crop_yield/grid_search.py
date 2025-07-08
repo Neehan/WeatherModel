@@ -11,10 +11,10 @@ from src.crop_yield.yield_main import main as yield_main_func
 from src.utils.utils import setup_logging, get_model_params
 
 PRETRAINED_MODEL_PATHS = {
-    "weatherformer": "data/trained_models/pretraining/weatherformer_2.0m_latest.pth",
-    "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
-    "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
-    "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.0m_latest.pth",
+    "weatherformer": "data/trained_models/stored_pretraining/weatherformer_2.0m_latest.pth",
+    "weatherautoencoder": "data/trained_models/stored_pretraining/weatherautoencoder_1.9m_latest.pth",
+    "weatherformersinusoid": "data/trained_models/stored_pretraining/weatherformer_sinusoid_2.0m_latest.pth",
+    "weatherformermixture": "data/trained_models/stored_pretraining/weatherformer_mixture_2.0m_latest.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
     "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
     "weathercnn": None,
@@ -42,7 +42,7 @@ class GridSearch:
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
         # Grid search parameters
-        self.beta_values = [0.0, 1e-4]
+        self.beta_values = [0.0, 1e-4, 1e-3]
         self.n_train_years_values = [5, 15, 30]
 
         # Setup logging
