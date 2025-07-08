@@ -24,7 +24,7 @@ class WeatherBERT(BaseModel):
         super(WeatherBERT, self).__init__("weatherbert")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim + 1  # weather (normalized) + (year-1970)/100
+        self.input_dim = weather_dim + 2 + 1  # weather (normalized) + (year-1970)/100
         self.output_dim = output_dim
         self.max_len = max_len
 
@@ -33,11 +33,11 @@ class WeatherBERT(BaseModel):
 
         self.in_proj = nn.Linear(self.input_dim, hidden_dim)
 
-        self.spatiotemporal_embedding = nn.Sequential(
-            nn.Linear(2, self.input_dim // 2),  # 2 for coords
-            nn.GELU(),
-            nn.Linear(self.input_dim // 2, self.input_dim),
-        )
+        # self.spatiotemporal_embedding = nn.Sequential(
+        #     nn.Linear(2, self.input_dim // 2),  # 2 for coords
+        #     nn.GELU(),
+        #     nn.Linear(self.input_dim // 2, self.input_dim),
+        # )
 
         self.positional_encoding = VanillaPositionalEncoding(
             hidden_dim, max_len=max_len, device=device
@@ -72,9 +72,9 @@ class WeatherBERT(BaseModel):
         self.in_proj = copy.deepcopy(pretrained_model.in_proj)
         self.positional_encoding = copy.deepcopy(pretrained_model.positional_encoding)
         self.transformer_encoder = copy.deepcopy(pretrained_model.transformer_encoder)
-        self.spatiotemporal_embedding = copy.deepcopy(
-            pretrained_model.spatiotemporal_embedding
-        )
+        # self.spatiotemporal_embedding = copy.deepcopy(
+        #     pretrained_model.spatiotemporal_embedding
+        # )
         if load_out_proj:
             self.logger.info("🔄 Loading out_proj from pretrained model")
             self.out_proj = copy.deepcopy(pretrained_model.out_proj)
@@ -110,8 +110,7 @@ class WeatherBERT(BaseModel):
         # mask weather for the masked dimensions
         weather = weather * (~weather_feature_mask)
 
-        sp_embed = self.spatiotemporal_embedding(coords)
-        input_tensor = torch.cat([weather, year], dim=2) + sp_embed
+        input_tensor = torch.cat([weather, coords, year], dim=2)
         input_tensor = self.in_proj(input_tensor)
         input_tensor = self.positional_encoding(input_tensor)
         input_tensor = self.transformer_encoder(
