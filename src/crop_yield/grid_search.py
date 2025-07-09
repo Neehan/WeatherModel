@@ -43,7 +43,7 @@ class GridSearch:
 
         # Grid search parameters
         self.beta_values = [0.0, 1e-4, 1e-3]
-        self.n_train_years_values = [5, 15]
+        self.n_train_years_values = [15]
 
         # Setup logging
         setup_logging(rank=0)
