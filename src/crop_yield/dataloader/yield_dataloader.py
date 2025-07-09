@@ -58,6 +58,8 @@ class CropDataset(Dataset):
         # 2: min temp
         # 29: vap pressure
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
+        # substract test gap from start year
+        start_year -= test_gap
 
         if test_dataset:  # test on specific year
             candidate_data = data[data["year"] == test_year]
