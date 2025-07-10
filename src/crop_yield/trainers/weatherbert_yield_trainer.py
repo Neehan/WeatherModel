@@ -21,8 +21,10 @@ import os
 TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
 FOLD_IDX = 0
 
-EXTREME_YEARS_CORN = [2002, 2004, 2009, 2012, 2014]
-EXTREME_YEARS_SOYBEAN = [2003, 2004, 2009, 2012, 2014]
+EXTREME_YEARS = {
+    "corn": [2002, 2004, 2009, 2012, 2014],
+    "soybean": [2003, 2004, 2009, 2012, 2016],
+}
 
 
 def _reset_fold_index():
@@ -70,6 +72,9 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss(reduction="mean")
 
+        # extreme years
+        test_years = EXTREME_YEARS[crop_type]
+
         # Override model directory for yield prediction
         if self.rank == 0:
             self.model_dir = DATA_DIR + "trained_models/crop_yield/"
@@ -90,11 +95,11 @@ class WeatherBERTYieldTrainer(BaseTrainer):
             else:
                 # Cross-validation mode
                 global FOLD_IDX
-                if FOLD_IDX >= len(TEST_YEARS):
+                if FOLD_IDX >= len(test_years):
                     raise ValueError(
-                        f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(TEST_YEARS)}). Call _reset_fold_index() before starting new cross-validation."
+                        f"FOLD_IDX ({FOLD_IDX}) exceeds TEST_YEARS length ({len(test_years)}). Call _reset_fold_index() before starting new cross-validation."
                     )
-                self.test_year = TEST_YEARS[FOLD_IDX]
+                self.test_year = test_years[FOLD_IDX]
                 FOLD_IDX += 1
                 self.logger.info(
                     f"Cross-validation mode - Testing on year: {self.test_year}"
