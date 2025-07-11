@@ -14,7 +14,7 @@ if [ $# -lt 3 ]; then
     echo "Usage: $0 <model1> <model2> <crop_type> [additional_python_args...]"
     echo "Example: $0 weatherformer weatherformersinusoid corn"
     echo "Example: $0 weatherformer weatherformersinusoid corn --batch-size 128 --init-lr 0.001"
-    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, weathercnn"
+    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, weathercnn, linear"
     exit 1
 fi
 
@@ -25,7 +25,7 @@ CROP_TYPE=$3
 EXTRA_ARGS="${@:4}"
 
 # Validate model names
-valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "weathercnn")
+valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "weathercnn" "linear")
 if [[ ! " ${valid_models[@]} " =~ " ${MODEL1} " ]]; then
     echo "Error: Invalid model1 '${MODEL1}'. Valid options: ${valid_models[@]}"
     exit 1

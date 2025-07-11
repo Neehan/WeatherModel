@@ -19,9 +19,7 @@ class WeatherCNN(BaseModel):
         super(WeatherCNN, self).__init__("weathercnn")
 
         self.weather_dim = weather_dim
-        self.input_dim = (
-            weather_dim + 2 + 1 + 1
-        )  # weather_dim + coords + year + interval
+        self.input_dim = weather_dim + 2 + 1  # weather_dim + coords + year
         self.output_dim = output_dim
         self.max_len = max_len
         self.device = device
@@ -130,16 +128,16 @@ class WeatherCNN(BaseModel):
         year = year.unsqueeze(2)  # batch_size x seq_len x 1
 
         # Expand interval and coords to match sequence length
-        interval = interval.unsqueeze(1).expand(
-            batch_size, seq_len, 1
-        )  # batch_size x seq_len x 1
+        # interval = interval.unsqueeze(1).expand(
+        #     batch_size, seq_len, 1
+        # )  # batch_size x seq_len x 1
         coords = coords.unsqueeze(1).expand(
             batch_size, seq_len, 2
         )  # batch_size x seq_len x 2
 
         # Concatenate all features: weather + coords + year + interval
         input_tensor = torch.cat(
-            [weather, coords, year, interval], dim=2
+            [weather, coords, year], dim=2
         )  # batch_size x seq_len x input_dim
 
         # Reshape to process per year: (batch_size, n_years, weeks_per_year, input_dim)
