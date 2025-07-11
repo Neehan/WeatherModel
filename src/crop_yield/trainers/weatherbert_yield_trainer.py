@@ -73,7 +73,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.criterion = nn.MSELoss(reduction="mean")
 
         # extreme years
-        test_years = EXTREME_YEARS[crop_type]
+        # test_years = EXTREME_YEARS[crop_type]
+        test_years = TEST_YEARS
 
         # Override model directory for yield prediction
         if self.rank == 0:

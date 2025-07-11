@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, or weathercnn",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, or cnnrnn",
     default="weatherformer",
     type=str,
 )
@@ -105,8 +105,8 @@ def train_single_crop(crop_type: str, args_dict: dict):
     from src.crop_yield.trainers.weatherbert_yield_trainer import (
         weatherbert_yield_training_loop,
     )
-    from src.crop_yield.trainers.weathercnn_yield_trainer import (
-        weathercnn_yield_training_loop,
+    from src.crop_yield.trainers.cnnrnn_yield_trainer import (
+        cnnrnn_yield_training_loop,
     )
     from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
         weatherformer_mixture_yield_training_loop,
@@ -156,13 +156,13 @@ def train_single_crop(crop_type: str, args_dict: dict):
         cross_validation_results = weatherautoencoder_sine_yield_training_loop(
             crop_args, use_cropnet=True
         )
-    elif model_type == "weathercnn":
-        cross_validation_results = weathercnn_yield_training_loop(
+    elif model_type == "cnnrnn":
+        cross_validation_results = cnnrnn_yield_training_loop(
             crop_args, use_cropnet=True
         )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'weathercnn'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', or 'cnnrnn'"
         )
 
     # Convert MSE to RMSE using crop-specific scaling factor

@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, weathercnn, or linear",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, cnnrnn, or linear",
     default="weatherformer",
     type=str,
 )
@@ -129,8 +129,8 @@ def main(args_dict=None):
     from src.crop_yield.trainers.weatherbert_yield_trainer import (
         weatherbert_yield_training_loop,
     )
-    from src.crop_yield.trainers.weathercnn_yield_trainer import (
-        weathercnn_yield_training_loop,
+    from src.crop_yield.trainers.cnnrnn_yield_trainer import (
+        cnnrnn_yield_training_loop,
     )
     from src.crop_yield.trainers.weatherformer_mixture_yield_trainer import (
         weatherformer_mixture_yield_training_loop,
@@ -176,8 +176,8 @@ def main(args_dict=None):
         cross_validation_results = weatherautoencoder_sine_yield_training_loop(
             args_dict, use_cropnet=False
         )
-    elif model_type == "weathercnn":
-        cross_validation_results = weathercnn_yield_training_loop(
+    elif model_type == "cnnrnn":
+        cross_validation_results = cnnrnn_yield_training_loop(
             args_dict, use_cropnet=False
         )
     elif model_type == "linear":
@@ -186,7 +186,7 @@ def main(args_dict=None):
         )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'weathercnn', or 'linear'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'cnnrnn', or 'linear'"
         )
 
     logger = logging.getLogger(__name__)

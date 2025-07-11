@@ -5,7 +5,6 @@ from typing import Optional
 
 from src.base_models.base_model import BaseModel
 from src.utils.constants import MAX_CONTEXT_LENGTH, DEVICE, TOTAL_WEATHER_VARS
-from src.utils.utils import normalize_year_interval_coords
 
 
 class WeatherCNN(BaseModel):
@@ -19,7 +18,7 @@ class WeatherCNN(BaseModel):
         super(WeatherCNN, self).__init__("weathercnn")
 
         self.weather_dim = weather_dim
-        self.input_dim = weather_dim + 2 + 1  # weather_dim + coords + year
+        self.input_dim = weather_dim
         self.output_dim = output_dim
         self.max_len = max_len
         self.device = device
@@ -28,7 +27,7 @@ class WeatherCNN(BaseModel):
         self.weeks_per_year = 52
         self.n_years = max_len // self.weeks_per_year
 
-        # CNN layers for processing weather sequences (per year)
+        # CNN layers for processing weather sequences (per year) - matching original paper
         self.weather_cnn = nn.Sequential(
             nn.Conv1d(
                 in_channels=1, out_channels=8, kernel_size=9, stride=1, padding=0
@@ -50,9 +49,7 @@ class WeatherCNN(BaseModel):
             ),
             nn.ReLU(),
             nn.AvgPool1d(kernel_size=2, stride=2),
-            # Flattening the output to fit Linear Layer
-            nn.Flatten(),  # 20 x calculated_size
-            nn.ReLU(),
+            nn.Flatten(),
         )
 
         # Calculate the final sequence length after all CNN operations
@@ -61,9 +58,9 @@ class WeatherCNN(BaseModel):
         with torch.no_grad():
             dummy_output = self.weather_cnn(dummy_input)
         self.cnn_features_per_feature = dummy_output.shape[1]
-        self.cnn_features_per_year = self.cnn_features_per_feature * self.input_dim
+        self.cnn_features_per_year = self.cnn_features_per_feature * self.weather_dim
 
-        # FC layer to combine features per year (like in original)
+        # FC layer to combine features per year (matching original paper)
         self.weather_fc = nn.Sequential(
             nn.Linear(self.cnn_features_per_year, output_dim), nn.ReLU()
         )
@@ -101,12 +98,9 @@ class WeatherCNN(BaseModel):
         src_key_padding_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
+        Process weather data through CNN layers.
         weather: batch_size x seq_len x n_features
-        coords: batch_size x 2 (lat, lon) UNNORMALIZED
-        year: batch_size x seq_len (UNNORMALIZED, time-varying years)
-        interval: batch_size x 1 (UNNORMALIZED in days)
-        weather_feature_mask: batch_size x seq_len x n_features
-        src_key_padding_mask: batch_size x seq_len
+        Returns: batch_size x n_years x output_dim
         """
         batch_size, seq_len, n_features = weather.shape
         if n_features != self.weather_dim:
@@ -114,46 +108,24 @@ class WeatherCNN(BaseModel):
                 f"expected {self.weather_dim} weather features but received {n_features} features"
             )
 
-        # Normalize year, interval, and coords
-        year, interval, coords = normalize_year_interval_coords(year, interval, coords)
-
         # Apply masking if provided
-        if (
-            weather_feature_mask is not None
-            and weather_feature_mask.shape == weather.shape
-        ):
+        if weather_feature_mask is not None:
             weather = weather * (~weather_feature_mask)
 
-        # Add year as feature dimension to match BERT approach
-        year = year.unsqueeze(2)  # batch_size x seq_len x 1
-
-        # Expand interval and coords to match sequence length
-        # interval = interval.unsqueeze(1).expand(
-        #     batch_size, seq_len, 1
-        # )  # batch_size x seq_len x 1
-        coords = coords.unsqueeze(1).expand(
-            batch_size, seq_len, 2
-        )  # batch_size x seq_len x 2
-
-        # Concatenate all features: weather + coords + year + interval
-        input_tensor = torch.cat(
-            [weather, coords, year], dim=2
-        )  # batch_size x seq_len x input_dim
-
-        # Reshape to process per year: (batch_size, n_years, weeks_per_year, input_dim)
-        input_tensor = input_tensor.view(
-            batch_size, self.n_years, self.weeks_per_year, self.input_dim
+        # Reshape to process per year: (batch_size, n_years, weeks_per_year, weather_dim)
+        weather = weather.view(
+            batch_size, self.n_years, self.weeks_per_year, self.weather_dim
         )
 
-        # Reshape to process each feature of each year separately: (batch_size * n_years * input_dim, 1, weeks_per_year)
-        input_tensor = input_tensor.reshape(
-            batch_size * self.n_years * self.input_dim, 1, self.weeks_per_year
+        # Reshape to process each feature of each year separately: (batch_size * n_years * weather_dim, 1, weeks_per_year)
+        weather = weather.reshape(
+            batch_size * self.n_years * self.weather_dim, 1, self.weeks_per_year
         )
 
         # Pass each feature of each year through CNN
         cnn_output = self.weather_cnn(
-            input_tensor
-        )  # (batch_size * n_years * input_dim, cnn_features_per_feature)
+            weather
+        )  # (batch_size * n_years * weather_dim, cnn_features_per_feature)
 
         # Reshape to combine features per year: (batch_size * n_years, cnn_features_per_year)
         cnn_output = cnn_output.view(
