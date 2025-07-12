@@ -5,6 +5,7 @@ import argparse
 import pandas as pd
 import copy
 import json
+import time
 from typing import Dict, Tuple, Optional, List
 
 from src.crop_yield.yield_main import main as yield_main_func
@@ -30,21 +31,19 @@ class GridSearch:
         model: str,
         load_pretrained: bool,
         crop_type: str,
-        batch_size: int,
-        init_lr: float,
         output_dir: str = "data/grid_search",
     ):
         self.model = model
         self.load_pretrained = load_pretrained
         self.crop_type = crop_type
         self.output_dir = output_dir
-        self.batch_size = batch_size
-        self.init_lr = init_lr
         self.method = "pretrained" if load_pretrained else "not_pretrained"
 
         # Grid search parameters
         self.beta_values = [0.0, 1e-4, 1e-3]
         self.n_train_years_values = [5, 15, 30]
+        self.batch_size_values = [16, 32, 64]
+        self.init_lr_values = [2.5e-4, 5e-4, 1e-3]
 
         # Setup logging
         setup_logging(rank=0)
@@ -90,8 +89,10 @@ class GridSearch:
                 return pd.DataFrame()
         return pd.DataFrame()
 
-    def _experiment_exists(self, beta: float, n_train_years: int) -> bool:
-        """Check if specific experiment (beta, year) already exists and completed successfully"""
+    def _experiment_exists(
+        self, beta: float, n_train_years: int, batch_size: int, init_lr: float
+    ) -> bool:
+        """Check if specific experiment (beta, year, batch_size, init_lr) already exists and completed successfully"""
         if self.existing_results.empty or "model" not in self.existing_results.columns:
             return False
 
@@ -99,6 +100,8 @@ class GridSearch:
             (self.existing_results["model"] == self.model)
             & (self.existing_results["method"] == self.method)
             & (self.existing_results["beta"] == beta)
+            & (self.existing_results["batch_size"] == batch_size)
+            & (self.existing_results["init_lr"] == init_lr)
         )
 
         matching_rows = self.existing_results[mask]
@@ -121,7 +124,7 @@ class GridSearch:
         # Only consider experiment completed if it contains the "±" symbol
         return "±" in value
 
-    def _get_base_config(self) -> Dict:
+    def _get_base_config(self, batch_size: int, init_lr: float) -> Dict:
         """Get base configuration for experiments"""
         # Model-specific configuration
         if "sinusoid" in self.model:
@@ -132,10 +135,10 @@ class GridSearch:
             n_mixture_components = 1  # Default for other models
 
         base_config = {
-            "batch_size": self.batch_size,
+            "batch_size": batch_size,
             "n_past_years": 6,
             "n_epochs": 40,
-            "init_lr": self.init_lr,
+            "init_lr": init_lr,
             "decay_factor": None,
             "n_warmup_epochs": 10,
             "model_size": "small",
@@ -182,7 +185,9 @@ class GridSearch:
             self.logger.error(f"Failed experiment {experiment_name}: {str(e)}")
             return None, None, None, None, None
 
-    def _run_beta_experiments(self, beta: float) -> Dict[
+    def _run_beta_experiments(
+        self, beta: float, batch_size: int, init_lr: float
+    ) -> Dict[
         int,
         Tuple[
             Optional[float],
@@ -193,16 +198,16 @@ class GridSearch:
         ],
     ]:
         """Run experiments for a single beta value across all year values"""
-        base_config = self._get_base_config()
+        base_config = self._get_base_config(batch_size, init_lr)
         base_config["beta"] = beta
 
         results = {}
 
         for n_train_years in self.n_train_years_values:
-            # Check if this specific (beta, year) experiment already exists
-            if self._experiment_exists(beta, n_train_years):
+            # Check if this specific experiment already exists
+            if self._experiment_exists(beta, n_train_years, batch_size, init_lr):
                 self.logger.info(
-                    f"Skipping beta={beta}, years={n_train_years} (already completed)"
+                    f"Skipping beta={beta}, years={n_train_years}, batch_size={batch_size}, init_lr={init_lr} (already completed)"
                 )
                 continue
 
@@ -225,6 +230,8 @@ class GridSearch:
     def _save_results(
         self,
         beta: float,
+        batch_size: int,
+        init_lr: float,
         results: Dict[
             int,
             Tuple[
@@ -233,6 +240,7 @@ class GridSearch:
                 Optional[float],
                 Optional[float],
                 Optional[List[float]],
+                Optional[float],
             ],
         ],
     ):
@@ -243,12 +251,14 @@ class GridSearch:
         # Load current results
         df = self._load_existing_results()
 
-        # Find existing row for this beta
+        # Find existing row for this parameter combination
         if not df.empty and "model" in df.columns:
             mask = (
                 (df["model"] == self.model)
                 & (df["method"] == self.method)
                 & (df["beta"] == beta)
+                & (df["batch_size"] == batch_size)
+                & (df["init_lr"] == init_lr)
             )
 
             if mask.any():
@@ -260,6 +270,7 @@ class GridSearch:
                     mean_r2,
                     std_r2,
                     r_squared_values,
+                    runtime_seconds,
                 ) in results.items():
                     year_col = f"year_{n_years}"
                     year_r2_col = f"year_{n_years}_r2"
@@ -271,13 +282,20 @@ class GridSearch:
                         df.loc[row_idx, year_r2_col] = "FAILED"
             else:
                 # Create new row with only the attempted experiments
-                new_row = {"model": self.model, "method": self.method, "beta": beta}
+                new_row = {
+                    "model": self.model,
+                    "method": self.method,
+                    "beta": beta,
+                    "batch_size": batch_size,
+                    "init_lr": init_lr,
+                }
                 for n_years, (
                     mean_rmse,
                     std_rmse,
                     mean_r2,
                     std_r2,
                     r_squared_values,
+                    runtime_seconds,
                 ) in results.items():
                     year_col = f"year_{n_years}"
                     year_r2_col = f"year_{n_years}_r2"
@@ -292,13 +310,20 @@ class GridSearch:
                 df = pd.concat([df, new_df], ignore_index=True)
         else:
             # Empty DataFrame - create new row with only attempted experiments
-            new_row = {"model": self.model, "method": self.method, "beta": beta}
+            new_row = {
+                "model": self.model,
+                "method": self.method,
+                "beta": beta,
+                "batch_size": batch_size,
+                "init_lr": init_lr,
+            }
             for n_years, (
                 mean_rmse,
                 std_rmse,
                 mean_r2,
                 std_r2,
                 r_squared_values,
+                runtime_seconds,
             ) in results.items():
                 year_col = f"year_{n_years}"
                 year_r2_col = f"year_{n_years}_r2"
@@ -316,13 +341,17 @@ class GridSearch:
         df.to_csv(self.output_file, sep="\t", index=False)
 
         # Save detailed results with individual R² values
-        self._save_detailed_results(beta, results)
+        self._save_detailed_results(beta, batch_size, init_lr, results)
 
-        self.logger.info(f"Saved results for beta={beta}")
+        self.logger.info(
+            f"Saved results for beta={beta}, batch_size={batch_size}, init_lr={init_lr}"
+        )
 
     def _save_detailed_results(
         self,
         beta: float,
+        batch_size: int,
+        init_lr: float,
         results: Dict[
             int,
             Tuple[
@@ -331,6 +360,7 @@ class GridSearch:
                 Optional[float],
                 Optional[float],
                 Optional[List[float]],
+                Optional[float],
             ],
         ],
     ):
@@ -339,7 +369,7 @@ class GridSearch:
         detailed_results = self._load_detailed_results()
 
         # Create experiment key
-        experiment_key = f"{self.model}_{self.method}_{self.crop_type}_beta_{beta}"
+        experiment_key = f"{self.model}_{self.method}_{self.crop_type}_beta_{beta}_bs_{batch_size}_lr_{init_lr}"
 
         if experiment_key not in detailed_results:
             detailed_results[experiment_key] = {}
@@ -351,6 +381,7 @@ class GridSearch:
             mean_r2,
             std_r2,
             r_squared_values,
+            runtime_seconds,
         ) in results.items():
             year_key = f"year_{n_years}"
             if r_squared_values is not None:
@@ -361,6 +392,7 @@ class GridSearch:
                     "std_r2": std_r2,
                     "individual_r2_values": r_squared_values,
                     "fold_count": len(r_squared_values),
+                    "runtime_seconds": runtime_seconds,
                 }
             else:
                 detailed_results[experiment_key][year_key] = {
@@ -371,6 +403,7 @@ class GridSearch:
                     "individual_r2_values": None,
                     "fold_count": 0,
                     "status": "FAILED",
+                    "runtime_seconds": runtime_seconds,
                 }
 
         # Save detailed results to JSON file
@@ -397,67 +430,81 @@ class GridSearch:
         else:
             self.logger.info("CUDA not available! Running on CPU (will be slow)")
 
-        self.logger.info(f"Generated {len(self.beta_values)} beta values to test")
+        total_combinations = (
+            len(self.beta_values)
+            * len(self.n_train_years_values)
+            * len(self.batch_size_values)
+            * len(self.init_lr_values)
+        )
+        self.logger.info(f"Total parameter combinations to test: {total_combinations}")
+        self.logger.info(f"Beta values: {self.beta_values}")
+        self.logger.info(f"Training years: {self.n_train_years_values}")
+        self.logger.info(f"Batch sizes: {self.batch_size_values}")
+        self.logger.info(f"Learning rates: {self.init_lr_values}")
         self.logger.info(f"Model: {self.model}, Method: {self.method}")
 
         completed_experiments = 0
         skipped_experiments = 0
 
-        # Run experiments for each year, then each beta within that year
-        for n_train_years in self.n_train_years_values:
-            self.logger.info(
-                f"\n=== Running experiments for {n_train_years} training years ==="
-            )
+        # Run experiments for each parameter combination
+        for batch_size in self.batch_size_values:
+            for init_lr in self.init_lr_values:
+                for n_train_years in self.n_train_years_values:
+                    for beta in self.beta_values:
+                        # Skip beta > 0 for weatherautoencoder, cnnrnn, and linear since they don't use beta parameter
+                        if (
+                            self.model in ["weatherautoencoder", "cnnrnn", "linear"]
+                            and beta > 0
+                        ):
+                            self.logger.info(
+                                f"Skipping beta={beta} for {self.model} (doesn't use beta parameter)"
+                            )
+                            skipped_experiments += 1
+                            continue
 
-            for beta in self.beta_values:
-                # Skip beta > 0 for weatherautoencoder, cnnrnn, and linear since they don't use beta parameter
-                if (
-                    self.model in ["weatherautoencoder", "cnnrnn", "linear"]
-                    and beta > 0
-                ):
-                    self.logger.info(
-                        f"Skipping beta={beta} for {self.model} (doesn't use beta parameter)"
-                    )
-                    skipped_experiments += 1
-                    continue
+                        # Check if this specific experiment already exists
+                        if self._experiment_exists(
+                            beta, n_train_years, batch_size, init_lr
+                        ):
+                            self.logger.info(
+                                f"Skipping beta={beta}, years={n_train_years}, batch_size={batch_size}, init_lr={init_lr} (already completed)"
+                            )
+                            skipped_experiments += 1
+                            continue
 
-                # Check if this specific (beta, year) experiment already exists
-                if self._experiment_exists(beta, n_train_years):
-                    self.logger.info(
-                        f"Skipping beta={beta}, years={n_train_years} (already completed)"
-                    )
-                    skipped_experiments += 1
-                    continue
+                        self.logger.info(
+                            f"Running experiment: beta={beta}, years={n_train_years}, batch_size={batch_size}, init_lr={init_lr}"
+                        )
 
-                self.logger.info(
-                    f"Running experiment: beta={beta}, years={n_train_years}"
-                )
+                        # Run single experiment
+                        base_config = self._get_base_config(batch_size, init_lr)
+                        base_config["beta"] = beta
+                        base_config["n_train_years"] = n_train_years
 
-                # Run single experiment
-                base_config = self._get_base_config()
-                base_config["beta"] = beta
-                base_config["n_train_years"] = n_train_years
+                        start_time = time.time()
+                        avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = (
+                            self._run_single_experiment(base_config)
+                        )
+                        end_time = time.time()
+                        runtime_seconds = end_time - start_time
 
-                avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = (
-                    self._run_single_experiment(base_config)
-                )
+                        # Save result immediately
+                        results = {
+                            n_train_years: (
+                                avg_rmse,
+                                std_rmse,
+                                avg_r2,
+                                std_r2,
+                                r_squared_values,
+                                runtime_seconds if avg_rmse is not None else None,
+                            )
+                        }
+                        self._save_results(beta, batch_size, init_lr, results)
 
-                # Save result immediately
-                results = {
-                    n_train_years: (
-                        avg_rmse,
-                        std_rmse,
-                        avg_r2,
-                        std_r2,
-                        r_squared_values,
-                    )
-                }
-                self._save_results(beta, results)
-
-                completed_experiments += 1
-                self.logger.info(
-                    f"Completed and saved: beta={beta}, years={n_train_years}"
-                )
+                        completed_experiments += 1
+                        self.logger.info(
+                            f"Completed and saved: beta={beta}, years={n_train_years}, batch_size={batch_size}, init_lr={init_lr}"
+                        )
 
         self.logger.info(f"Grid search completed!")
         self.logger.info(
@@ -508,20 +555,6 @@ def setup_args() -> argparse.Namespace:
         help="Directory to save results (default: data/grid_search)",
     )
 
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=64,
-        help="Batch size for training (default: 64)",
-    )
-
-    parser.add_argument(
-        "--init-lr",
-        type=float,
-        default=0.0005,
-        help="Initial learning rate (default: 0.0005)",
-    )
-
     return parser.parse_args()
 
 
@@ -533,8 +566,6 @@ def main():
         model=args.model,
         load_pretrained=args.load_pretrained,
         crop_type=args.crop_type,
-        batch_size=args.batch_size,
-        init_lr=args.init_lr,
         output_dir=args.output_dir,
     )
 
