@@ -9,20 +9,33 @@
 #SBATCH --mem=64GB                     # Total memory
 #SBATCH -t 24:00:00                    # 24-hour wall time
 
-# Check if at least three arguments are provided
-if [ $# -lt 3 ]; then
-    echo "Usage: $0 <model1> <model2> <crop_type> [additional_python_args...]"
-    echo "Example: $0 weatherformer weatherformersinusoid corn"
-    echo "Example: $0 weatherformer weatherformersinusoid corn --batch-size 128 --init-lr 0.001"
+# Check if at least two arguments are provided
+if [ $# -lt 2 ]; then
+    echo "Usage (single model): $0 <model> <crop_type> [additional_python_args...]"
+    echo "Usage (two models): $0 <model1> <model2> <crop_type> [additional_python_args...]"
+    echo "Example (single): $0 weatherformer corn"
+    echo "Example (single): $0 weatherformer corn --batch-size 128 --init-lr 0.001"
+    echo "Example (two models): $0 weatherformer weatherformersinusoid corn"
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, cnnrnn, linear"
     exit 1
 fi
 
-MODEL1=$1
-MODEL2=$2
-CROP_TYPE=$3
-# Get all arguments after the first 3
-EXTRA_ARGS="${@:4}"
+# Determine if we have 2 or 3+ arguments
+if [ $# -eq 2 ] || [[ $3 != "corn" && $3 != "soy" && $3 != "wheat" ]]; then
+    # Single model mode: model, crop_type, [extra_args...]
+    MODEL1=$1
+    MODEL2=$1  # Same model for both
+    CROP_TYPE=$2
+    EXTRA_ARGS="${@:3}"
+    SINGLE_MODEL_MODE=true
+else
+    # Two model mode: model1, model2, crop_type, [extra_args...]
+    MODEL1=$1
+    MODEL2=$2
+    CROP_TYPE=$3
+    EXTRA_ARGS="${@:4}"
+    SINGLE_MODEL_MODE=false
+fi
 
 # Validate model names
 valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "cnnrnn" "linear")
@@ -38,8 +51,14 @@ fi
 # Load your environment
 module load miniforge/24.3.0-0
 
-echo "======== Starting Parallel Grid Search on 4 GPUs ========"
-echo "Comparing models: ${MODEL1} vs ${MODEL2}"
+echo "======== Starting Parallel Grid Search ========"
+if $SINGLE_MODEL_MODE; then
+    echo "Single model mode: ${MODEL1} (pretrained vs not pretrained)"
+    echo "Using 2 GPUs"
+else
+    echo "Two model mode: ${MODEL1} vs ${MODEL2}"
+    echo "Using 4 GPUs"
+fi
 echo "Crop type: ${CROP_TYPE}"
 if [ -n "$EXTRA_ARGS" ]; then
     echo "Extra arguments: ${EXTRA_ARGS}"
@@ -76,78 +95,145 @@ run_experiment() {
 # Clear previous logs
 rm -f log/gpu*.log
 
-echo "Starting all 4 experiments in parallel..."
-
-# Run all experiments in parallel, each on its own GPU with separate logging
-echo "GPU 0: ${MODEL1} (no pretraining)"
-run_experiment 0 "$MODEL1" "" &
-PID1=$!
-
-echo "GPU 1: ${MODEL1} (with pretraining)"
-run_experiment 1 "$MODEL1" "--load-pretrained" &
-PID2=$!
-
-echo "GPU 2: ${MODEL2} (no pretraining)"
-run_experiment 2 "$MODEL2" "" &
-PID3=$!
-
-echo "GPU 3: ${MODEL2} (with pretraining)"
-run_experiment 3 "$MODEL2" "--load-pretrained" &
-PID4=$!
-
-# Store all PIDs for monitoring
-PIDS=($PID1 $PID2 $PID3 $PID4)
-echo "Started processes with PIDs: ${PIDS[@]}"
-
-# Monitor progress
-monitor_progress() {
-    while true; do
-        sleep 300  # Check every 5 minutes
-        echo "$(date): Progress check..."
-        for i in "${!PIDS[@]}"; do
-            if kill -0 "${PIDS[$i]}" 2>/dev/null; then
-                echo "  GPU $i: Still running (PID ${PIDS[$i]})"
-            else
-                echo "  GPU $i: Completed (PID ${PIDS[$i]})"
-            fi
-        done
-        
-        # Check if any processes are still running
-        running=false
-        for pid in "${PIDS[@]}"; do
-            if kill -0 "$pid" 2>/dev/null; then
-                running=true
+if $SINGLE_MODEL_MODE; then
+    echo "Starting 2 experiments in parallel (single model mode)..."
+    
+    # Run 2 experiments in parallel
+    echo "GPU 0: ${MODEL1} (no pretraining)"
+    run_experiment 0 "$MODEL1" "" &
+    PID1=$!
+    
+    echo "GPU 1: ${MODEL1} (with pretraining)"
+    run_experiment 1 "$MODEL1" "--load-pretrained" &
+    PID2=$!
+    
+    # Store PIDs for monitoring
+    PIDS=($PID1 $PID2)
+    echo "Started processes with PIDs: ${PIDS[@]}"
+    
+    # Monitor progress
+    monitor_progress() {
+        while true; do
+            sleep 300  # Check every 5 minutes
+            echo "$(date): Progress check..."
+            for i in "${!PIDS[@]}"; do
+                if kill -0 "${PIDS[$i]}" 2>/dev/null; then
+                    echo "  GPU $i: Still running (PID ${PIDS[$i]})"
+                else
+                    echo "  GPU $i: Completed (PID ${PIDS[$i]})"
+                fi
+            done
+            
+            # Check if any processes are still running
+            running=false
+            for pid in "${PIDS[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    running=true
+                    break
+                fi
+            done
+            
+            if ! $running; then
                 break
             fi
         done
-        
-        if ! $running; then
-            break
-        fi
-    done
-}
-
-# Start monitoring in background
-monitor_progress &
-MONITOR_PID=$!
-
-# Wait for all background jobs to complete
-echo "All experiments started. Waiting for completion..."
-echo "You can monitor progress in real-time with: tail -f log/gpu*.log"
-wait $PID1 $PID2 $PID3 $PID4
-
-# Stop monitoring
-kill $MONITOR_PID 2>/dev/null
-
-echo "======== All Grid Search Experiments Completed ========"
-echo "Results saved in data/grid_search/ directory:"
-echo "- grid_search_${MODEL1}_not_pretrained.tsv"
-echo "- grid_search_${MODEL1}_pretrained.tsv"
-echo "- grid_search_${MODEL2}_not_pretrained.tsv"
-echo "- grid_search_${MODEL2}_pretrained.tsv"
-echo ""
-echo "Logs saved in log/ directory:"
-echo "- log/gpu0.log (${MODEL1}, no pretraining)"
-echo "- log/gpu1.log (${MODEL1}, with pretraining)"
-echo "- log/gpu2.log (${MODEL2}, no pretraining)"
-echo "- log/gpu3.log (${MODEL2}, with pretraining)" 
+    }
+    
+    # Start monitoring in background
+    monitor_progress &
+    MONITOR_PID=$!
+    
+    # Wait for all background jobs to complete
+    echo "All experiments started. Waiting for completion..."
+    echo "You can monitor progress in real-time with: tail -f log/gpu*.log"
+    wait $PID1 $PID2
+    
+    # Stop monitoring
+    kill $MONITOR_PID 2>/dev/null
+    
+    echo "======== All Grid Search Experiments Completed ========"
+    echo "Results saved in data/grid_search/ directory:"
+    echo "- grid_search_${MODEL1}_not_pretrained.tsv"
+    echo "- grid_search_${MODEL1}_pretrained.tsv"
+    echo ""
+    echo "Logs saved in log/ directory:"
+    echo "- log/gpu0.log (${MODEL1}, no pretraining)"
+    echo "- log/gpu1.log (${MODEL1}, with pretraining)"
+    
+else
+    echo "Starting all 4 experiments in parallel (two model mode)..."
+    
+    # Run all experiments in parallel, each on its own GPU with separate logging
+    echo "GPU 0: ${MODEL1} (no pretraining)"
+    run_experiment 0 "$MODEL1" "" &
+    PID1=$!
+    
+    echo "GPU 1: ${MODEL1} (with pretraining)"
+    run_experiment 1 "$MODEL1" "--load-pretrained" &
+    PID2=$!
+    
+    echo "GPU 2: ${MODEL2} (no pretraining)"
+    run_experiment 2 "$MODEL2" "" &
+    PID3=$!
+    
+    echo "GPU 3: ${MODEL2} (with pretraining)"
+    run_experiment 3 "$MODEL2" "--load-pretrained" &
+    PID4=$!
+    
+    # Store all PIDs for monitoring
+    PIDS=($PID1 $PID2 $PID3 $PID4)
+    echo "Started processes with PIDs: ${PIDS[@]}"
+    
+    # Monitor progress
+    monitor_progress() {
+        while true; do
+            sleep 300  # Check every 5 minutes
+            echo "$(date): Progress check..."
+            for i in "${!PIDS[@]}"; do
+                if kill -0 "${PIDS[$i]}" 2>/dev/null; then
+                    echo "  GPU $i: Still running (PID ${PIDS[$i]})"
+                else
+                    echo "  GPU $i: Completed (PID ${PIDS[$i]})"
+                fi
+            done
+            
+            # Check if any processes are still running
+            running=false
+            for pid in "${PIDS[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    running=true
+                    break
+                fi
+            done
+            
+            if ! $running; then
+                break
+            fi
+        done
+    }
+    
+    # Start monitoring in background
+    monitor_progress &
+    MONITOR_PID=$!
+    
+    # Wait for all background jobs to complete
+    echo "All experiments started. Waiting for completion..."
+    echo "You can monitor progress in real-time with: tail -f log/gpu*.log"
+    wait $PID1 $PID2 $PID3 $PID4
+    
+    # Stop monitoring
+    kill $MONITOR_PID 2>/dev/null
+    
+    echo "======== All Grid Search Experiments Completed ========"
+    echo "Results saved in data/grid_search/ directory:"
+    echo "- grid_search_${MODEL1}_not_pretrained.tsv"
+    echo "- grid_search_${MODEL1}_pretrained.tsv"
+    echo "- grid_search_${MODEL2}_not_pretrained.tsv"
+    echo "- grid_search_${MODEL2}_pretrained.tsv"
+    echo ""
+    echo "Logs saved in log/ directory:"
+    echo "- log/gpu0.log (${MODEL1}, no pretraining)"
+    echo "- log/gpu1.log (${MODEL1}, with pretraining)"
+    echo "- log/gpu2.log (${MODEL2}, no pretraining)"
+    echo "- log/gpu3.log (${MODEL2}, with pretraining)"
+fi 
