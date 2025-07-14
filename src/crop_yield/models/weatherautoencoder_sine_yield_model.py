@@ -29,7 +29,7 @@ class WeatherAutoencoderSineYieldModel(WeatherAutoencoderYieldModel):
         self.name = "weatherautoencoder_sine_yield"
 
         # p(z) ~ N(A_p * sin(theta * z), sigma^2_p)
-        max_len = self.yield_model.max_len
+        max_len = self.yield_model.max_len  # type: ignore
         self.positions = (
             torch.arange(max_len, dtype=torch.float, device=device)
             .unsqueeze(0)

@@ -128,7 +128,7 @@ class CropNetDataset(Dataset):
             valid_candidates = pd.DataFrame(valid_candidates)
             self.index = valid_candidates[["year", "loc_id"]].reset_index(drop=True)
         else:
-            self.index = pd.DataFrame(columns=["year", "loc_id"])
+            self.index = pd.DataFrame(columns=["year", "loc_id"])  # type: ignore
 
         dataset_name = "test" if test_dataset else "train"
         year_info = (
@@ -304,7 +304,7 @@ def split_train_test_by_year(
 
     # Forward fill missing yields within each location
     crop_yield_col = f"{crop_type.lower().replace('winter', 'winter ')}_yield"
-    data = data.sort_values(["fips", "year"])
+    data = data.sort_values(["fips", "year"])  # type: ignore
     data[crop_yield_col] = data.groupby("fips")[crop_yield_col].ffill()
 
     # Standardize everything

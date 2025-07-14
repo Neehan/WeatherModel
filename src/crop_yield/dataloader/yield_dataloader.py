@@ -234,7 +234,7 @@ def split_train_test_by_year(
     # Drop rows with missing yield values for the given crop
     yield_col = f"{crop_type}_yield"
     rows_before = len(data)
-    data = data.dropna(subset=[yield_col])
+    data = data.dropna(subset=[yield_col])  # type: ignore
     rows_after = len(data)
     rows_dropped = rows_before - rows_after
 
