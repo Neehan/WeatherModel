@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing import Optional
 
 from src.base_models.weather_cnn import WeatherCNN
+from src.base_models.soil_cnn import SoilCNN
 from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 from src.base_models.base_model import BaseModel
 from src.utils.utils import normalize_year_interval_coords
@@ -16,6 +17,7 @@ class CNNRNNYieldModel(BaseModel):
         weather_dim: int,
         n_past_years: int,
         output_dim: int = 60,  # CNN output features
+        soil_output_dim: int = 40,  # Soil CNN output features
         lstm_hidden_dim: int = 64,
         lstm_num_layers: int = 1,
         **model_size_params,
@@ -33,11 +35,14 @@ class CNNRNNYieldModel(BaseModel):
             device=device,
         )
 
-        # LSTM for processing temporal sequence with past yields and coordinates
-        # Input: CNN features + past yields + coordinates + year
+        # CNN for processing soil data
+        self.soil_cnn = SoilCNN()
+
+        # LSTM for processing temporal sequence with past yields, coordinates, weather, and soil features
+        # Input: CNN output + soil CNN output + past yields + coordinates + year
         lstm_input_dim = (
-            output_dim + 2 + 1 + 1
-        )  # CNN output + coords + year + past_yield
+            output_dim + soil_output_dim + 2 + 1 + 1
+        )  # weather CNN output + soil CNN output + coords + year + past_yield
         self.lstm = nn.LSTM(
             input_size=lstm_input_dim,
             hidden_size=lstm_hidden_dim,
@@ -62,6 +67,7 @@ class CNNRNNYieldModel(BaseModel):
         year,
         interval,
         weather_feature_mask,
+        soil,
         y_past,
     ):
         # Get weather representations from CNN (batch_size, n_years, output_dim)
@@ -72,6 +78,9 @@ class CNNRNNYieldModel(BaseModel):
             interval,
             weather_feature_mask=weather_feature_mask,
         )
+
+        # Process soil data through soil CNN (batch_size, n_years, soil_output_dim)
+        soil_features = self.soil_cnn(soil)
 
         batch_size, n_years, cnn_output_dim = weather_features.shape
 
@@ -91,9 +100,16 @@ class CNNRNNYieldModel(BaseModel):
         # y_past should be (batch_size, n_past_years + 1)
         y_past_expanded = y_past.unsqueeze(2).expand(batch_size, n_years, 1)
 
-        # Concatenate CNN features, coordinates, year, and past yields
+        # Concatenate weather CNN features, soil CNN features, coordinates, year, and past yields
         lstm_input = torch.cat(
-            [weather_features, coords_expanded, year_expanded, y_past_expanded], dim=2
+            [
+                weather_features,
+                soil_features,
+                coords_expanded,
+                year_expanded,
+                y_past_expanded,
+            ],
+            dim=2,
         )  # (batch_size, n_years, lstm_input_dim)
 
         # Pass through LSTM
