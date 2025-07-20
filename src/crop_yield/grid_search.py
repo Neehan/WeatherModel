@@ -12,13 +12,14 @@ from src.crop_yield.yield_main import main as yield_main_func
 from src.utils.utils import setup_logging, get_model_params
 
 PRETRAINED_MODEL_PATHS = {
-    "weatherformer": "data/trained_models/stored_pretraining/weatherformer_2.0m_latest.pth",
-    "weatherautoencoder": "data/trained_models/stored_pretraining/weatherautoencoder_1.9m_latest.pth",
+    "weatherformer": "data/trained_models/pretraining/weatherformer_2.0m_latest.pth",
+    "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
     "weatherformersinusoid": "data/trained_models/stored_pretraining/weatherformer_sinusoid_2.0m_latest.pth",
     "weatherformermixture": "data/trained_models/stored_pretraining/weatherformer_mixture_2.0m_latest.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
     "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
     "cnnrnn": None,
+    "gnnrnn": None,
     "linear": None,
 }
 
@@ -451,9 +452,10 @@ class GridSearch:
             for init_lr in self.init_lr_values:
                 for n_train_years in self.n_train_years_values:
                     for beta in self.beta_values:
-                        # Skip beta > 0 for weatherautoencoder, cnnrnn, and linear since they don't use beta parameter
+                        # Skip beta > 0 for weatherautoencoder, cnnrnn, gnnrnn, and linear since they don't use beta parameter
                         if (
-                            self.model in ["weatherautoencoder", "cnnrnn", "linear"]
+                            self.model
+                            in ["weatherautoencoder", "cnnrnn", "gnnrnn", "linear"]
                             and beta > 0
                         ):
                             self.logger.info(
@@ -533,6 +535,7 @@ def setup_args() -> argparse.Namespace:
             "weatherautoencodersinusoid",
             "weatherautoencoder",
             "cnnrnn",
+            "gnnrnn",
             "linear",
         ],
         help="Model to use for experiments",
