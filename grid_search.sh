@@ -16,7 +16,7 @@ if [ $# -lt 2 ]; then
     echo "Example (single): $0 weatherformer corn"
     echo "Example (single): $0 weatherformer corn --batch-size 128 --init-lr 0.001"
     echo "Example (two models): $0 weatherformer weatherformersinusoid corn"
-    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, cnnrnn, linear"
+    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, cnnrnn, gnnrnn, linear"
     exit 1
 fi
 
@@ -38,7 +38,7 @@ else
 fi
 
 # Validate model names
-valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "cnnrnn" "linear")
+valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "cnnrnn" "gnnrnn" "linear")
 if [[ ! " ${valid_models[@]} " =~ " ${MODEL1} " ]]; then
     echo "Error: Invalid model1 '${MODEL1}'. Valid options: ${valid_models[@]}"
     exit 1
@@ -68,8 +68,8 @@ fi
 mkdir -p data/grid_search
 mkdir -p log
 
-rm -rf data/grid_search/*
-rm -rf log/gpu*.log
+# rm -rf data/grid_search/*
+# rm -rf log/gpu*.log
 rm -rf data/trained_models/crop_yield/*
 
 # Function to run experiment and log output
