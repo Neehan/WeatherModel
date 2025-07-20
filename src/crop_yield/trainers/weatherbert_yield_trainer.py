@@ -236,7 +236,15 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
     local_rank = args_dict.get("local_rank", 0)
 
     # Set device for this process
-    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
+    # Force CPU for Mac MPS to avoid DGL compatibility issues
+    if torch.backends.mps.is_available():
+        import os
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide CUDA from DGL
+        device = torch.device("cpu")  # Force CPU on Mac to avoid DGL MPS issues
+        print("Detected MPS device, forcing CPU for DGL compatibility")
+    else:
+        device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
     if use_cropnet:
         # Use provided CropNet DataFrame

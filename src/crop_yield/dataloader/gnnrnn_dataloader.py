@@ -216,22 +216,32 @@ class GNNRNNDataset:
 
     def get_nodeloader(self):
         """Create DGL NodeDataLoader for graph sampling"""
-        # Skip nodeloader on CPU due to DGL CUDA stream issues
-        if self.device.type == "cpu":
-            return None
-
         N = len(self.counties)
         sampler = dgl.dataloading.MultiLayerNeighborSampler([10, 10])
-        nodeloader = dgl.dataloading.DataLoader(
-            self.g,
-            torch.arange(N).to(self.device),
-            sampler,
-            batch_size=self.batch_size,
-            shuffle=True,
-            drop_last=False,
-            num_workers=0,
-            device=self.device,
-        )
+
+        # For CPU, don't specify device parameter to avoid CUDA stream issues
+        if self.device.type == "cpu":
+            nodeloader = dgl.dataloading.DataLoader(
+                self.g,
+                torch.arange(N),  # Don't move to device for CPU
+                sampler,
+                batch_size=self.batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=0,
+                # Don't specify device parameter for CPU
+            )
+        else:
+            nodeloader = dgl.dataloading.DataLoader(
+                self.g,
+                torch.arange(N).to(self.device),
+                sampler,
+                batch_size=self.batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=0,
+                device=self.device,
+            )
         return nodeloader
 
 

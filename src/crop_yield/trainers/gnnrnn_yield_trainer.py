@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple, Any
 import logging
 
 from src.crop_yield.models.gnnrnn_yield_model import GNNRNNYieldModel
@@ -19,11 +19,16 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
 class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
     """
     Trainer class for GNN-RNN crop yield prediction models.
-    Uses standard WeatherBERT training with minimal GNN-specific overrides.
+    Uses BaseTrainer infrastructure with GNN-specific data handling following original paper.
     """
 
-    def get_dataloaders(self, shuffle: bool = False):
-        """Use GNN dataloaders instead of regular yield dataloaders"""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Initialize nodeloader as None - will be set in get_dataloaders
+        self.nodeloader: Optional[Any] = None
+
+    def get_dataloaders(self, shuffle: bool = False) -> Tuple:
+        """Use GNN dataloaders and set up nodeloader"""
         if self.train_loader is not None and self.test_loader is not None:
             return self.train_loader, self.test_loader
 
@@ -36,26 +41,53 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
             crop_type=self.crop_type,
         )
 
+        # Store nodeloader for use in training/validation
         self.nodeloader = nodeloader
         self.train_loader = train_dataset
         self.test_loader = test_dataset
         return train_dataset, test_dataset
 
-    def _train_epoch(self, train_loader):
-        """Handle GNN dataset format"""
+    def compute_train_loss(self, *args) -> Dict[str, torch.Tensor]:
+        """Not used - we override _train_epoch directly following original paper pattern"""
+        raise NotImplementedError(
+            "GNN-RNN uses custom training loop - this method is not used"
+        )
+
+    def compute_validation_loss(self, *args) -> Dict[str, torch.Tensor]:
+        """Not used - we override _validate_epoch directly following original paper pattern"""
+        raise NotImplementedError(
+            "GNN-RNN uses custom validation loop - this method is not used"
+        )
+
+    def _train_epoch(self, train_dataset):
+        """Train epoch following original paper's pattern"""
         self.model.train()
-        total_loss = 0.0
+        total_loss_dict = self._initialize_loss_dict("train")
+
+        if self.rank == 0:
+            self.logger.info("Started training epoch.")
+
         num_batches = 0
 
-        dataset = train_loader
-        for i in range(0, len(dataset), self.batch_size):
-            batch_items = [
-                dataset[j] for j in range(i, min(i + self.batch_size, len(dataset)))
-            ]
+        # Follow original paper pattern: iterate through nodeloader batches
+        assert (
+            self.nodeloader is not None
+        ), f"nodeloader should be set in get_dataloaders. Current value: {self.nodeloader}"
+        nodeloader = self.nodeloader  # Help type checker understand it's not None
+        for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(nodeloader):
+            # Get batch data - sample from dataset using batch size
+            batch_items = []
+            start_idx = batch_idx * self.batch_size
+            end_idx = min(start_idx + self.batch_size, len(train_dataset))
+
+            for i in range(start_idx, end_idx):
+                if i < len(train_dataset):
+                    batch_items.append(train_dataset[i])
+
             if not batch_items:
                 continue
 
-            # Convert to tensors and move to device - NO CONVERSION NEEDED!
+            # Convert to tensors following original paper format
             weather = torch.stack(
                 [torch.FloatTensor(item["weather"]) for item in batch_items]
             ).to(self.device)
@@ -72,36 +104,57 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
                 [item["target_yield"] for item in batch_items]
             ).to(self.device)
 
-            # Get blocks from nodeloader for GraphSAGE
-            blocks = None
-            if self.nodeloader is not None:
-                input_nodes, output_nodes, blocks = next(iter(self.nodeloader))
+            # Convert blocks to int and move to device (following original paper)
+            blocks = [block.int().to(self.device) for block in blocks]
 
-            # Forward pass - direct GNN format with blocks
+            # Forward pass with blocks (following original SAGE_RNN pattern)
             self.optimizer.zero_grad()
             predicted_yield = self.model(weather, soil, coords, past_yields, blocks)
 
+            # MSE loss for training
             loss = self.criterion(predicted_yield.squeeze(), targets.squeeze())
             loss.backward()
             self.optimizer.step()
 
-            total_loss += loss.item()
+            # Track loss
+            loss_dict = {"total_loss": loss}
+            self._accumulate_losses(total_loss_dict, loss_dict)
             num_batches += 1
 
-        return total_loss / max(num_batches, 1)
+        self.scheduler.step()
+        self._sync_distributed_training()
 
-    def _validate_epoch(self, val_loader):
-        """Handle GNN dataset format"""
+        avg_loss_dict = self._average_losses(total_loss_dict, num_batches)
+        self._update_output_json_losses("train", avg_loss_dict)
+
+        return avg_loss_dict["total_loss"]
+
+    def _validate_epoch(self, test_dataset):
+        """Validate epoch following original paper's pattern"""
         self.model.eval()
-        total_loss = 0.0
+        total_loss_dict = self._initialize_loss_dict("val")
+
+        if self.rank == 0:
+            self.logger.info("Started validation epoch.")
+
         num_batches = 0
 
-        dataset = val_loader
         with torch.no_grad():
-            for i in range(0, len(dataset), self.batch_size):
-                batch_items = [
-                    dataset[j] for j in range(i, min(i + self.batch_size, len(dataset)))
-                ]
+            # Follow original paper pattern: iterate through nodeloader batches
+            assert (
+                self.nodeloader is not None
+            ), "nodeloader should be set in get_dataloaders"
+            nodeloader = self.nodeloader  # Help type checker understand it's not None
+            for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(nodeloader):
+                # Get batch data - sample from dataset using batch size
+                batch_items = []
+                start_idx = batch_idx * self.batch_size
+                end_idx = min(start_idx + self.batch_size, len(test_dataset))
+
+                for i in range(start_idx, end_idx):
+                    if i < len(test_dataset):
+                        batch_items.append(test_dataset[i])
+
                 if not batch_items:
                     continue
 
@@ -121,18 +174,25 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
                     [item["target_yield"] for item in batch_items]
                 ).to(self.device)
 
-                # Get blocks for validation too
-                blocks = None
-                if self.nodeloader is not None:
-                    input_nodes, output_nodes, blocks = next(iter(self.nodeloader))
+                # Convert blocks to int and move to device
+                blocks = [block.int().to(self.device) for block in blocks]
 
                 predicted_yield = self.model(weather, soil, coords, past_yields, blocks)
 
-                loss = self.criterion(predicted_yield.squeeze(), targets.squeeze())
-                total_loss += loss.item() ** 0.5  # RMSE for validation
+                # RMSE loss for validation (following your convention)
+                mse_loss = self.criterion(predicted_yield.squeeze(), targets.squeeze())
+                rmse_loss = mse_loss**0.5
+
+                loss_dict = {"total_loss": rmse_loss}
+                self._accumulate_losses(total_loss_dict, loss_dict)
                 num_batches += 1
 
-        return total_loss / max(num_batches, 1)
+        self._sync_distributed_training()
+
+        avg_loss_dict = self._average_losses(total_loss_dict, num_batches)
+        self._update_output_json_losses("val", avg_loss_dict)
+
+        return avg_loss_dict["total_loss"]
 
 
 def gnnrnn_yield_training_loop(args_dict, use_cropnet: bool):
