@@ -69,23 +69,21 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
 
         num_batches = 0
 
-        # Follow original paper pattern: iterate through nodeloader batches
-        assert (
-            self.nodeloader is not None
-        ), f"nodeloader should be set in get_dataloaders. Current value: {self.nodeloader}"
-        nodeloader = self.nodeloader  # Help type checker understand it's not None
-        for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(nodeloader):
-            # Get batch data - sample from dataset using batch size
-            batch_items = []
-            start_idx = batch_idx * self.batch_size
-            end_idx = min(start_idx + self.batch_size, len(train_dataset))
+        # Follow original paper pattern exactly: nodeloader samples graph nodes
+        assert self.nodeloader is not None, "nodeloader should be set"
 
-            for i in range(start_idx, end_idx):
-                if i < len(train_dataset):
-                    batch_items.append(train_dataset[i])
+        for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(self.nodeloader):
+            # Convert blocks to int and move to device (following original paper)
+            blocks = [block.int().to(self.device) for block in blocks]
 
-            if not batch_items:
+            # Sample data for the output nodes (like original paper's load_subtensor)
+            batch_size_actual = len(out_nodes)
+            if batch_size_actual == 0:
                 continue
+
+            # Sample from our dataset - get random samples equal to out_nodes size
+            sampled_indices = torch.randperm(len(train_dataset))[:batch_size_actual]
+            batch_items = [train_dataset[i] for i in sampled_indices]
 
             # Convert to tensors following original paper format
             weather = torch.stack(
@@ -103,9 +101,6 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
             targets = torch.FloatTensor(
                 [item["target_yield"] for item in batch_items]
             ).to(self.device)
-
-            # Convert blocks to int and move to device (following original paper)
-            blocks = [block.int().to(self.device) for block in blocks]
 
             # Forward pass with blocks (following original SAGE_RNN pattern)
             self.optimizer.zero_grad()
@@ -140,23 +135,21 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
         num_batches = 0
 
         with torch.no_grad():
-            # Follow original paper pattern: iterate through nodeloader batches
-            assert (
-                self.nodeloader is not None
-            ), "nodeloader should be set in get_dataloaders"
-            nodeloader = self.nodeloader  # Help type checker understand it's not None
-            for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(nodeloader):
-                # Get batch data - sample from dataset using batch size
-                batch_items = []
-                start_idx = batch_idx * self.batch_size
-                end_idx = min(start_idx + self.batch_size, len(test_dataset))
+            # Follow original paper pattern exactly: nodeloader samples graph nodes
+            assert self.nodeloader is not None, "nodeloader should be set"
 
-                for i in range(start_idx, end_idx):
-                    if i < len(test_dataset):
-                        batch_items.append(test_dataset[i])
+            for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(self.nodeloader):
+                # Convert blocks to int and move to device (following original paper)
+                blocks = [block.int().to(self.device) for block in blocks]
 
-                if not batch_items:
+                # Sample data for the output nodes (like original paper's load_subtensor)
+                batch_size_actual = len(out_nodes)
+                if batch_size_actual == 0:
                     continue
+
+                # Sample from our dataset - get random samples equal to out_nodes size
+                sampled_indices = torch.randperm(len(test_dataset))[:batch_size_actual]
+                batch_items = [test_dataset[i] for i in sampled_indices]
 
                 weather = torch.stack(
                     [torch.FloatTensor(item["weather"]) for item in batch_items]
@@ -173,9 +166,6 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
                 targets = torch.FloatTensor(
                     [item["target_yield"] for item in batch_items]
                 ).to(self.device)
-
-                # Convert blocks to int and move to device
-                blocks = [block.int().to(self.device) for block in blocks]
 
                 predicted_yield = self.model(weather, soil, coords, past_yields, blocks)
 
