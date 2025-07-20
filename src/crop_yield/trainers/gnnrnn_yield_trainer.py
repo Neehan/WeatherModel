@@ -306,10 +306,13 @@ def gnnrnn_yield_training_loop(args_dict, use_cropnet: bool):
     data_dir = "/Users/adibhasan/Downloads/WeatherModel/data/"  # Adjust path as needed
     crop_df = read_soybean_dataset(data_dir)
 
+    crop_type = args_dict["crop_type"]
+    test_years = EXTREME_YEARS[crop_type]
+
     # Cross-validation setup
-    test_years = (
-        TEST_YEARS if args_dict.get("test_year") is None else [args_dict["test_year"]]
-    )
+    # test_years = (
+    #     TEST_YEARS if args_dict.get("test_year") is None else [args_dict["test_year"]]
+    # )
     fold_results = []
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
