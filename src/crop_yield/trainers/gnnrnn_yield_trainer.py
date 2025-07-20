@@ -20,19 +20,39 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
     """
     Trainer class for GNN-RNN crop yield prediction models.
     Uses BaseTrainer infrastructure with GNN-specific data handling following original paper.
+
+    KEY IMPLEMENTATION DETAILS:
+    - Graph nodes represent counties/geographic regions
+    - NodeDataLoader samples graph nodes (counties) for each batch
+    - Each sampled node is mapped to actual data samples from that county
+    - This maintains the geographic structure that's critical for GNN performance
+    - PERFORMANCE: All sampling operations run on GPU with pre-computed tensors
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Initialize nodeloader as None - will be set in get_dataloaders
+        # Initialize GNN-specific attributes
         self.nodeloader: Optional[Any] = None
+        self.train_node_mapping: Optional[Dict] = None
+        self.test_node_mapping: Optional[Dict] = None
 
-    def get_dataloaders(self, shuffle: bool = False) -> Tuple:
+    def get_dataloaders(self, shuffle: bool = False) -> Tuple[Any, Any]:
         """Use GNN dataloaders and set up nodeloader"""
-        if self.train_loader is not None and self.test_loader is not None:
+        if (
+            self.train_loader is not None
+            and self.test_loader is not None
+            and self.train_node_mapping is not None
+            and self.test_node_mapping is not None
+        ):
             return self.train_loader, self.test_loader
 
-        train_dataset, test_dataset, nodeloader = get_gnnrnn_dataloaders(
+        (
+            train_dataset,
+            test_dataset,
+            nodeloader,
+            train_node_mapping,
+            test_node_mapping,
+        ) = get_gnnrnn_dataloaders(
             crop_df=self.crop_df,
             test_year=self.test_year,
             n_past_years=self.n_past_years,
@@ -41,11 +61,78 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
             crop_type=self.crop_type,
         )
 
-        # Store nodeloader for use in training/validation
+        # Store nodeloader and mappings for use in training/validation
         self.nodeloader = nodeloader
+        self.train_node_mapping = train_node_mapping
+        self.test_node_mapping = test_node_mapping
+
+        # Pre-compute GPU tensors for fast node-to-sample mapping
+        self.train_node_to_samples_gpu = self._create_gpu_mapping(
+            train_node_mapping, len(train_dataset)
+        )
+        self.test_node_to_samples_gpu = self._create_gpu_mapping(
+            test_node_mapping, len(test_dataset)
+        )
         self.train_loader = train_dataset
         self.test_loader = test_dataset
         return train_dataset, test_dataset
+
+    def _create_gpu_mapping(self, node_mapping: Dict, dataset_len: int) -> torch.Tensor:
+        """Create GPU tensor for fast node-to-sample mapping"""
+        max_samples_per_node = (
+            max(len(samples) for samples in node_mapping.values())
+            if node_mapping
+            else 1
+        )
+        num_nodes = max(node_mapping.keys()) + 1 if node_mapping else 1
+
+        # Create mapping tensor: [num_nodes, max_samples_per_node] filled with -1 initially
+        mapping_tensor = torch.full(
+            (num_nodes, max_samples_per_node), -1, dtype=torch.long, device=self.device
+        )
+
+        for node_idx, sample_indices in node_mapping.items():
+            for i, sample_idx in enumerate(sample_indices):
+                if i < max_samples_per_node:
+                    mapping_tensor[node_idx, i] = sample_idx
+
+        return mapping_tensor
+
+    def _get_samples_for_nodes_gpu(
+        self, node_indices: torch.Tensor, mapping_tensor: torch.Tensor, dataset_len: int
+    ):
+        """Pure GPU sampling - no CPU transfers!"""
+        batch_size = len(node_indices)
+        samples = []
+
+        for node_idx in node_indices:
+            node_idx = int(node_idx.item())  # Explicit int conversion
+            if node_idx < mapping_tensor.size(0):
+                # Get valid sample indices for this node (non-negative)
+                node_samples = mapping_tensor[node_idx]
+                valid_samples = node_samples[node_samples >= 0]
+
+                if len(valid_samples) > 0:
+                    # Random choice on GPU
+                    rand_idx = torch.randint(
+                        len(valid_samples), (1,), device=self.device
+                    )
+                    chosen_sample = valid_samples[rand_idx].item()
+                    samples.append(chosen_sample)
+                else:
+                    # Fallback: random sample
+                    rand_sample = torch.randint(
+                        dataset_len, (1,), device=self.device
+                    ).item()
+                    samples.append(rand_sample)
+            else:
+                # Fallback: random sample
+                rand_sample = torch.randint(
+                    dataset_len, (1,), device=self.device
+                ).item()
+                samples.append(rand_sample)
+
+        return samples
 
     def compute_train_loss(self, *args) -> Dict[str, torch.Tensor]:
         """Not used - we override _train_epoch directly following original paper pattern"""
@@ -69,37 +156,46 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
 
         num_batches = 0
 
-        # Follow original paper pattern exactly: nodeloader samples graph nodes
+        # KEEP THE GNN SAMPLING - use proper node-to-samples mapping
         assert self.nodeloader is not None, "nodeloader should be set"
+        assert self.train_node_mapping is not None, "train_node_mapping should be set"
 
         for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(self.nodeloader):
-            # Convert blocks to int and move to device (following original paper)
-            blocks = [block.int().to(self.device) for block in blocks]
+            # Convert blocks to device
+            blocks = [block.to(self.device) for block in blocks]
 
-            # Sample data for the output nodes (like original paper's load_subtensor)
-            batch_size_actual = len(out_nodes)
-            if batch_size_actual == 0:
+            # Map in_nodes to actual data samples using proper mapping
+            num_in_nodes = len(in_nodes)
+            if num_in_nodes == 0:
                 continue
 
-            # Sample from our dataset - get random samples equal to out_nodes size
-            sampled_indices = torch.randperm(len(train_dataset))[:batch_size_actual]
-            batch_items = [train_dataset[i] for i in sampled_indices]
+            # PURE GPU SAMPLING - NO CPU TRANSFERS!
+            sample_indices = self._get_samples_for_nodes_gpu(
+                in_nodes, self.train_node_to_samples_gpu, len(train_dataset)
+            )
+            in_batch_items = [train_dataset[idx] for idx in sample_indices]
 
-            # Convert to tensors following original paper format
+            # Convert to tensors - features for ALL in_nodes
             weather = torch.stack(
-                [torch.FloatTensor(item["weather"]) for item in batch_items]
+                [torch.FloatTensor(item["weather"]) for item in in_batch_items]
             ).to(self.device)
             soil = torch.stack(
-                [torch.FloatTensor(item["soil"]) for item in batch_items]
+                [torch.FloatTensor(item["soil"]) for item in in_batch_items]
             ).to(self.device)
             coords = torch.stack(
-                [torch.FloatTensor(item["coords"]) for item in batch_items]
+                [torch.FloatTensor(item["coords"]) for item in in_batch_items]
             ).to(self.device)
             past_yields = torch.stack(
-                [torch.FloatTensor(item["past_yields"]) for item in batch_items]
+                [torch.FloatTensor(item["past_yields"]) for item in in_batch_items]
             ).to(self.device)
+
+            # Targets only for out_nodes (the nodes we're predicting)
+            num_out_nodes = len(out_nodes)
+            out_batch_items = in_batch_items[
+                :num_out_nodes
+            ]  # Take first out_nodes items
             targets = torch.FloatTensor(
-                [item["target_yield"] for item in batch_items]
+                [item["target_yield"] for item in out_batch_items]
             ).to(self.device)
 
             # Forward pass with blocks (following original SAGE_RNN pattern)
@@ -135,36 +231,46 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
         num_batches = 0
 
         with torch.no_grad():
-            # Follow original paper pattern exactly: nodeloader samples graph nodes
+            # KEEP THE GNN SAMPLING for validation - use proper node-to-samples mapping
             assert self.nodeloader is not None, "nodeloader should be set"
+            assert self.test_node_mapping is not None, "test_node_mapping should be set"
 
             for batch_idx, (in_nodes, out_nodes, blocks) in enumerate(self.nodeloader):
-                # Convert blocks to int and move to device (following original paper)
-                blocks = [block.int().to(self.device) for block in blocks]
+                # Convert blocks to device
+                blocks = [block.to(self.device) for block in blocks]
 
-                # Sample data for the output nodes (like original paper's load_subtensor)
-                batch_size_actual = len(out_nodes)
-                if batch_size_actual == 0:
+                # Map in_nodes to actual data samples using proper mapping
+                num_in_nodes = len(in_nodes)
+                if num_in_nodes == 0:
                     continue
 
-                # Sample from our dataset - get random samples equal to out_nodes size
-                sampled_indices = torch.randperm(len(test_dataset))[:batch_size_actual]
-                batch_items = [test_dataset[i] for i in sampled_indices]
+                    # PURE GPU SAMPLING - NO CPU TRANSFERS!
+                sample_indices = self._get_samples_for_nodes_gpu(
+                    in_nodes, self.test_node_to_samples_gpu, len(test_dataset)
+                )
+                in_batch_items = [test_dataset[idx] for idx in sample_indices]
 
+                # Convert to tensors - features for ALL in_nodes
                 weather = torch.stack(
-                    [torch.FloatTensor(item["weather"]) for item in batch_items]
+                    [torch.FloatTensor(item["weather"]) for item in in_batch_items]
                 ).to(self.device)
                 soil = torch.stack(
-                    [torch.FloatTensor(item["soil"]) for item in batch_items]
+                    [torch.FloatTensor(item["soil"]) for item in in_batch_items]
                 ).to(self.device)
                 coords = torch.stack(
-                    [torch.FloatTensor(item["coords"]) for item in batch_items]
+                    [torch.FloatTensor(item["coords"]) for item in in_batch_items]
                 ).to(self.device)
                 past_yields = torch.stack(
-                    [torch.FloatTensor(item["past_yields"]) for item in batch_items]
+                    [torch.FloatTensor(item["past_yields"]) for item in in_batch_items]
                 ).to(self.device)
+
+                # Targets only for out_nodes (the nodes we're predicting)
+                num_out_nodes = len(out_nodes)
+                out_batch_items = in_batch_items[
+                    :num_out_nodes
+                ]  # Take first out_nodes items
                 targets = torch.FloatTensor(
-                    [item["target_yield"] for item in batch_items]
+                    [item["target_yield"] for item in out_batch_items]
                 ).to(self.device)
 
                 predicted_yield = self.model(weather, soil, coords, past_yields, blocks)

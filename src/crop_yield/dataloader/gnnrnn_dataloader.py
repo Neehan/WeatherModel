@@ -232,6 +232,18 @@ class GNNRNNDataset:
         )
         return nodeloader
 
+    def get_node_to_samples_mapping(self):
+        """Get mapping from node_idx to sample indices"""
+        node_to_samples = {}  # node_idx -> [sample_indices]
+
+        for i, item in enumerate(self.sequences):
+            node_idx = item["county_idx"]  # This is already set in _create_sequences
+            if node_idx not in node_to_samples:
+                node_to_samples[node_idx] = []
+            node_to_samples[node_idx].append(i)
+
+        return node_to_samples
+
 
 def get_gnnrnn_dataloaders(
     crop_df: pd.DataFrame,
@@ -242,7 +254,7 @@ def get_gnnrnn_dataloaders(
     crop_type: str = "soybean",
     us_adj_file: str = "us_adj.pkl",
     crop_id_to_fid: str = "crop_id_to_fid.pkl",
-) -> Tuple[Any, Any, Any]:
+) -> Tuple[Any, Any, Any, Dict, Dict]:
     """
     Get GNN-RNN data loaders for train and test
     Follows same standardization approach as main yield dataloader
@@ -251,6 +263,8 @@ def get_gnnrnn_dataloaders(
         train_dataset: Training dataset
         test_dataset: Test dataset
         nodeloader: DGL NodeDataLoader for graph sampling
+        train_node_mapping: Mapping from node_idx to train sample indices
+        test_node_mapping: Mapping from node_idx to test sample indices
     """
     start_year = test_year - 10  # Use 10 years of training data
 
@@ -337,4 +351,14 @@ def get_gnnrnn_dataloaders(
 
     nodeloader = train_dataset.get_nodeloader()
 
-    return train_dataset, test_dataset, nodeloader
+    # Get proper node-to-samples mappings for both datasets
+    train_node_mapping = train_dataset.get_node_to_samples_mapping()
+    test_node_mapping = test_dataset.get_node_to_samples_mapping()
+
+    return (
+        train_dataset,
+        test_dataset,
+        nodeloader,
+        train_node_mapping,
+        test_node_mapping,
+    )
