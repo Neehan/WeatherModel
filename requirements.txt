@@ -5,4 +5,4 @@ torch-lr-finder
 python-dotenv
 pandas
 tqdm
-
+dgl==1.1.3
