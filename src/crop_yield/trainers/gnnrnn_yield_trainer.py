@@ -36,6 +36,7 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
             crop_type=self.crop_type,
         )
 
+        self.nodeloader = nodeloader
         self.train_loader = train_dataset
         self.test_loader = test_dataset
         return train_dataset, test_dataset
@@ -71,9 +72,14 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
                 [item["target_yield"] for item in batch_items]
             ).to(self.device)
 
-            # Forward pass - direct GNN format
+            # Get blocks from nodeloader for GraphSAGE
+            blocks = None
+            if self.nodeloader is not None:
+                input_nodes, output_nodes, blocks = next(iter(self.nodeloader))
+
+            # Forward pass - direct GNN format with blocks
             self.optimizer.zero_grad()
-            predicted_yield = self.model(weather, soil, coords, past_yields)
+            predicted_yield = self.model(weather, soil, coords, past_yields, blocks)
 
             loss = self.criterion(predicted_yield.squeeze(), targets.squeeze())
             loss.backward()
@@ -115,7 +121,12 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
                     [item["target_yield"] for item in batch_items]
                 ).to(self.device)
 
-                predicted_yield = self.model(weather, soil, coords, past_yields)
+                # Get blocks for validation too
+                blocks = None
+                if self.nodeloader is not None:
+                    input_nodes, output_nodes, blocks = next(iter(self.nodeloader))
+
+                predicted_yield = self.model(weather, soil, coords, past_yields, blocks)
 
                 loss = self.criterion(predicted_yield.squeeze(), targets.squeeze())
                 total_loss += loss.item() ** 0.5  # RMSE for validation
