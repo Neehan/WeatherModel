@@ -168,37 +168,24 @@ class GNNRNNYieldModel(BaseModel):
 
     def forward(
         self,
-        padded_weather,
-        coord_processed,
-        year_expanded,
-        interval,
-        weather_feature_mask,
+        weather,
         soil,
-        y_past,
+        coords,
+        past_yields,
         blocks=None,  # DGL blocks for sampling
     ):
         """
-        Forward pass matching the signature expected by the trainer.
-        Implements SAGE-RNN approach: Encoder (with past yields) → GraphSAGE → LSTM → Prediction
+        Forward pass accepting GNN data format directly
 
-        Args from regular yield models:
-            padded_weather: (batch, seq_len, weather_vars) - we'll reshape this
-            coord_processed: (batch, 2) - UNNORMALIZED coordinates
-            year_expanded: (batch, seq_len) - UNNORMALIZED time-varying years
-            interval: (batch, 1) - UNNORMALIZED interval in days
-            weather_feature_mask: (batch, seq_len, weather_vars) - not used
-            soil: (batch, n_years, 11, 6)
-            y_past: (batch, n_past_years + 1) - ALL past yields, passed to encoder at each timestep
+        Args:
+            weather: (batch, n_years, 6, 52) - direct from GNN dataloader
+            soil: (batch, n_years, 11, 6) - direct from GNN dataloader
+            coords: (batch, 2) - coordinates
+            past_yields: (batch, n_past_years + 1) - past yields
             blocks: DGL blocks for graph sampling
         """
-        batch_size = padded_weather.shape[0]
-        seq_len = padded_weather.shape[1]
-        n_years = seq_len // 52
-
-        # Reshape padded_weather back to (batch, n_years, 6, 52) format
-        weather_indices = [7, 8, 11, 1, 2, 29]  # From dataloader
-        weather_data = padded_weather[:, :, weather_indices]  # (batch, n_years*52, 6)
-        weather = weather_data.view(batch_size, n_years, 52, 6).transpose(2, 3)
+        batch_size = weather.shape[0]
+        n_years = weather.shape[1]
 
         # Process each year: Encoder (with past yield) → GraphSAGE
         hs = []
@@ -207,20 +194,22 @@ class GNNRNNYieldModel(BaseModel):
             year_weather = weather[:, i : i + 1]  # (batch, 1, 6, 52)
             year_soil = soil[:, i : i + 1]  # (batch, 1, 11, 6)
 
-            # Get past yield for this timestep (y_past now matches weather/soil length)
-            past_yield_i = y_past[
-                :, i : i + 1
-            ]  # (batch, 1) - directly use corresponding past yield
+            # Get past yield for this timestep
+            past_yield_i = past_yields[:, i : i + 1]  # (batch, 1)
 
-            # Encode features using encoder module (includes past yield, coords, year)
+            # Dummy inputs for encoder compatibility
+            year_expanded = torch.zeros(batch_size, 52).to(weather.device)
+            interval = torch.zeros(batch_size, 1).to(weather.device)
+
+            # Encode features using encoder module
             h = self.encoder(
                 year_weather,
                 year_soil,
-                coord_processed,
+                coords,
                 year_expanded,
                 interval,
                 past_yield_i,
-            )  # (batch, 128) - already includes past yield
+            )  # (batch, 128)
 
             # Apply GraphSAGE layers (no need to add past yield again)
             if blocks is not None:
