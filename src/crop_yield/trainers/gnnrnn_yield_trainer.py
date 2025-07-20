@@ -12,6 +12,7 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
     WeatherBERTYieldTrainer,
     TEST_YEARS,
     EXTREME_YEARS,
+    DATA_DIR,
 )
 
 
@@ -303,8 +304,7 @@ def gnnrnn_yield_training_loop(args_dict, use_cropnet: bool):
     logger = logging.getLogger(__name__)
 
     # Read the dataset
-    data_dir = "/Users/adibhasan/Downloads/WeatherModel/data/"  # Adjust path as needed
-    crop_df = read_soybean_dataset(data_dir)
+    crop_df = read_soybean_dataset(DATA_DIR)
 
     crop_type = args_dict["crop_type"]
     test_years = EXTREME_YEARS[crop_type]
