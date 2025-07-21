@@ -55,6 +55,7 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
         ) = get_gnnrnn_dataloaders(
             crop_df=self.crop_df,
             test_year=self.test_year,
+            n_train_years=self.n_train_years,
             n_past_years=self.n_past_years,
             batch_size=self.batch_size,
             device=self.device,

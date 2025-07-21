@@ -37,9 +37,7 @@ class GNNRNNDataset:
         self.device = device
         self.crop_type = crop_type
         self.test_dataset = test_dataset
-        self.start_year = start_year or (
-            test_year - 10
-        )  # Default to 10 years of training data
+        self.start_year = start_year
         self.standardization_stats = standardization_stats
 
         self.yield_col = f"{crop_type}_yield"
@@ -248,6 +246,7 @@ class GNNRNNDataset:
 def get_gnnrnn_dataloaders(
     crop_df: pd.DataFrame,
     test_year: int,
+    n_train_years: int,
     n_past_years: int = 5,
     batch_size: int = 64,
     device: torch.device = torch.device("cpu"),
@@ -266,7 +265,7 @@ def get_gnnrnn_dataloaders(
         train_node_mapping: Mapping from node_idx to train sample indices
         test_node_mapping: Mapping from node_idx to test sample indices
     """
-    start_year = test_year - 10  # Use 10 years of training data
+    start_year = test_year - n_train_years  # Use specified number of training years
 
     # Standardize data upfront (same as main yield dataloader)
     data = crop_df[crop_df["year"] > 1981.0].copy()  # Filter years like main dataloader
