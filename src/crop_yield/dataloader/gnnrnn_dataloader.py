@@ -27,6 +27,7 @@ class GNNRNNDataset:
         test_dataset: bool = False,
         start_year: Optional[int] = None,
         standardization_stats: Optional[Dict] = None,
+        test_gap: int = 0,
     ):
         self.crop_df = crop_df
         self.us_adj_file = us_adj_file
@@ -39,6 +40,7 @@ class GNNRNNDataset:
         self.test_dataset = test_dataset
         self.start_year = start_year
         self.standardization_stats = standardization_stats
+        self.test_gap = test_gap
 
         self.yield_col = f"{crop_type}_yield"
 
@@ -77,13 +79,18 @@ class GNNRNNDataset:
         # Filter to years > 1981 (same as main yield dataloader)
         self.filtered_df = self.crop_df[self.crop_df["year"] > 1981.0].copy()
 
+        # Subtract test gap from start year (same as yield dataloader)
+        start_year_adjusted = (
+            self.start_year - self.test_gap if self.start_year is not None else None
+        )
+
         # Filter by test/train years
         if self.test_dataset:
             data = self.filtered_df[self.filtered_df["year"] == self.test_year].copy()
         else:
             data = self.filtered_df[
-                (self.filtered_df["year"] >= self.start_year)
-                & (self.filtered_df["year"] < self.test_year)
+                (self.filtered_df["year"] >= start_year_adjusted)
+                & (self.filtered_df["year"] < self.test_year - self.test_gap)
             ].copy()
 
         # Drop rows with missing yield values
@@ -253,6 +260,7 @@ def get_gnnrnn_dataloaders(
     crop_type: str = "soybean",
     us_adj_file: str = "us_adj.pkl",
     crop_id_to_fid: str = "crop_id_to_fid.pkl",
+    test_gap: int = 0,
 ) -> Tuple[Any, Any, Any, Dict, Dict]:
     """
     Get GNN-RNN data loaders for train and test
@@ -331,6 +339,7 @@ def get_gnnrnn_dataloaders(
         test_dataset=False,
         start_year=start_year,
         standardization_stats=None,  # Data already standardized
+        test_gap=test_gap,
     )
 
     # Create test dataset (data already standardized)
@@ -346,6 +355,7 @@ def get_gnnrnn_dataloaders(
         test_dataset=True,
         start_year=start_year,
         standardization_stats=None,  # Data already standardized
+        test_gap=test_gap,
     )
 
     nodeloader = train_dataset.get_nodeloader()
