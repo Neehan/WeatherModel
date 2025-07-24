@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, cnnrnn, gnnrnn, or linear",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, or linear",
     default="weatherformer",
     type=str,
 )
@@ -126,6 +126,9 @@ def main(args_dict=None):
     from src.crop_yield.trainers.weatherautoencoder_yield_trainer import (
         weatherautoencoder_yield_training_loop,
     )
+    from src.crop_yield.trainers.simmtm_yield_trainer import (
+        simmtm_yield_training_loop,
+    )
     from src.crop_yield.trainers.weatherbert_yield_trainer import (
         weatherbert_yield_training_loop,
     )
@@ -179,6 +182,10 @@ def main(args_dict=None):
         cross_validation_results = weatherautoencoder_sine_yield_training_loop(
             args_dict, use_cropnet=False
         )
+    elif model_type == "simmtm":
+        cross_validation_results = simmtm_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
     elif model_type == "cnnrnn":
         cross_validation_results = cnnrnn_yield_training_loop(
             args_dict, use_cropnet=False
@@ -193,7 +200,7 @@ def main(args_dict=None):
         )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'cnnrnn', 'gnnrnn', or 'linear'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', or 'linear'"
         )
 
     logger = logging.getLogger(__name__)

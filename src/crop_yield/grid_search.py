@@ -18,6 +18,7 @@ PRETRAINED_MODEL_PATHS = {
     "weatherformermixture": "data/trained_models/stored_pretraining/weatherformer_mixture_2.0m_latest.pth",
     "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
     "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
+    "simmtm": "data/trained_models/pretraining/simmtm_1.9m_latest.pth",
     "cnnrnn": None,
     "gnnrnn": None,
     "linear": None,
@@ -42,7 +43,7 @@ class GridSearch:
 
         # Grid search parameters
         self.beta_values = [0.0, 1e-4, 1e-3]
-        self.n_train_years_values = [5, 15, 30]
+        self.n_train_years_values = [15]
         self.batch_size_values = [16, 32, 64]
         self.init_lr_values = [2.5e-4, 5e-4, 1e-3]
 
@@ -452,10 +453,16 @@ class GridSearch:
             for init_lr in self.init_lr_values:
                 for n_train_years in self.n_train_years_values:
                     for beta in self.beta_values:
-                        # Skip beta > 0 for weatherautoencoder, cnnrnn, gnnrnn, and linear since they don't use beta parameter
+                        # Skip beta > 0 for weatherautoencoder, simmtm, cnnrnn, gnnrnn, and linear since they don't use beta parameter
                         if (
                             self.model
-                            in ["weatherautoencoder", "cnnrnn", "gnnrnn", "linear"]
+                            in [
+                                "weatherautoencoder",
+                                "simmtm",
+                                "cnnrnn",
+                                "gnnrnn",
+                                "linear",
+                            ]
                             and beta > 0
                         ):
                             self.logger.info(
@@ -534,6 +541,7 @@ def setup_args() -> argparse.Namespace:
             "weatherautoencodermixture",
             "weatherautoencodersinusoid",
             "weatherautoencoder",
+            "simmtm",
             "cnnrnn",
             "gnnrnn",
             "linear",
