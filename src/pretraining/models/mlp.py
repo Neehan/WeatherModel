@@ -32,6 +32,8 @@ class MLP(BaseModel):
         self.mlp = nn.Sequential(
             nn.Linear(weather_dim, hidden_dim),
             nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
