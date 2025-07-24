@@ -27,6 +27,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
         rank: int = 0,
+        cutoff_year: float = 2002.0,  # pretraining cutoff
     ):
 
         self.file_paths = file_paths
@@ -36,6 +37,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.rank = rank
+        self.cutoff_year = cutoff_year
 
         # Set the correct device for this rank
         self.device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
@@ -169,6 +171,10 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Yield all samples (vectorized unpacking)
             for sample_idx in range(total_samples):
+                # Skip samples that extend into cutoff year or later
+                if torch.max(years_tensors[sample_idx]) >= self.cutoff_year:
+                    continue
+
                 if self.masking_function is not None:
                     sample = (
                         weather_tensors[sample_idx],
