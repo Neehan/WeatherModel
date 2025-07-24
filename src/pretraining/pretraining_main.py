@@ -14,13 +14,14 @@ from src.pretraining.trainers.weatherformer_mixture_trainer import (
 from src.pretraining.trainers.weatherformer_sinusoid_trainer import (
     weatherformer_sinusoid_training_loop,
 )
+from src.pretraining.trainers.simmtm_trainer import simmtm_training_loop
 from src.utils.utils import setup_distributed, cleanup_distributed, setup_logging
 from src.utils.utils import parse_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    help="model type is weatherformer, weatherbert, weatherautoencoder, weatherformermixture, or weatherformersinusoid",
+    help="model type is weatherformer, weatherbert, weatherautoencoder, weatherformermixture, weatherformersinusoid, or simmtm",
     default="weatherformer",
     type=str,
 )
@@ -116,9 +117,11 @@ def main():
             weatherformer_mixture_training_loop(args_dict)
         elif model_type == "weatherformersinusoid":
             weatherformer_sinusoid_training_loop(args_dict)
+        elif model_type == "simmtm":
+            simmtm_training_loop(args_dict)
         else:
             raise ValueError(
-                f"Unknown model type: {model_type}. Choose 'weatherformer', 'weatherbert', 'weatherautoencoder', 'weatherformermixture', or 'weatherformersinusoid'"
+                f"Unknown model type: {model_type}. Choose 'weatherformer', 'weatherbert', 'weatherautoencoder', 'weatherformermixture', 'weatherformersinusoid', or 'simmtm'"
             )
     finally:
         # Clean up distributed environment

@@ -47,6 +47,8 @@ class StreamingDataset(torch.utils.data.IterableDataset):
             self.masking_function = self.weatherbert_masking_function
         elif masking_function == "weatherformer":
             self.masking_function = self.weatherformer_masking_function
+        elif masking_function == "simmtm":
+            self.masking_function = self.simmtm_masking_function
         else:
             raise ValueError(f"Masking function {masking_function} is not valid")
 
@@ -77,6 +79,106 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
         # Expand to all timesteps: [batch_size, seq_len, n_features]
         mask = feature_mask.unsqueeze(1).expand(-1, seq_len, -1)
+
+        return mask
+
+    def simmtm_masking_function(self, seq_len, n_features, batch_size):
+        """
+        SimMTM-style masking for weather data.
+        Creates contiguous segments with geometric mean length of 5.
+        Same mask applied to ALL features (more efficient and correct for SimMTM).
+        Improved start-position sampling and excess removal.
+        Fully vectorized implementation.
+        """
+        target_masked = int(seq_len * self.masking_prob)
+        if target_masked == 0:
+            return torch.zeros(
+                batch_size, seq_len, n_features, dtype=torch.bool, device=self.device
+            )
+
+        # Generate extra segments: target_masked/5 + 5 buffer per batch
+        mean_segment_length = 5
+        segments_per_batch = max(1, target_masked // mean_segment_length + 5)
+        total_segments = batch_size * segments_per_batch
+
+        # Generate segment lengths using geometric distribution (mean=5)
+        geometric_dist = torch.distributions.Geometric(
+            probs=torch.tensor(1 / mean_segment_length, device=self.device)
+        )
+        segment_lengths = geometric_dist.sample((total_segments,)).int()
+        segment_lengths = torch.clamp(segment_lengths, min=1, max=seq_len)
+
+        # Improved start position sampling: sample in [0, seq_len - length] for faithful lengths
+        max_starts = torch.clamp(seq_len - segment_lengths, min=0)
+        # Vectorized uniform sampling within valid ranges
+        random_fractions = torch.rand(total_segments, device=self.device)
+        start_positions = (random_fractions * (max_starts + 1).float()).long()
+
+        # Reshape for batch processing: [batch_size, segments_per_batch]
+        segment_lengths = segment_lengths.view(batch_size, segments_per_batch)
+        start_positions = start_positions.view(batch_size, segments_per_batch)
+
+        # Sort by start position within each batch
+        sorted_indices = torch.argsort(start_positions, dim=-1)
+        start_positions = torch.gather(start_positions, -1, sorted_indices)
+        segment_lengths = torch.gather(segment_lengths, -1, sorted_indices)
+
+        # Calculate end positions (no clamping needed due to improved sampling)
+        end_positions = start_positions + segment_lengths
+
+        # Vectorized overlap removal: keep segments where start >= previous end
+        prev_ends = torch.cat(
+            [
+                torch.zeros(batch_size, 1, device=self.device, dtype=torch.long),
+                end_positions[:, :-1],
+            ],
+            dim=-1,
+        )
+        valid_mask = start_positions >= prev_ends  # [batch_size, segments_per_batch]
+
+        # Apply segments to create position-level mask [batch_size, seq_len]
+        all_positions = torch.arange(seq_len, device=self.device)[
+            None, None, :
+        ]  # [1, 1, seq_len]
+        start_expanded = start_positions.unsqueeze(
+            -1
+        )  # [batch_size, segments_per_batch, 1]
+        end_expanded = end_positions.unsqueeze(
+            -1
+        )  # [batch_size, segments_per_batch, 1]
+        valid_expanded = valid_mask.unsqueeze(-1)  # [batch_size, segments_per_batch, 1]
+
+        # Check which positions are within valid segments
+        within_segment = (
+            (all_positions >= start_expanded)
+            & (all_positions < end_expanded)
+            & valid_expanded
+        )
+        position_mask = within_segment.any(dim=1)  # [batch_size, seq_len]
+
+        # Fully vectorized excess removal using random ranking
+        masked_counts = position_mask.sum(dim=1)  # [batch_size]
+        needs_reduction = masked_counts > target_masked
+
+        if needs_reduction.any():
+            # Generate random values for ranking masked positions
+            random_vals = torch.rand_like(position_mask.float())
+            # Set non-masked positions to infinity so they rank last
+            random_vals = torch.where(position_mask, random_vals, torch.inf)
+
+            # Get ranking of positions (0 = lowest random value = highest priority to keep)
+            position_ranks = torch.argsort(random_vals, dim=1)
+            ranks_of_positions = torch.argsort(position_ranks, dim=1)
+
+            # Keep only positions with rank < target_masked
+            keep_mask = ranks_of_positions < target_masked
+            # Only apply reduction to batches that need it, others keep original mask
+            position_mask = torch.where(
+                needs_reduction.unsqueeze(1), keep_mask, position_mask
+            )
+
+        # Broadcast the same position mask to all features
+        mask = position_mask.unsqueeze(-1).expand(-1, -1, n_features)
 
         return mask
 

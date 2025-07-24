@@ -61,9 +61,7 @@ from src.crop_yield.dataloader.cropnet_dataloader import (
 # Import all possible model classes
 from src.crop_yield.models.weatherformer_yield_model import WeatherFormerYieldModel
 from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
-from src.crop_yield.models.weatherautoencoder_yield_model import (
-    WeatherAutoencoderYieldModel,
-)
+from src.pretraining.models.weatherautoencoder import WeatherAutoencoder
 from src.crop_yield.models.weatherformer_mixture_yield_model import (
     WeatherFormerMixtureYieldModel,
 )
@@ -111,6 +109,17 @@ def load_model(model_path: str, device: torch.device, n_past_years: int = 6):
         )
         # Load the pretrained weights
         model.load_pretrained(pretrained_model)
+    elif "weatherautoencoder" in model_path:
+        model = WeatherAutoencoder(
+            weather_dim=TOTAL_WEATHER_VARS,  # Use current constant
+            output_dim=TOTAL_WEATHER_VARS,
+            device=device,
+            num_heads=10,
+            num_layers=2,
+            hidden_dim_factor=20,
+        )
+        # Load the pretrained weights
+        model.load_pretrained(pretrained_model)
     else:
         # For other model types, use directly
         model = pretrained_model
@@ -128,6 +137,7 @@ def extract_latents(
     locations = []
 
     print("Extracting latent representations...")
+    is_bert = isinstance(model, WeatherAutoencoder)
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader, desc="Processing batches")):
@@ -151,28 +161,28 @@ def extract_latents(
             weather_feature_mask = weather_feature_mask.to(device)
             y_past = y_past.to(device)
 
-            # Forward pass to get latents
-            model_outputs = model(
-                padded_weather,
-                coord_processed,
-                year_expanded,
-                interval,
-                weather_feature_mask,
-                y_past,
-            )
-
-            # Extract z (latent representation)
-            # WeatherFormer models return (yield_pred, z, mu_x, var_x)
-            z = model_outputs[1][:, -52:, :]
-
-            # Debug: print z statistics for first batch
-            if batch_idx == 0:
-                print(f"DEBUG - z shape: {z.shape}")
-                print(
-                    f"DEBUG - z mean: {z.mean().item():.3f}, std: {z.std().item():.3f}"
+            if is_bert:
+                model_outputs = model(
+                    padded_weather,
+                    coord_processed,
+                    year_expanded,
+                    interval,
+                    weather_feature_mask,
                 )
-                print(f"DEBUG - z range: [{z.min().item():.3f}, {z.max().item():.3f}]")
+                z = model_outputs
+            else:
+                # Forward pass to get latents
+                model_outputs = model(
+                    padded_weather,
+                    coord_processed,
+                    year_expanded,
+                    interval,
+                    weather_feature_mask,
+                    y_past,
+                )
+                z = model_outputs[1]
 
+            z = z[:, -52:, :]
             # Get the year for this batch (use the first timestep of the last year)
             # year_expanded shape: (batch_size, n_years * seq_len)
             batch_size = padded_weather.shape[0]
@@ -301,31 +311,39 @@ def plot_latents_pca(
             c=[colors[i]],
             label=str(year),
             alpha=0.7,
-            s=40,  # Bigger dots for better visibility
+            s=80,  # Bigger dots for better visibility (2x larger)
             edgecolors="white",
             linewidth=0.3,
         )
+
+        # Set aspect ratio to make plot taller and improve proportions
+    plt.gca().set_aspect(1.0)  # Make y-axis appear twice as tall relative to x-axis
+
+    # Set fixed axis limits for consistent shape across all plots
+    plt.xlim([-30, 35])
+    plt.ylim([-15, 15])
 
     # Remove axes labels and ticks for clean neurips presentation
     plt.xticks([])
     plt.yticks([])
 
-    # Clean, academic-style legend for NeurIPS paper
+    # Clean, academic-style legend for NeurIPS paper - horizontal layout
     legend = plt.legend(
-        loc="lower left",
-        fontsize=48,
-        frameon=True,
-        facecolor="white",
-        edgecolor="black",
-        bbox_to_anchor=(0.02, 0.02),
-        handletextpad=0.3,
+        loc="upper center",
+        fontsize=36,  # Half the previous size
+        frameon=False,  # Remove box around legend
+        bbox_to_anchor=(0.5, -0.05),  # Center horizontally, below plot area
+        handletextpad=0.05,  # Minimal padding between marker and text
         borderaxespad=0,
-        markerscale=2.5,
+        borderpad=0,  # Remove internal padding
+        markerscale=5.0,  # 2x larger legend markers
+        ncol=len(unique_years),  # Display all years in one row
+        columnspacing=0.2,  # Minimal space between columns
     )
-    # Set border width
-    legend.get_frame().set_linewidth(1)
 
     plt.grid(True, alpha=0.2)
+    # Add bottom margin to accommodate the horizontal legend
+    plt.subplots_adjust(bottom=0.15)
     plt.tight_layout()
 
     if save_path:
