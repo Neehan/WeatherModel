@@ -27,8 +27,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
         rank: int = 0,
+        cutoff_year: float = 2002.0,
     ):
-
+        self.cutoff_year = cutoff_year
         self.file_paths = file_paths
         self.num_input_features = num_input_features
         self.num_output_features = num_output_features
@@ -271,6 +272,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Yield all samples (vectorized unpacking)
             for sample_idx in range(total_samples):
+                # Skip samples that extend into cutoff year or later
+                if torch.max(years_tensors[sample_idx]) >= self.cutoff_year:
+                    continue
                 if self.masking_function is not None:
                     sample = (
                         weather_tensors[sample_idx],
