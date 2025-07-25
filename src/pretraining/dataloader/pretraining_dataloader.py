@@ -166,8 +166,10 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
                 # Apply year shuffling for ablation - vectorized lookup
                 real_years_int = real_years.int()  # Convert to int tensor
+                # Clamp years to valid range [1984, 2022] to avoid index out of bounds
+                clamped_years = torch.clamp(real_years_int, 1984, 2022)
                 shuffled_years = self.year_lookup[
-                    real_years_int - 1984
+                    clamped_years - 1984
                 ]  # Fast tensor indexing
                 years_tensors[idx] = shuffled_years
 
