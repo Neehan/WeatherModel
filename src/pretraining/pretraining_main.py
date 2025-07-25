@@ -74,7 +74,7 @@ parser.add_argument(
 parser.add_argument(
     "--masking-prob",
     help="percent to mask (for weatherbert)",
-    default=0.15,
+    default=0.30,
     type=float,
 )
 parser.add_argument(
