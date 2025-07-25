@@ -9,8 +9,6 @@ from src.utils.constants import (
     DRY_RUN_TRAIN_CHUNK_IDS,
     VALIDATION_CHUNK_IDS,
     NUM_DATASET_PARTS,
-    ABLATION_TRAIN_CHUNK_IDS,
-    SHUFFLED_YEARS,
 )
 import logging
 
@@ -29,7 +27,6 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
         rank: int = 0,
-        # cutoff_year: float = 2006.0,  # pretraining cutoff
     ):
 
         self.file_paths = file_paths
@@ -39,17 +36,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.rank = rank
-        # self.cutoff_year = cutoff_year
 
         # Set the correct device for this rank
         self.device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
-
-        # Create year lookup tensor once for all iterations
-        self.year_lookup = torch.zeros(
-            2023 - 1984, dtype=torch.float32, device=self.device
-        )
-        for year in range(1984, 2023):
-            self.year_lookup[year - 1984] = float(SHUFFLED_YEARS.get(year, year))
 
         # logger.info(
         #     f"Masking function: {masking_function}, masking prob: {masking_prob}, n_masked_features: {n_masked_features}"
@@ -160,18 +149,8 @@ class StreamingDataset(torch.utils.data.IterableDataset):
                 )
                 # Shape: [seq_len] - absolute time indices since 1984
                 absolute_time_indices = temporal_index * 365 + time_point_indices
-
                 # Shape: [seq_len] - convert to actual years
-                real_years = 1984.0 + (absolute_time_indices * interval) / 365
-
-                # Apply year shuffling for ablation - vectorized lookup
-                real_years_int = real_years.int()  # Convert to int tensor
-                # Clamp years to valid range [1984, 2022] to avoid index out of bounds
-                clamped_years = torch.clamp(real_years_int, 1984, 2022)
-                shuffled_years = self.year_lookup[
-                    clamped_years - 1984
-                ]  # Fast tensor indexing
-                years_tensors[idx] = shuffled_years
+                years_tensors[idx] = 1984.0 + (absolute_time_indices * interval) / 365
 
             if self.masking_function is not None:
                 # Use the actual masking functions with batch support
@@ -190,10 +169,6 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Yield all samples (vectorized unpacking)
             for sample_idx in range(total_samples):
-                # # # Skip samples that extend into cutoff year or later
-                # if torch.max(years_tensors[sample_idx]) >= self.cutoff_year:
-                #     continue
-
                 if self.masking_function is not None:
                     sample = (
                         weather_tensors[sample_idx],
@@ -239,8 +214,6 @@ def streaming_dataloader(
         test_indices = VALIDATION_CHUNK_IDS[:4]  # Use 4 validation chunks for 4 GPUs
     else:
         train_indices = set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
-        # train_indices = set(ABLATION_TRAIN_CHUNK_IDS)
-
         test_indices = VALIDATION_CHUNK_IDS
 
     # Convert to lists and create different orderings for each frequency

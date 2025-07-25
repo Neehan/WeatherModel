@@ -93,7 +93,7 @@ class GridSearch:
         if year_col not in matching_rows.columns:
             return False
 
-        year_values = matching_rows[year_col].values  # type: ignore
+        year_values = matching_rows[year_col].values
         if len(year_values) == 0:
             return False
 
