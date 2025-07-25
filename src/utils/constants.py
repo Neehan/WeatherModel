@@ -41,3 +41,9 @@ _all_train_indices = list(
     set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
 )
 ABLATION_TRAIN_CHUNK_IDS = random.sample(_all_train_indices, 56)
+SHUFFLED_YEARS = {
+    year: random_year
+    for year, random_year in zip(
+        range(1984, 2023), random.sample(range(1984, 2023), 39)
+    )
+}
