@@ -9,6 +9,7 @@ from src.utils.constants import (
     DRY_RUN_TRAIN_CHUNK_IDS,
     VALIDATION_CHUNK_IDS,
     NUM_DATASET_PARTS,
+    CORN_BELT_CHUNK_IDS,
 )
 import logging
 
@@ -27,7 +28,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         masking_prob: float = 0.15,
         n_masked_features: int = 1,
         rank: int = 0,
-        cutoff_year: float = 2002.0,  # pretraining cutoff
+        # cutoff_year: float = 2002.0,  # pretraining cutoff
     ):
 
         self.file_paths = file_paths
@@ -37,7 +38,7 @@ class StreamingDataset(torch.utils.data.IterableDataset):
         self.masking_prob = masking_prob
         self.n_masked_features = n_masked_features
         self.rank = rank
-        self.cutoff_year = cutoff_year
+        # self.cutoff_year = cutoff_year
 
         # Set the correct device for this rank
         self.device = f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
@@ -171,9 +172,9 @@ class StreamingDataset(torch.utils.data.IterableDataset):
 
             # Yield all samples (vectorized unpacking)
             for sample_idx in range(total_samples):
-                # Skip samples that extend into cutoff year or later
-                if torch.max(years_tensors[sample_idx]) >= self.cutoff_year:
-                    continue
+                # # Skip samples that extend into cutoff year or later
+                # if torch.max(years_tensors[sample_idx]) >= self.cutoff_year:
+                #     continue
 
                 if self.masking_function is not None:
                     sample = (
@@ -219,7 +220,11 @@ def streaming_dataloader(
         train_indices = DRY_RUN_TRAIN_CHUNK_IDS
         test_indices = VALIDATION_CHUNK_IDS[:4]  # Use 4 validation chunks for 4 GPUs
     else:
-        train_indices = set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
+        # Exclude validation + corn belt + last 3 South America indices from training
+        excluded_indices = set(
+            VALIDATION_CHUNK_IDS + CORN_BELT_CHUNK_IDS + [116, 117, 118]
+        )
+        train_indices = set(range(NUM_DATASET_PARTS)).difference(excluded_indices)
         test_indices = VALIDATION_CHUNK_IDS
 
     # Convert to lists and create different orderings for each frequency
