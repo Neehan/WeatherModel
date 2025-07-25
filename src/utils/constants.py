@@ -34,3 +34,10 @@ NUM_DATASET_PARTS = 119
 VALIDATION_CHUNK_IDS = [7, 30, 56, 59, 93, 106, 110, 24]
 # CORN_BELT_CHUNK_IDS = [14, 15, 16, 22, 23, 24, 30, 31]
 DRY_RUN_TRAIN_CHUNK_IDS = [1, 34, 53, 72, 81]
+
+import random
+
+_all_train_indices = list(
+    set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
+)
+ABLATION_TRAIN_CHUNK_IDS = random.sample(_all_train_indices, 56)
