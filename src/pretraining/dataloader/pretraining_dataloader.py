@@ -9,6 +9,7 @@ from src.utils.constants import (
     DRY_RUN_TRAIN_CHUNK_IDS,
     VALIDATION_CHUNK_IDS,
     NUM_DATASET_PARTS,
+    NON_USA_CHUNK_IDS,
 )
 import logging
 
@@ -213,7 +214,8 @@ def streaming_dataloader(
         train_indices = DRY_RUN_TRAIN_CHUNK_IDS
         test_indices = VALIDATION_CHUNK_IDS[:4]  # Use 4 validation chunks for 4 GPUs
     else:
-        train_indices = set(range(NUM_DATASET_PARTS)).difference(VALIDATION_CHUNK_IDS)
+        # Only use non-USA chunks (35-118) for training, excluding validation chunks
+        train_indices = set(NON_USA_CHUNK_IDS).difference(VALIDATION_CHUNK_IDS)
         test_indices = VALIDATION_CHUNK_IDS
 
     # Convert to lists and create different orderings for each frequency

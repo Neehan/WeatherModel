@@ -31,5 +31,13 @@ TOTAL_WEATHER_VARS = 31
 MAX_GRANULARITY_DAYS = 31
 MAX_CONTEXT_LENGTH = 365
 NUM_DATASET_PARTS = 119
-VALIDATION_CHUNK_IDS = [7, 30, 56, 59, 93, 106, 110, 24]
-DRY_RUN_TRAIN_CHUNK_IDS = [1, 34, 53, 72, 81]
+
+# USA grids are 0-34, excluding them from training/validation (using as test set)
+# Only use non-USA grids 35-118 for training and validation
+USA_CHUNK_IDS = list(range(35))  # grids 0-34 (reserved for testing)
+NON_USA_CHUNK_IDS = list(range(35, NUM_DATASET_PARTS))  # grids 35-118
+
+# Updated validation chunks - all from non-USA region (35-118)
+# Replaced USA chunks (7, 30, 24) with non-USA chunks (42, 68, 89)
+VALIDATION_CHUNK_IDS = [45, 56, 59, 76, 93, 106, 110, 118]
+DRY_RUN_TRAIN_CHUNK_IDS = [36, 45, 53, 72, 81]  # Updated to non-USA chunks
