@@ -9,6 +9,7 @@ from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
 from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
     read_soybean_dataset,
+    read_wheat_dataset,
 )
 from src.crop_yield.dataloader.cropnet_dataloader import (
     get_cropnet_train_test_loaders,
@@ -24,7 +25,7 @@ FOLD_IDX = 0
 EXTREME_YEARS = {
     "corn": [2002, 2004, 2009, 2012, 2014],
     "soybean": [2003, 2004, 2009, 2012, 2016],
-    "winter_wheat": [2002, 2003, 2012, 2014, 2016],
+    "wheat": [2002, 2003, 2005, 2009, 2011],
 }
 
 
@@ -253,8 +254,13 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
         # For CropNet, use k=1 fold (test on 2021)
         cross_validation_k = 1
     else:
-        # Read soybean dataset
-        crop_df = read_soybean_dataset(DATA_DIR)
+        # Read dataset based on crop type
+        crop_type = args_dict["crop_type"]
+        if crop_type == "wheat":
+            crop_df = read_wheat_dataset(DATA_DIR)
+        else:
+            crop_df = read_soybean_dataset(DATA_DIR)
+
         # Check if specific test year is provided
         if args_dict.get("test_year") is not None:
             # Single test year mode

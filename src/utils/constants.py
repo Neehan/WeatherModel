@@ -25,7 +25,7 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
-    "winter_wheat": {
+    "wheat": {
         "mean": [],
         "std": [],
     },

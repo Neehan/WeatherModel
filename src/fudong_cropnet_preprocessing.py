@@ -259,7 +259,7 @@ def read_crop_csv_file(csv_file, crop, target_fips=None):
         # Check for yield column - Cotton uses different units
         if crop.lower() == "cotton":
             yield_col = "YIELD, MEASURED IN LB / ACRE"
-        elif crop.lower() == "winterwheat":
+        elif crop.lower() == "wheat":
             yield_col = "YIELD, MEASURED IN BU / ACRE"
         else:
             yield_col = "YIELD, MEASURED IN BU / ACRE"

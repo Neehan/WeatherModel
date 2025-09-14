@@ -21,7 +21,7 @@ if [ $# -lt 2 ]; then
 fi
 
 # Determine if we have 2 or 3+ arguments
-if [ $# -eq 2 ] || [[ $3 != "corn" && $3 != "soybean" && $3 != "winter_wheat" ]]; then
+if [ $# -eq 2 ] || [[ $3 != "corn" && $3 != "soybean" && $3 != "wheat" ]]; then
     # Single model mode: model, crop_type, [extra_args...]
     MODEL1=$1
     MODEL2=$1  # Same model for both

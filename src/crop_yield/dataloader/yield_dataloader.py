@@ -309,6 +309,13 @@ def read_soybean_dataset(data_dir: str):
     return soybean_df
 
 
+def read_wheat_dataset(data_dir: str):
+    full_filename = "khaki_soybeans/khaki_wheat_argentina.csv"
+    wheat_df = pd.read_csv(data_dir + full_filename)
+    wheat_df = wheat_df.sort_values(["loc_ID", "year"])
+    return wheat_df
+
+
 def get_train_test_loaders(
     crop_df: pd.DataFrame,
     n_train_years: int,
