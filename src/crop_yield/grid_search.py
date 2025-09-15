@@ -556,8 +556,8 @@ def setup_args() -> argparse.Namespace:
     parser.add_argument(
         "--crop-type",
         required=True,
-        choices=["soybean", "corn", "wheat"],
-        help="Crop type to predict: soybean, corn or wheat",
+        choices=["soybean", "corn", "wheat", "sunflower"],
+        help="Crop type to predict: soybean, corn, wheat or sunflower",
     )
 
     parser.add_argument(

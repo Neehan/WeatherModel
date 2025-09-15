@@ -363,7 +363,9 @@ def main():
         "--model-path", required=True, help="Path to the trained model checkpoint"
     )
     parser.add_argument(
-        "--crop-type", default="soybean", choices=["soybean", "corn", "wheat"]
+        "--crop-type",
+        default="soybean",
+        choices=["soybean", "corn", "wheat", "sunflower"],
     )
 
     parser.add_argument(

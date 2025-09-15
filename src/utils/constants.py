@@ -29,6 +29,10 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
+    "sunflower": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31

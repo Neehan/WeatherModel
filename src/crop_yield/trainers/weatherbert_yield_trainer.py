@@ -26,6 +26,7 @@ EXTREME_YEARS = {
     "corn": [2002, 2004, 2009, 2012, 2014],
     "soybean": [2003, 2004, 2009, 2012, 2016],
     "wheat": [2002, 2003, 2005, 2009, 2011],
+    "sunflower": [2002, 2007, 2008, 2009, 2011],
 }
 
 
@@ -256,7 +257,7 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
     else:
         # Read dataset based on crop type
         crop_type = args_dict["crop_type"]
-        if crop_type == "wheat":
+        if crop_type == "wheat" or crop_type == "sunflower":
             crop_df = read_wheat_dataset(DATA_DIR)
         else:
             crop_df = read_soybean_dataset(DATA_DIR)

@@ -233,8 +233,19 @@ def split_train_test_by_year(
 
     # Duplicate yield column before standardization to avoid bias
     yield_col = f"{crop_type}_yield"
-    yield_col_original = f"{crop_type}_yield_original"
-    data[yield_col_original] = data[yield_col].copy()
+
+    # Drop rows with missing yield values for the given crop AFTER standardization
+    rows_before = len(data)
+    data = data.dropna(subset=[yield_col])  # type: ignore
+    rows_after = len(data)
+    rows_dropped = rows_before - rows_after
+
+    if rows_dropped > 0:
+        logger.warning(
+            f"Dropped {rows_dropped} rows with missing {crop_type} yield values ({rows_before} -> {rows_after} rows)"
+        )
+
+    data = data.fillna(0)
 
     if standardize:
         cols_to_standardize = [
@@ -249,7 +260,6 @@ def split_train_test_by_year(
                 "lat",
                 "lng",
                 yield_col,
-                yield_col_original,
             ]
         ]
         # helpful to detect if certain weeks are particularly out of dist compared to
@@ -267,24 +277,11 @@ def split_train_test_by_year(
             train_data[yield_col].std(),
         )
         data[yield_col] = (data[yield_col] - yield_mean) / yield_std
-        print(
+        logger.info(
             f"Saving mean ({yield_mean:.3f}) and std ({yield_std:.3f}) from training data for {crop_type}"
         )
         CROP_YIELD_STATS[crop_type]["mean"].append(yield_mean)
         CROP_YIELD_STATS[crop_type]["std"].append(yield_std)
-
-    # Drop rows with missing yield values for the given crop AFTER standardization
-    rows_before = len(data)
-    data = data.dropna(subset=[yield_col_original])  # type: ignore
-    rows_after = len(data)
-    rows_dropped = rows_before - rows_after
-
-    if rows_dropped > 0:
-        logger.warning(
-            f"Dropped {rows_dropped} rows with missing {crop_type} yield values ({rows_before} -> {rows_after} rows)"
-        )
-
-    data = data.fillna(0)
 
     train_dataset = CropDataset(
         data.copy(),
