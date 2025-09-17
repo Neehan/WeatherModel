@@ -12,9 +12,6 @@
 # Load your environment
 module load miniforge/24.3.0-0
 
-# no torch vision dependencies
-export TRANSFORMERS_NO_TORCHVISION=1
-
 echo "======== Starting Single-Node Multi-GPU Training ========"
 
 # Extract model names from arguments

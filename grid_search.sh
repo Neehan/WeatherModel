@@ -53,9 +53,6 @@ fi
 # Load your environment
 module load miniforge/24.3.0-0
 
-# no torch vision dependencies
-export TRANSFORMERS_NO_TORCHVISION=1
-
 echo "======== Starting Parallel Grid Search ========"
 if $SINGLE_MODEL_MODE; then
     echo "Single model mode: ${MODEL1} (pretrained vs not pretrained)"
@@ -86,7 +83,7 @@ run_experiment() {
     
     echo "$(date): Starting ${model} ${pretrained_flag} on GPU ${gpu_id}" | tee -a "$log_file"
     
-    CUDA_VISIBLE_DEVICES=$gpu_id python -m src.crop_yield.grid_search \
+    CUDA_VISIBLE_DEVICES=$gpu_id TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.grid_search \
         --model "$model" \
         --crop-type "$CROP_TYPE" \
         $pretrained_flag \

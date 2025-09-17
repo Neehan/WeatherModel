@@ -13,4 +13,4 @@ module load miniforge/24.3.0-0
 export TRANSFORMERS_NO_TORCHVISION=1
 
 echo "======== Starting Crop Yield Training ========"
-python -m src.crop_yield.yield_main "$@"
+TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.yield_main "$@"
