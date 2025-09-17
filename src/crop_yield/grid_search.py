@@ -33,14 +33,15 @@ class GridSearch:
         model: str,
         load_pretrained: bool,
         crop_type: str,
-        output_dir: str = "data/grid_search",
+        output_dir: str,
+        country: str,
     ):
         self.model = model
         self.load_pretrained = load_pretrained
         self.crop_type = crop_type
         self.output_dir = output_dir
         self.method = "pretrained" if load_pretrained else "not_pretrained"
-
+        self.country = country
         # Grid search parameters
         self.beta_values = [0.0, 1e-4, 1e-3]
         self.n_train_years_values = [15]
@@ -60,7 +61,7 @@ class GridSearch:
         self.existing_results = self._load_existing_results()
 
         self.logger.info(
-            f"Initialized GridSearch for {model} ({'with' if load_pretrained else 'without'} pretraining) on {crop_type}"
+            f"Initialized GridSearch for {model} ({'with' if load_pretrained else 'without'} pretraining) on {crop_type} in {country}"
         )
         self.logger.info(f"Results will be saved to: {self.output_file}")
         self.logger.info(
@@ -69,14 +70,12 @@ class GridSearch:
 
     def _get_output_filename(self) -> str:
         """Generate output filename based on model and pretrained setting"""
-        filename = f"grid_search_{self.model}_{self.method}_{self.crop_type}.tsv"
+        filename = f"grid_search_{self.model}_{self.method}_{self.crop_type}_{self.country}.tsv"
         return os.path.join(self.output_dir, filename)
 
     def _get_detailed_output_filename(self) -> str:
         """Generate detailed output filename for individual R² values"""
-        filename = (
-            f"grid_search_{self.model}_{self.method}_{self.crop_type}_detailed.json"
-        )
+        filename = f"grid_search_{self.model}_{self.method}_{self.crop_type}_{self.country}_detailed.json"
         return os.path.join(self.output_dir, filename)
 
     def _load_existing_results(self) -> pd.DataFrame:
@@ -138,6 +137,7 @@ class GridSearch:
 
         base_config = {
             "batch_size": batch_size,
+            "country": self.country,
             "n_past_years": 6,
             "n_epochs": 40,
             "init_lr": init_lr,
@@ -170,6 +170,7 @@ class GridSearch:
         """Run a single experiment with given configuration"""
         experiment_name = (
             f"{config['model']}_beta_{config['beta']}_years_{config['n_train_years']}_"
+            f"{config['country']}_"
             f"pretrained_{config['pretrained_model_path'] is not None}"
         )
 
@@ -184,7 +185,9 @@ class GridSearch:
             )
             return avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values
         except Exception as e:
-            self.logger.error(f"Failed experiment {experiment_name}: {str(e)}")
+            self.logger.error(
+                f"Failed experiment {experiment_name}: {str(e)}", exc_info=True
+            )
             return None, None, None, None, None
 
     def _run_beta_experiments(
@@ -566,6 +569,14 @@ def setup_args() -> argparse.Namespace:
         help="Directory to save results (default: data/grid_search)",
     )
 
+    parser.add_argument(
+        "--country",
+        help="country dataset to use: usa or argentina",
+        default="usa",
+        type=str,
+        choices=["usa", "argentina"],
+    )
+
     return parser.parse_args()
 
 
@@ -578,6 +589,7 @@ def main():
         load_pretrained=args.load_pretrained,
         crop_type=args.crop_type,
         output_dir=args.output_dir,
+        country=args.country,
     )
 
     grid_search.run()
