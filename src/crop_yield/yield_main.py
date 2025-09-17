@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, or linear",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, or chronos",
     default="weatherformer",
     type=str,
 )
@@ -157,6 +157,9 @@ def main(args_dict=None):
     from src.crop_yield.trainers.linear_yield_trainer import (
         linear_yield_training_loop,
     )
+    from src.crop_yield.trainers.chronos_yield_trainer import (
+        chronos_yield_training_loop,
+    )
 
     # Determine which training function to use based on model type
     model_type = args_dict["model"].lower()
@@ -205,9 +208,13 @@ def main(args_dict=None):
         cross_validation_results = linear_yield_training_loop(
             args_dict, use_cropnet=False
         )
+    elif model_type == "chronos":
+        cross_validation_results = chronos_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', or 'linear'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', 'linear', or 'chronos'"
         )
 
     logger = logging.getLogger(__name__)

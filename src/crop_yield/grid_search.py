@@ -22,6 +22,9 @@ PRETRAINED_MODEL_PATHS = {
     "cnnrnn": None,
     "gnnrnn": None,
     "linear": None,
+    # Chronos is already pretrained, this fake path is just to trigger fine-tuning
+    # otherwise the model will be frozen and not fine-tuned
+    "chronos": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
 }
 
 
@@ -456,7 +459,7 @@ class GridSearch:
             for init_lr in self.init_lr_values:
                 for n_train_years in self.n_train_years_values:
                     for beta in self.beta_values:
-                        # Skip beta > 0 for weatherautoencoder, simmtm, cnnrnn, gnnrnn, and linear since they don't use beta parameter
+                        # Skip beta > 0 for weatherautoencoder, simmtm, cnnrnn, gnnrnn, linear, and chronos since they don't use beta parameter
                         if (
                             self.model
                             in [
@@ -465,6 +468,7 @@ class GridSearch:
                                 "cnnrnn",
                                 "gnnrnn",
                                 "linear",
+                                "chronos",
                             ]
                             and beta > 0
                         ):
@@ -548,6 +552,7 @@ def setup_args() -> argparse.Namespace:
             "cnnrnn",
             "gnnrnn",
             "linear",
+            "chronos",
         ],
         help="Model to use for experiments",
     )
