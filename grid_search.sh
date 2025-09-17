@@ -17,7 +17,7 @@ if [ $# -lt 2 ]; then
     echo "Example (single): $0 weatherformer corn --country argentina"
     echo "Example (single): $0 weatherformer corn --country usa --batch-size 128 --init-lr 0.001"
     echo "Example (two models): $0 weatherformer weatherformersinusoid corn --country argentina"
-    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear"
+    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
     echo "Available countries: usa, argentina (default: usa)"
     exit 1
 fi
@@ -40,7 +40,7 @@ else
 fi
 
 # Validate model names
-valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear")
+valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos")
 if [[ ! " ${valid_models[@]} " =~ " ${MODEL1} " ]]; then
     echo "Error: Invalid model1 '${MODEL1}'. Valid options: ${valid_models[@]}"
     exit 1
