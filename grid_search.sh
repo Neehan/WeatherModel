@@ -53,6 +53,9 @@ fi
 # Load your environment
 module load miniforge/24.3.0-0
 
+# no torch vision dependencies
+export TRANSFORMERS_NO_TORCHVISION=1
+
 echo "======== Starting Parallel Grid Search ========"
 if $SINGLE_MODEL_MODE; then
     echo "Single model mode: ${MODEL1} (pretrained vs not pretrained)"

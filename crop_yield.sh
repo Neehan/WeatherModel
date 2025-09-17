@@ -10,7 +10,7 @@
 #SBATCH -t 24:00:00                    # 24-hour wall time
 # Load your environment
 module load miniforge/24.3.0-0
-source activate torch  # Replace with your conda env
+export TRANSFORMERS_NO_TORCHVISION=1
 
 echo "======== Starting Crop Yield Training ========"
 python -m src.crop_yield.yield_main "$@"
