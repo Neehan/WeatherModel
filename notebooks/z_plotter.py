@@ -51,7 +51,8 @@ os.environ["DRY_RUN"] = "0"
 from src.utils.constants import DATA_DIR, TOTAL_WEATHER_VARS
 from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
-    read_soybean_dataset,
+    read_usa_dataset,
+    read_argentina_dataset,
 )
 from src.crop_yield.dataloader.cropnet_dataloader import (
     get_cropnet_train_test_loaders,
@@ -421,7 +422,7 @@ def main():
             num_workers=0,
         )
     else:
-        crop_df = read_soybean_dataset(DATA_DIR)
+        crop_df = read_usa_dataset(DATA_DIR)
         train_loader, test_loader = get_train_test_loaders(
             crop_df,
             n_train_years=9,  # Use more years to get more data
