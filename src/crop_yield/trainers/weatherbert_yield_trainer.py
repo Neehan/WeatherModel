@@ -8,8 +8,8 @@ from src.utils.constants import DATA_DIR, TOTAL_WEATHER_VARS
 from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
 from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
-    read_soybean_dataset,
-    read_wheat_dataset,
+    read_usa_dataset,
+    read_argentina_dataset,
 )
 from src.crop_yield.dataloader.cropnet_dataloader import (
     get_cropnet_train_test_loaders,
@@ -23,10 +23,16 @@ TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
 FOLD_IDX = 0
 
 EXTREME_YEARS = {
-    "corn": [2002, 2004, 2009, 2012, 2014],
-    "soybean": [2003, 2004, 2009, 2012, 2016],
-    "wheat": [2002, 2003, 2005, 2009, 2011],
-    "sunflower": [2002, 2007, 2008, 2009, 2011],
+    "usa": {
+        "corn": [2002, 2004, 2009, 2012, 2014],
+        "soybean": [2003, 2004, 2009, 2012, 2016],
+    },
+    "argentina": {
+        "corn": [2004, 2005, 2007, 2019, 2015],
+        "soybean": [2003, 2006, 2007, 2009, 2015],
+        "wheat": [2002, 2003, 2005, 2009, 2011],
+        "sunflower": [2002, 2007, 2008, 2009, 2011],
+    },
 }
 
 
@@ -54,6 +60,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
     def __init__(
         self,
         crop_df: pd.DataFrame,
+        country: str,
         n_past_years: int,
         n_train_years: int,
         beta: float,
@@ -76,7 +83,9 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.criterion = nn.MSELoss(reduction="mean")
 
         # extreme years
-        test_years = EXTREME_YEARS[crop_type]
+        test_years = EXTREME_YEARS.get(country, {}).get(crop_type)
+        if test_years is None:
+            raise ValueError(f"No extreme years found for {crop_type} in {country}.")
         # test_years = TEST_YEARS
 
         # Override model directory for yield prediction
@@ -255,12 +264,12 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
         # For CropNet, use k=1 fold (test on 2021)
         cross_validation_k = 1
     else:
-        # Read dataset based on crop type
-        crop_type = args_dict["crop_type"]
-        if crop_type == "wheat" or crop_type == "sunflower":
-            crop_df = read_wheat_dataset(DATA_DIR)
-        else:
-            crop_df = read_soybean_dataset(DATA_DIR)
+        # Read dataset based on country
+        country = args_dict["country"]
+        if country == "argentina":
+            crop_df = read_argentina_dataset(DATA_DIR)
+        else:  # usa
+            crop_df = read_usa_dataset(DATA_DIR)
 
         # Check if specific test year is provided
         if args_dict.get("test_year") is not None:
@@ -322,6 +331,7 @@ def _run_yield_cross_validation(
 
     trainer_kwargs = {
         "crop_df": setup_params["crop_df"],
+        "country": args_dict["country"],
         "n_past_years": args_dict["n_past_years"],
         "n_train_years": args_dict["n_train_years"],
         "beta": args_dict["beta"],

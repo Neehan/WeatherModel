@@ -7,7 +7,6 @@ import logging
 
 from src.crop_yield.models.gnnrnn_yield_model import GNNRNNYieldModel
 from src.crop_yield.dataloader.gnnrnn_dataloader import get_gnnrnn_dataloaders
-from src.crop_yield.dataloader.yield_dataloader import read_soybean_dataset
 from src.crop_yield.trainers.weatherbert_yield_trainer import (
     WeatherBERTYieldTrainer,
     TEST_YEARS,

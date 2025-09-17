@@ -304,18 +304,18 @@ def split_train_test_by_year(
     return train_dataset, test_dataset
 
 
-def read_soybean_dataset(data_dir: str):
+def read_usa_dataset(data_dir: str):
     full_filename = "khaki_soybeans/khaki_multi_crop_yield.csv"
-    soybean_df = pd.read_csv(data_dir + full_filename)
-    soybean_df = soybean_df.sort_values(["loc_ID", "year"])
-    return soybean_df
+    usa_df = pd.read_csv(data_dir + full_filename)
+    usa_df = usa_df.sort_values(["loc_ID", "year"])
+    return usa_df
 
 
-def read_wheat_dataset(data_dir: str):
+def read_argentina_dataset(data_dir: str):
     full_filename = "khaki_soybeans/khaki_argentina_multi_crop.csv"
-    wheat_df = pd.read_csv(data_dir + full_filename)
-    wheat_df = wheat_df.sort_values(["loc_ID", "year"])
-    return wheat_df
+    argentina_df = pd.read_csv(data_dir + full_filename)
+    argentina_df = argentina_df.sort_values(["loc_ID", "year"])
+    return argentina_df
 
 
 def get_train_test_loaders(

@@ -86,6 +86,13 @@ parser.add_argument(
     choices=["soybean", "corn", "wheat", "sunflower"],
 )
 parser.add_argument(
+    "--country",
+    help="country dataset to use: usa or argentina",
+    default="usa",
+    type=str,
+    choices=["usa", "argentina"],
+)
+parser.add_argument(
     "--test-year",
     help="specific test year for single-year evaluation (if not provided, uses 5-fold cross validation)",
     default=None,
