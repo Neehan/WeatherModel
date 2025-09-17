@@ -432,6 +432,7 @@ def main():
             shuffle=False,
             num_workers=0,
             crop_type=args.crop_type,
+            country="usa",
         )
 
     # Combine train and test loaders to get all data

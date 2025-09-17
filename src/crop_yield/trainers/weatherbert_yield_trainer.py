@@ -73,6 +73,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
 
         # Store yield-specific parameters
         self.crop_df = crop_df
+        self.country = country
         self.n_past_years = n_past_years
         self.n_train_years = n_train_years
         self.beta = beta
@@ -155,6 +156,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 shuffle,
                 num_workers=0 if self.world_size > 1 else 8,
                 crop_type=self.crop_type,
+                country=self.country,
             )
 
         self.train_loader = train_loader

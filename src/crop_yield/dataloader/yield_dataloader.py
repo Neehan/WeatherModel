@@ -1,5 +1,7 @@
 from asyncio.log import logger
-from typing import Tuple
+from typing import Tuple, Dict
+import json
+import os
 
 import pandas as pd
 import torch
@@ -11,7 +13,102 @@ from src.utils.constants import (
     MAX_CONTEXT_LENGTH,
     TOTAL_WEATHER_VARS,
     CROP_YIELD_STATS,
+    DATA_DIR,
 )
+
+
+def load_weather_scalers_from_json(json_path: str) -> Dict[str, Dict[str, float]]:
+    """
+    Load weather parameter scalers from JSON file and convert to W_x_x format.
+
+    Returns:
+        Dictionary with keys like 'W_1_1', 'W_1_2', etc. and values containing 'mean' and 'std'
+    """
+    # Mapping from JSON parameter names to weather indices
+    param_to_index = {
+        "T2M_MAX": 1,  # max temp
+        "T2M_MIN": 2,  # min temp
+        "PRECTOTCORR": 7,  # precipitation
+        "ALLSKY_SFC_SW_DWN": 8,  # solar radiation
+        "SNODP": 11,  # snow depth
+        "VAP": 29,  # vapor pressure
+    }
+
+    with open(json_path, "r") as f:
+        scaler_data = json.load(f)
+
+    weather_scalers = {}
+
+    # Convert from JSON format to W_x_x format
+    for week_key, week_data in scaler_data.items():
+        if not week_key.startswith("week_"):
+            continue
+
+        week_num = int(week_key.split("_")[1])
+
+        param_means = week_data["param_means"]
+        param_stds = week_data["param_stds"]
+
+        for param_name, weather_idx in param_to_index.items():
+            if param_name in param_means and param_name in param_stds:
+                col_name = f"W_{weather_idx}_{week_num}"
+                weather_scalers[col_name] = {
+                    "mean": param_means[param_name],
+                    "std": param_stds[param_name],
+                }
+
+    return weather_scalers
+
+
+def standardize_weather_cols(data: pd.DataFrame, country: str) -> pd.DataFrame:
+    """
+    Standardize only weather columns using either dataset-based or JSON-based scalers.
+
+    Args:
+        data: DataFrame containing weather data
+        country: Country name ('argentina' uses JSON scalers, others use dataset scalers)
+
+    Returns:
+        DataFrame with standardized weather columns only
+    """
+    data_copy = data.copy()
+
+    # Get weather columns
+    weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
+    weather_cols_in_data = [col for col in weather_cols if col in data_copy.columns]
+
+    if country.lower() == "argentina":
+        logger.warning("Using JSON-based scalers for Argentina weather data only")
+        # Use JSON-based scalers for Argentina weather data only
+        json_path = os.path.join(
+            DATA_DIR, "khaki_soybeans", "weekly_weather_param_scalers.json"
+        )
+        if not os.path.exists(json_path):
+            raise FileNotFoundError(f"JSON scalers file not found at {json_path}")
+
+        weather_scalers = load_weather_scalers_from_json(json_path)
+
+        # Standardize using JSON scalers
+        for col in weather_cols_in_data:
+            if col in weather_scalers:
+                mean = weather_scalers[col]["mean"]
+                std = weather_scalers[col]["std"]
+                if std > 0:  # Avoid division by zero
+                    data_copy[col] = (data_copy[col] - mean) / std
+                else:
+                    data_copy[col] = 0
+    else:
+        # Use dataset-based scalers for weather columns only
+        if weather_cols_in_data:
+            means = data_copy[weather_cols_in_data].mean()
+            stds = data_copy[weather_cols_in_data].std()
+            data_copy[weather_cols_in_data] = (
+                data_copy[weather_cols_in_data] - means
+            ) / stds
+            # Fill any NaN values that result from division by zero with 0
+            data_copy[weather_cols_in_data] = data_copy[weather_cols_in_data].fillna(0)
+
+    return data_copy
 
 
 class CropDataset(Dataset):
@@ -51,12 +148,12 @@ class CropDataset(Dataset):
         ]
 
         # Define weather indices used in preprocessing
-        # 7: precipitation
-        # 8: solar radiation
-        # 11: snow depth
-        # 1: max temp
-        # 2: min temp
-        # 29: vap pressure
+        # 7: precipitation (PRECTOTCORR)
+        # 8: solar radiation (ALLSKY_SFC_SW_DWN)
+        # 11: snow depth (SNODP)
+        # 1: max temp (T2M_MAX)
+        # 2: min temp (T2M_MIN)
+        # 29: vap pressure (VAP)
         self.weather_indices = torch.tensor([7, 8, 11, 1, 2, 29])
         # substract test gap from start year
         start_year -= test_gap
@@ -221,6 +318,7 @@ def split_train_test_by_year(
     standardize: bool,
     n_past_years: int,
     crop_type: str,
+    country: str,
 ):
     # you need n_train_years + 1 years of data
     # n_train years to have at least one training datapoint
@@ -231,10 +329,9 @@ def split_train_test_by_year(
         soybean_df["year"] > 1981.0
     ].copy()  # must be > 1981 otherwise all past data is just 0
 
-    # Duplicate yield column before standardization to avoid bias
     yield_col = f"{crop_type}_yield"
 
-    # Drop rows with missing yield values for the given crop AFTER standardization
+    # Drop rows with missing yield values for the given crop before standardization
     rows_before = len(data)
     data = data.dropna(subset=[yield_col])  # type: ignore
     rows_after = len(data)
@@ -248,27 +345,34 @@ def split_train_test_by_year(
     data = data.fillna(0)
 
     if standardize:
-        cols_to_standardize = [
-            col
-            for col in data.columns
-            if col
-            not in [
-                "loc_ID",
-                "year",
-                "State",
-                "County",
-                "lat",
-                "lng",
-                yield_col,
-            ]
+        # First standardize weather data using country-specific approach
+        data = standardize_weather_cols(data, country)
+
+        # Then standardize non-weather data using original approach
+        cols_to_exclude = [
+            "loc_ID",
+            "year",
+            "State",
+            "County",
+            "lat",
+            "lng",
+            yield_col,
         ]
-        # helpful to detect if certain weeks are particularly out of dist compared to
-        # historical data for that week
-        data[cols_to_standardize] = (
-            data[cols_to_standardize] - data[cols_to_standardize].mean()
-        ) / data[cols_to_standardize].std()
-        # Fill any NaN values that result from division by zero with 0
-        data[cols_to_standardize] = data[cols_to_standardize].fillna(0)  # type: ignore
+        # Also exclude weather columns since we already standardized them
+        weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
+        cols_to_exclude.extend(weather_cols)
+
+        cols_to_standardize = [
+            col for col in data.columns if col not in cols_to_exclude
+        ]
+
+        # Standardize non-weather data (soil, practices, etc.)
+        if cols_to_standardize:
+            data[cols_to_standardize] = (
+                data[cols_to_standardize] - data[cols_to_standardize].mean()
+            ) / data[cols_to_standardize].std()
+            # Fill any NaN values that result from division by zero with 0
+            data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
 
         # save crop-specific yield statistics from constants
         train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
@@ -327,6 +431,7 @@ def get_train_test_loaders(
     shuffle: bool,
     num_workers: int,
     crop_type: str,
+    country: str,
 ) -> Tuple[DataLoader, DataLoader]:
 
     if n_train_years <= 1:
@@ -350,6 +455,7 @@ def get_train_test_loaders(
         standardize=True,
         n_past_years=n_past_years,
         crop_type=crop_type,
+        country=country,
     )
 
     if n_train_years < n_past_years + 1:
