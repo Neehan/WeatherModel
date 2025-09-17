@@ -1,6 +1,11 @@
 from typing import Optional, Union
 import torch
 import torch.nn as nn
+
+import os
+
+os.environ["TRANSFORMERS_NO_TORCHVISION"] = "1"
+
 from chronos import ChronosPipeline
 from src.pretraining.models.weatherbert import WeatherBERT
 

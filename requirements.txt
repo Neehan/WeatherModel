@@ -1,4 +1,4 @@
-transformers
+transformers>=4.40,<4.45
 datasets
 huggingface_hub
 torch-lr-finder
