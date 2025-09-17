@@ -14,9 +14,11 @@ if [ $# -lt 2 ]; then
     echo "Usage (single model): $0 <model> <crop_type> [additional_python_args...]"
     echo "Usage (two models): $0 <model1> <model2> <crop_type> [additional_python_args...]"
     echo "Example (single): $0 weatherformer corn"
-    echo "Example (single): $0 weatherformer corn --batch-size 128 --init-lr 0.001"
-    echo "Example (two models): $0 weatherformer weatherformersinusoid corn"
+    echo "Example (single): $0 weatherformer corn --country argentina"
+    echo "Example (single): $0 weatherformer corn --country usa --batch-size 128 --init-lr 0.001"
+    echo "Example (two models): $0 weatherformer weatherformersinusoid corn --country argentina"
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear"
+    echo "Available countries: usa, argentina (default: usa)"
     exit 1
 fi
 
