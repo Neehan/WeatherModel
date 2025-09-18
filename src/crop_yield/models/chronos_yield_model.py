@@ -30,11 +30,12 @@ class ChronosYieldModel(BaseModel):
             torch_dtype=torch.float32,
         )
 
-        # Move tokenizer tensors to the same device
-        if hasattr(self.chronos_pipeline.tokenizer, 'boundaries'):
-            self.chronos_pipeline.tokenizer.boundaries = self.chronos_pipeline.tokenizer.boundaries.to(device)
-        if hasattr(self.chronos_pipeline.tokenizer, 'centers'):
-            self.chronos_pipeline.tokenizer.centers = self.chronos_pipeline.tokenizer.centers.to(device)
+        # Move all tokenizer tensors to the same device to avoid device mismatch
+        tokenizer = self.chronos_pipeline.tokenizer
+        for attr_name in dir(tokenizer):
+            attr = getattr(tokenizer, attr_name)
+            if isinstance(attr, torch.Tensor):
+                setattr(tokenizer, attr_name, attr.to(device))
 
         # Register the chronos model as a submodule so it's included in parameters() count
         self.chronos_model = self.chronos_pipeline.model
