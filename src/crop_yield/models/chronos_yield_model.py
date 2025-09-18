@@ -10,7 +10,6 @@ from chronos import ChronosPipeline
 from src.pretraining.models.weatherbert import WeatherBERT
 
 from src.base_models.base_model import BaseModel
-from src.utils.constants import DEVICE, TOTAL_WEATHER_VARS
 
 
 class ChronosYieldModel(BaseModel):
@@ -30,6 +29,9 @@ class ChronosYieldModel(BaseModel):
             device_map=device,
             torch_dtype=torch.float32,
         )
+
+        # Ensure entire pipeline is on the correct device
+        self.chronos_pipeline = self.chronos_pipeline.to(device)
 
         # Register the chronos model as a submodule so it's included in parameters() count
         self.chronos_model = self.chronos_pipeline.model
