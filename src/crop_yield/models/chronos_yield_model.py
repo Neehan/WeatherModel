@@ -43,12 +43,21 @@ class ChronosYieldModel(BaseModel):
         # Monkey patch the _append_eos_token method to use correct device
         def _append_eos_token_fixed(self, token_ids, attention_mask):
             batch_size = token_ids.shape[0]
-            eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id, device=token_ids.device)
+            eos_tokens = torch.full(
+                (batch_size, 1),
+                fill_value=self.config.eos_token_id,
+                device=token_ids.device,
+            )
             token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-            eos_mask = torch.full((batch_size, 1), fill_value=True, device=attention_mask.device)
+            eos_mask = torch.full(
+                (batch_size, 1), fill_value=True, device=attention_mask.device
+            )
             attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
             return token_ids, attention_mask
-        tokenizer._append_eos_token = _append_eos_token_fixed.__get__(tokenizer, type(tokenizer))
+
+        tokenizer._append_eos_token = _append_eos_token_fixed.__get__(
+            tokenizer, type(tokenizer)
+        )
 
         # Register the chronos model as a submodule so it's included in parameters() count
         self.chronos_model = self.chronos_pipeline.model
@@ -78,33 +87,18 @@ class ChronosYieldModel(BaseModel):
         )
         self.freeze_chronos_model()  # This will set it to True and actually freeze parameters
 
-    def get_chronos_embeddings(self, weather):
+    def get_chronos_embeddings(self, context):
         """
         Extract embeddings from Chronos model for weather time series
-        Processes all weather variables in parallel and removes extra tokens
-        weather: batch_size x seq_len x weather_dim
-        returns: batch_size x seq_len x (chronos_embedding_dim * weather_dim)
         """
-        batch_size, seq_len, weather_dim = weather.shape
 
-        # Reshape to process all weather variables in parallel
-        weather_reshaped = weather.permute(0, 2, 1).reshape(
-            batch_size * weather_dim, seq_len
+        token_ids, attention_mask, tokenizer_state = (
+            self.chronos_pipeline.tokenizer.context_input_transform(context)
         )
-
-        # Get embeddings and remove extra token that Chronos adds
-        embeddings, _ = self.chronos_pipeline.embed(weather_reshaped)
-        embeddings = embeddings[:, :seq_len, :]  # Remove extra CLS-like token
-        embeddings = embeddings.to(weather_reshaped.device)  # Move back to GPU
-
-        # Reshape and concatenate embeddings from all weather variables
-        embeddings = embeddings.reshape(
-            batch_size, weather_dim, seq_len, self.chronos_embedding_dim
+        embeddings = self.chronos_pipeline.model.encode(
+            input_ids=token_ids,
+            attention_mask=attention_mask,
         )
-        embeddings = embeddings.permute(0, 2, 1, 3).reshape(
-            batch_size, seq_len, weather_dim * self.chronos_embedding_dim
-        )
-
         return embeddings
 
     def yield_model(
@@ -149,11 +143,28 @@ class ChronosYieldModel(BaseModel):
         weather_feature_mask: batch_size x seq_len x n_features
         """
 
-        # Get embeddings from Chronos model
-        weather_embeddings = self.get_chronos_embeddings(weather)
+        batch_size, seq_len, weather_dim = weather.shape
+
+        # Reshape to process all weather variables in parallel
+        weather_reshaped = weather.permute(0, 2, 1).reshape(
+            batch_size * weather_dim, seq_len
+        )
+
+        # Get embeddings and remove extra token that Chronos adds
+        embeddings = self.get_chronos_embeddings(weather_reshaped)
+        # Remove extra CLS-like token
+        embeddings = embeddings[:, :seq_len, :]
+
+        # Reshape and concatenate embeddings from all weather variables
+        embeddings = embeddings.reshape(
+            batch_size, weather_dim, seq_len, self.chronos_embedding_dim
+        )
+        embeddings = embeddings.permute(0, 2, 1, 3).reshape(
+            batch_size, seq_len, weather_dim * self.chronos_embedding_dim
+        )
 
         output = self.yield_model(
-            weather_embeddings,
+            embeddings,
             coord,
             year,
             interval,
