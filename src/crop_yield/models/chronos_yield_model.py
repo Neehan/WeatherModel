@@ -95,6 +95,7 @@ class ChronosYieldModel(BaseModel):
         # Get embeddings and remove extra token that Chronos adds
         embeddings, _ = self.chronos_pipeline.embed(weather_reshaped)
         embeddings = embeddings[:, :seq_len, :]  # Remove extra CLS-like token
+        embeddings = embeddings.to(weather_reshaped.device)  # Move back to GPU
 
         # Reshape and concatenate embeddings from all weather variables
         embeddings = embeddings.reshape(
