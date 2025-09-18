@@ -37,6 +37,19 @@ class ChronosYieldModel(BaseModel):
             if isinstance(attr, torch.Tensor):
                 setattr(tokenizer, attr_name, attr.to(device))
 
+        # Store device for dynamic tensor creation
+        tokenizer.device = device
+
+        # Monkey patch the _append_eos_token method to use correct device
+        def _append_eos_token_fixed(self, token_ids, attention_mask):
+            batch_size = token_ids.shape[0]
+            eos_tokens = torch.full((batch_size, 1), fill_value=self.config.eos_token_id, device=token_ids.device)
+            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
+            eos_mask = torch.full((batch_size, 1), fill_value=True, device=attention_mask.device)
+            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
+            return token_ids, attention_mask
+        tokenizer._append_eos_token = _append_eos_token_fixed.__get__(tokenizer, type(tokenizer))
+
         # Register the chronos model as a submodule so it's included in parameters() count
         self.chronos_model = self.chronos_pipeline.model
 
