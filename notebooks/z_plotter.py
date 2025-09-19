@@ -52,7 +52,7 @@ from src.utils.constants import DATA_DIR, TOTAL_WEATHER_VARS
 from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
     read_usa_dataset,
-    read_argentina_dataset,
+    read_non_us_dataset,
 )
 from src.crop_yield.dataloader.cropnet_dataloader import (
     get_cropnet_train_test_loaders,

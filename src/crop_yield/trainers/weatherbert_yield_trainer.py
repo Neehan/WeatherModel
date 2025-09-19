@@ -9,7 +9,7 @@ from src.crop_yield.models.weatherbert_yield_model import WeatherBERTYieldModel
 from src.crop_yield.dataloader.yield_dataloader import (
     get_train_test_loaders,
     read_usa_dataset,
-    read_argentina_dataset,
+    read_non_us_dataset,
 )
 from src.crop_yield.dataloader.cropnet_dataloader import (
     get_cropnet_train_test_loaders,
@@ -274,7 +274,7 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
         # Read dataset based on country
         country = args_dict["country"]
         if country == "argentina":
-            crop_df = read_argentina_dataset(DATA_DIR)
+            crop_df = read_non_us_dataset(DATA_DIR)
         else:  # usa
             crop_df = read_usa_dataset(DATA_DIR)
 
