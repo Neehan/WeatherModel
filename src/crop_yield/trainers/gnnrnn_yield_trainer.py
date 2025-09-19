@@ -59,6 +59,7 @@ class GNNRNNYieldTrainer(WeatherBERTYieldTrainer):
             batch_size=self.batch_size,
             device=self.device,
             crop_type=self.crop_type,
+            country=self.country,
         )
 
         # Store nodeloader and mappings for use in training/validation

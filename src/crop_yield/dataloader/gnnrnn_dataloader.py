@@ -9,8 +9,120 @@ import warnings
 from torch.utils.data import DataLoader, Dataset
 from typing import Tuple, Dict, Any, Optional
 import math
+import json
+from asyncio.log import logger
 
 from src.utils.constants import DATA_DIR, CROP_YIELD_STATS
+
+
+def load_weather_scalers_from_json(json_path: str) -> Dict[str, Dict[str, float]]:
+    """
+    Load weather parameter scalers from JSON file and convert to W_x_x format.
+
+    Returns:
+        Dictionary with keys like 'W_1_1', 'W_1_2', etc. and values containing 'mean' and 'std'
+    """
+    # Mapping from JSON parameter names to weather indices
+    param_to_index = {
+        "T2M_MAX": 1,  # max temp
+        "T2M_MIN": 2,  # min temp
+        "PRECTOTCORR": 7,  # precipitation
+        "ALLSKY_SFC_SW_DWN": 8,  # solar radiation
+        "SNODP": 11,  # snow depth
+        "VAP": 29,  # vapor pressure
+    }
+
+    with open(json_path, "r") as f:
+        scaler_data = json.load(f)
+
+    weather_scalers = {}
+
+    # Convert from JSON format to W_x_x format
+    for week_key, week_data in scaler_data.items():
+        if not week_key.startswith("week_"):
+            continue
+
+        week_num = int(week_key.split("_")[1])
+
+        param_means = week_data["param_means"]
+        param_stds = week_data["param_stds"]
+
+        for param_name, weather_idx in param_to_index.items():
+            if param_name in param_means and param_name in param_stds:
+                col_name = f"W_{weather_idx}_{week_num}"
+                weather_scalers[col_name] = {
+                    "mean": param_means[param_name],
+                    "std": param_stds[param_name],
+                }
+
+    return weather_scalers
+
+
+def standardize_weather_cols_gnn(data: pd.DataFrame, country: str) -> pd.DataFrame:
+    """
+    Standardize only weather columns using either dataset-based or JSON-based scalers.
+
+    Args:
+        data: DataFrame containing weather data
+        country: Non USA countries uses JSON scalers, others use dataset scalers)
+
+    Returns:
+        DataFrame with standardized weather columns only
+    """
+    data_copy = data.copy()
+
+    # Get weather columns
+    weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
+    weather_cols_in_data = [col for col in weather_cols if col in data_copy.columns]
+
+    if country.lower() != "usa":
+        logger.warning("Using USA-based scalers for standardizing Non-US weather data")
+        # Use JSON-based scalers for Argentina weather data only
+        json_path = os.path.join(
+            DATA_DIR, "khaki_soybeans", "weekly_weather_param_scalers.json"
+        )
+        if not os.path.exists(json_path):
+            raise FileNotFoundError(f"JSON scalers file not found at {json_path}")
+
+        weather_scalers = load_weather_scalers_from_json(json_path)
+
+        # Standardize using JSON scalers
+        for col in weather_cols_in_data:
+            if col in weather_scalers:
+                mean = weather_scalers[col]["mean"]
+                std = weather_scalers[col]["std"]
+                if std > 0:  # Avoid division by zero
+                    data_copy[col] = (data_copy[col] - mean) / std
+                else:
+                    data_copy[col] = 0
+    else:
+        # Use dataset-based scalers for weather columns only
+        if weather_cols_in_data:
+            means = data_copy[weather_cols_in_data].mean()
+            stds = data_copy[weather_cols_in_data].std()
+            data_copy[weather_cols_in_data] = (
+                data_copy[weather_cols_in_data] - means
+            ) / stds
+            # Fill any NaN values that result from division by zero with 0
+            data_copy[weather_cols_in_data] = data_copy[weather_cols_in_data].fillna(0)
+
+    return data_copy
+
+
+def read_usa_dataset_gnn(data_dir: str):
+    """Load USA dataset for GNN-RNN training"""
+    full_filename = "khaki_soybeans/khaki_multi_crop_yield.csv"
+    usa_df = pd.read_csv(data_dir + full_filename)
+    usa_df = usa_df.sort_values(["loc_ID", "year"])
+    return usa_df
+
+
+def read_non_us_dataset_gnn(data_dir: str, country: str):
+    """Load non-USA dataset for GNN-RNN training"""
+    full_filename = f"khaki_soybeans/khaki_{country}_multi_crop.csv"
+    df = pd.read_csv(data_dir + full_filename)
+    df = df.sort_values(["loc_ID", "year"])
+    return df
 
 
 class GNNRNNDataset:
@@ -258,6 +370,7 @@ def get_gnnrnn_dataloaders(
     batch_size: int = 64,
     device: torch.device = torch.device("cpu"),
     crop_type: str = "soybean",
+    country: str = "usa",
     us_adj_file: str = "us_adj.pkl",
     crop_id_to_fid: str = "crop_id_to_fid.pkl",
     test_gap: int = 0,
@@ -265,6 +378,19 @@ def get_gnnrnn_dataloaders(
     """
     Get GNN-RNN data loaders for train and test
     Follows same standardization approach as main yield dataloader
+
+    Args:
+        crop_df: DataFrame containing crop data
+        test_year: Year to use for testing
+        n_train_years: Number of training years
+        n_past_years: Number of past years for sequences
+        batch_size: Batch size for training
+        device: Device to use for training
+        crop_type: Type of crop (soybean, corn, etc.)
+        country: Country for data loading (affects weather standardization)
+        us_adj_file: Adjacency file path
+        crop_id_to_fid: Crop ID to field ID mapping file
+        test_gap: Gap between training and test years
 
     Returns:
         train_dataset: Training dataset
@@ -275,49 +401,76 @@ def get_gnnrnn_dataloaders(
     """
     start_year = test_year - n_train_years  # Use specified number of training years
 
-    # Standardize data upfront (same as main yield dataloader)
-    data = crop_df[crop_df["year"] > 1981.0].copy()  # Filter years like main dataloader
+    # Parameter validation (same as main dataloader)
+    if n_train_years <= 1:
+        raise ValueError(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}."
+        )
+
+    if n_train_years < n_past_years + 1:
+        logger.warning(
+            f"Not enough training data for current year + n_past_years. Required: {n_past_years + 1}. "
+            f"Available training years: {n_train_years}. "
+            f"Setting n_past_years to {n_train_years - 1}."
+        )
+        n_past_years = n_train_years - 1
+
+    # Filter years like main dataloader (must be > 1981 otherwise all past data is just 0)
+    data = crop_df[crop_df["year"] > 1981.0].copy()
 
     yield_col = f"{crop_type}_yield"
-    # Drop rows with missing yield values
+
+    # Drop rows with missing yield values for the given crop before standardization
     rows_before = len(data)
     data = data.dropna(subset=[yield_col])  # type: ignore
     rows_after = len(data)
-    if rows_before != rows_after:
-        print(
-            f"Dropped {rows_before - rows_after} rows with missing {yield_col} values"
+    rows_dropped = rows_before - rows_after
+
+    if rows_dropped > 0:
+        logger.warning(
+            f"Dropped {rows_dropped} rows with missing {crop_type} yield values ({rows_before} -> {rows_after} rows)"
         )
 
-    # Standardize everything (same logic as main dataloader)
+    data = data.fillna(0)
+
+    # First standardize weather data using country-specific approach (same as main dataloader)
+    data = standardize_weather_cols_gnn(data, country)
+
+    # Then standardize non-weather data using original approach
+    cols_to_exclude = [
+        "loc_ID",
+        "year",
+        "State",
+        "County",
+        "lat",
+        "lng",
+        yield_col,
+    ]
+    # Also exclude weather columns since we already standardized them
+    weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
+    cols_to_exclude.extend(weather_cols)
+
     cols_to_standardize = [
-        col
-        for col in data.columns
-        if col
-        not in [
-            "loc_ID",
-            "year",
-            "State",
-            "County",
-            "lat",
-            "lng",
-            yield_col,
-        ]
+        col for col in data.columns if col not in cols_to_exclude
     ]
 
-    # Standardize weather and soil features
-    data[cols_to_standardize] = (
-        data[cols_to_standardize] - data[cols_to_standardize].mean()
-    ) / data[cols_to_standardize].std()
-    data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
+    # Standardize non-weather data (soil, practices, etc.)
+    if cols_to_standardize:
+        data[cols_to_standardize] = (
+            data[cols_to_standardize] - data[cols_to_standardize].mean()
+        ) / data[cols_to_standardize].std()
+        # Fill any NaN values that result from division by zero with 0
+        data[cols_to_standardize] = data[cols_to_standardize].fillna(0)
 
-    # Standardize yield and save stats
+    # Save crop-specific yield statistics from constants (same as main dataloader)
     train_data = data[(data["year"] >= start_year) & (data["year"] < test_year)]
     yield_mean, yield_std = (
         train_data[yield_col].mean(),
         train_data[yield_col].std(),
     )
     data[yield_col] = (data[yield_col] - yield_mean) / yield_std
-    print(
+    logger.info(
         f"Saving mean ({yield_mean:.3f}) and std ({yield_std:.3f}) from training data for {crop_type}"
     )
     CROP_YIELD_STATS[crop_type]["mean"].append(yield_mean)

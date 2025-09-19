@@ -66,7 +66,7 @@ def standardize_weather_cols(data: pd.DataFrame, country: str) -> pd.DataFrame:
 
     Args:
         data: DataFrame containing weather data
-        country: Country name ('argentina' uses JSON scalers, others use dataset scalers)
+        country: Non USA countries uses JSON scalers, others use dataset scalers)
 
     Returns:
         DataFrame with standardized weather columns only
