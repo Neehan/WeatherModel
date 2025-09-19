@@ -273,10 +273,10 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
     else:
         # Read dataset based on country
         country = args_dict["country"]
-        if country == "argentina":
-            crop_df = read_non_us_dataset(DATA_DIR)
-        else:  # usa
+        if country == "usa":
             crop_df = read_usa_dataset(DATA_DIR)
+        else:
+            crop_df = read_non_us_dataset(DATA_DIR, country)
 
         # Check if specific test year is provided
         if args_dict.get("test_year") is not None:
