@@ -80,17 +80,17 @@ parser.add_argument(
 )
 parser.add_argument(
     "--crop-type",
-    help="crop type to predict: soybean, corn or, wheat, sunflower",
+    help="crop type to predict: soybean, corn, wheat, sunflower, cotton, sugarcane",
     default="soybean",
     type=str,
-    choices=["soybean", "corn", "wheat", "sunflower"],
+    choices=["soybean", "corn", "wheat", "sunflower", "cotton", "sugarcane"],
 )
 parser.add_argument(
     "--country",
-    help="country dataset to use: usa or argentina",
+    help="country dataset to use: usa, argentina, or brazil",
     default="usa",
     type=str,
-    choices=["usa", "argentina"],
+    choices=["usa", "argentina", "brazil"],
 )
 parser.add_argument(
     "--test-year",

@@ -54,8 +54,8 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "  $0 --model weatherformer --crop corn soybean"
     echo ""
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
-    echo "Available crops: corn, soybean, wheat, sunflower"
-    echo "Available countries: usa, argentina (default: usa)"
+    echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane"
+    echo "Available countries: usa, argentina, brazil (default: usa)"
     exit 1
 fi
 
@@ -80,7 +80,7 @@ for model in "${MODELS[@]}"; do
 done
 
 # Validate crop names
-valid_crops=("corn" "soybean" "wheat" "sunflower")
+valid_crops=("corn" "soybean" "wheat" "sunflower" "cotton" "sugarcane")
 for crop in "${CROPS[@]}"; do
     if [[ ! " ${valid_crops[@]} " =~ " ${crop} " ]]; then
         echo "Error: Invalid crop '${crop}'. Valid options: ${valid_crops[@]}"

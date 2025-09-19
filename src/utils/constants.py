@@ -33,6 +33,14 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
+    "cotton": {
+        "mean": [],
+        "std": [],
+    },
+    "sugarcane": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31

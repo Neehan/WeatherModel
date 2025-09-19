@@ -564,8 +564,8 @@ def setup_args() -> argparse.Namespace:
     parser.add_argument(
         "--crop-type",
         required=True,
-        choices=["soybean", "corn", "wheat", "sunflower"],
-        help="Crop type to predict: soybean, corn, wheat or sunflower",
+        choices=["soybean", "corn", "wheat", "sunflower", "cotton", "sugarcane"],
+        help="Crop type to predict: soybean, corn, wheat, sunflower, cotton, or sugarcane",
     )
 
     parser.add_argument(
@@ -576,10 +576,10 @@ def setup_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--country",
-        help="country dataset to use: usa or argentina",
+        help="country dataset to use: usa, argentina, or brazil",
         default="usa",
         type=str,
-        choices=["usa", "argentina"],
+        choices=["usa", "argentina", "brazil"],
     )
 
     return parser.parse_args()

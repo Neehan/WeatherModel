@@ -415,11 +415,11 @@ def read_usa_dataset(data_dir: str):
     return usa_df
 
 
-def read_argentina_dataset(data_dir: str):
-    full_filename = "khaki_soybeans/khaki_argentina_multi_crop.csv"
-    argentina_df = pd.read_csv(data_dir + full_filename)
-    argentina_df = argentina_df.sort_values(["loc_ID", "year"])
-    return argentina_df
+def read_non_us_dataset(data_dir: str, country: str):
+    full_filename = f"khaki_soybeans/khaki_{country}_multi_crop.csv"
+    df = pd.read_csv(data_dir + full_filename)
+    df = df.sort_values(["loc_ID", "year"])
+    return df
 
 
 def get_train_test_loaders(
