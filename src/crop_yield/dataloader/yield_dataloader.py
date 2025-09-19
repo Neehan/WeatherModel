@@ -77,8 +77,8 @@ def standardize_weather_cols(data: pd.DataFrame, country: str) -> pd.DataFrame:
     weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
     weather_cols_in_data = [col for col in weather_cols if col in data_copy.columns]
 
-    if country.lower() == "argentina":
-        logger.warning("Using JSON-based scalers for Argentina weather data only")
+    if country.lower() != "usa":
+        logger.warning("Using USA-based scalers for standardizing Non-US weather data")
         # Use JSON-based scalers for Argentina weather data only
         json_path = os.path.join(
             DATA_DIR, "khaki_soybeans", "weekly_weather_param_scalers.json"
