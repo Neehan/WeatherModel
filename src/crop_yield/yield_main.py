@@ -98,6 +98,13 @@ parser.add_argument(
     default=None,
     type=int,
 )
+parser.add_argument(
+    "--test-type",
+    help="type of test evaluation: extreme (extreme years), overall (2014-18), or ahead_pred (2014-18 with 5-year gap)",
+    default="extreme",
+    type=str,
+    choices=["extreme", "overall", "ahead_pred"],
+)
 
 
 def main(args_dict=None):

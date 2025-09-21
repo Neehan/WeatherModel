@@ -319,6 +319,7 @@ def split_train_test_by_year(
     n_past_years: int,
     crop_type: str,
     country: str,
+    test_gap: int = 0,
 ):
     # you need n_train_years + 1 years of data
     # n_train years to have at least one training datapoint
@@ -393,6 +394,7 @@ def split_train_test_by_year(
         test_year,
         test_dataset=False,
         n_past_years=n_past_years,
+        test_gap=test_gap,
         crop_type=crop_type,
     )
     test_dataset = CropDataset(
@@ -401,6 +403,7 @@ def split_train_test_by_year(
         test_year,
         test_dataset=True,
         n_past_years=n_past_years,
+        test_gap=test_gap,
         crop_type=crop_type,
     )
 
@@ -432,6 +435,7 @@ def get_train_test_loaders(
     num_workers: int,
     crop_type: str,
     country: str,
+    test_gap: int = 0,
 ) -> Tuple[DataLoader, DataLoader]:
 
     if n_train_years <= 1:
@@ -456,6 +460,7 @@ def get_train_test_loaders(
         n_past_years=n_past_years,
         crop_type=crop_type,
         country=country,
+        test_gap=test_gap,
     )
 
     if n_train_years < n_past_years + 1:

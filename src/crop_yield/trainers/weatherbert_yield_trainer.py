@@ -72,6 +72,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         use_cropnet: bool,
         crop_type: str,
         test_year: Optional[int] = None,
+        test_type: str = "extreme",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -84,16 +85,28 @@ class WeatherBERTYieldTrainer(BaseTrainer):
         self.beta = beta
         self.use_cropnet = use_cropnet
         self.crop_type = crop_type
+        self.test_type = test_type
         self.output_json["model_config"]["beta"] = beta
         # Override criterion for yield prediction
         self.criterion = nn.MSELoss(reduction="mean")
 
-        # extreme years
-        test_years = EXTREME_YEARS.get(country, {}).get(crop_type)
-        if test_years is None:
-            raise ValueError(f"No extreme years found for {crop_type} in {country}.")
-        # test_years = TEST_YEARS
+        # Select test years based on test_type
+        if test_type == "extreme":
+            test_years = EXTREME_YEARS.get(country, {}).get(crop_type)
+            if test_years is None:
+                raise ValueError(
+                    f"No extreme years found for {crop_type} in {country}."
+                )
+        elif test_type == "overall":
+            test_years = TEST_YEARS  # [2014, 2015, 2016, 2017, 2018]
+        elif test_type == "ahead_pred":
+            test_years = TEST_YEARS  # [2014, 2015, 2016, 2017, 2018]
+        else:
+            raise ValueError(
+                f"Unknown test_type: {test_type}. Choose 'extreme', 'overall', or 'ahead_pred'."
+            )
 
+        self.logger.info(f"Test type: {test_type} on years {test_years}")
         # Override model directory for yield prediction
         if self.rank == 0:
             self.model_dir = DATA_DIR + "trained_models/crop_yield/"
@@ -121,7 +134,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 self.test_year = test_years[FOLD_IDX]
                 FOLD_IDX += 1
                 self.logger.info(
-                    f"Cross-validation mode - Testing on year: {self.test_year}"
+                    f"Cross-validation mode ({test_type}) - Testing on year: {self.test_year}"
                 )
 
         # Cache for datasets to avoid recreation during cross-validation
@@ -152,6 +165,8 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 num_workers=0 if self.world_size > 1 else 8,
             )
         else:
+            # Set test_gap based on test_type
+            test_gap = 4 if self.test_type == "ahead_pred" else 0
             train_loader, test_loader = get_train_test_loaders(
                 self.crop_df,
                 self.n_train_years,
@@ -162,6 +177,7 @@ class WeatherBERTYieldTrainer(BaseTrainer):
                 num_workers=0 if self.world_size > 1 else 8,
                 crop_type=self.crop_type,
                 country=self.country,
+                test_gap=test_gap,
             )
 
         self.train_loader = train_loader
@@ -296,6 +312,7 @@ def _create_yield_training_setup(args_dict, use_cropnet: bool):
         "beta": args_dict["beta"],
         "use_cropnet": use_cropnet,
         "test_year": args_dict.get("test_year"),
+        "test_type": args_dict.get("test_type", "extreme"),
     }
 
 
@@ -345,6 +362,7 @@ def _run_yield_cross_validation(
         "use_cropnet": setup_params["use_cropnet"],
         "crop_type": args_dict["crop_type"],
         "test_year": setup_params["test_year"],
+        "test_type": setup_params["test_type"],
         "batch_size": args_dict["batch_size"],
         "num_epochs": args_dict["n_epochs"],
         "init_lr": args_dict["init_lr"],
