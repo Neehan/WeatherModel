@@ -5,6 +5,5 @@ torch-lr-finder
 python-dotenv
 pandas
 tqdm
-dgl -f https://data.dgl.ai/wheels/cu121/repo.html
-torchdata
+dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
 chronos-forecasting

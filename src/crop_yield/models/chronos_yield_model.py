@@ -6,7 +6,7 @@ import os
 
 os.environ["TRANSFORMERS_NO_TORCHVISION"] = "1"
 
-from chronos import ChronosPipeline
+from chronos import ChronosBoltPipeline
 from src.pretraining.models.weatherbert import WeatherBERT
 
 from src.base_models.base_model import BaseModel
@@ -22,51 +22,10 @@ class ChronosYieldModel(BaseModel):
         **model_size_params,
     ):
         super().__init__(name)
+        self.device = device
 
-        # Load Chronos-T5-Tiny model for embeddings
-        self.chronos_pipeline = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-tiny",
-            device_map=device,
-            torch_dtype=torch.float32,
-        )
-
-        # Move all tokenizer tensors to the same device to avoid device mismatch
-        tokenizer = self.chronos_pipeline.tokenizer
-        for attr_name in dir(tokenizer):
-            attr = getattr(tokenizer, attr_name)
-            if isinstance(attr, torch.Tensor):
-                setattr(tokenizer, attr_name, attr.to(device))
-
-        # Store device for dynamic tensor creation
-        tokenizer.device = device
-
-        # Monkey patch the _append_eos_token method to use correct device
-        def _append_eos_token_fixed(self, token_ids, attention_mask):
-            batch_size = token_ids.shape[0]
-            eos_tokens = torch.full(
-                (batch_size, 1),
-                fill_value=self.config.eos_token_id,
-                device=token_ids.device,
-            )
-            token_ids = torch.concat((token_ids, eos_tokens), dim=1)
-            eos_mask = torch.full(
-                (batch_size, 1), fill_value=True, device=attention_mask.device
-            )
-            attention_mask = torch.concat((attention_mask, eos_mask), dim=1)
-            return token_ids, attention_mask
-
-        tokenizer._append_eos_token = _append_eos_token_fixed.__get__(
-            tokenizer, type(tokenizer)
-        )
-
-        # Register the chronos model as a submodule so it's included in parameters() count
-        self.chronos_model = self.chronos_pipeline.model
-
-        # Get embedding dimension from chronos model
-        # chronos-t5-tiny has embedding dim of 256
-        self.chronos_embedding_dim = 256
-        # Total embedding dim after concatenating all weather features
-        self.total_embedding_dim = self.chronos_embedding_dim * weather_dim
+        # Initialize ChronosBolt components
+        self._init_chronos_bolt(device, weather_dim, n_past_years)
 
         # Attention mechanism to reduce sequence dimension
         self.weather_attention = nn.Sequential(
@@ -82,23 +41,55 @@ class ChronosYieldModel(BaseModel):
         )
 
         # Freeze Chronos model by default since it's pretrained
-        self.chronos_model_frozen = (
-            False  # Set to False first so freeze_chronos_model() will run
-        )
+        self.chronos_model_frozen = False
         self.freeze_chronos_model()  # This will set it to True and actually freeze parameters
+
+    def _init_chronos_bolt(self, device, weather_dim, n_past_years):
+        """Initialize ChronosBolt pipeline and extract configuration"""
+        # Load Chronos-Bolt model for embeddings
+        self.chronos_pipeline = ChronosBoltPipeline.from_pretrained(
+            "amazon/chronos-bolt-tiny",
+            device_map=device,
+            torch_dtype=torch.float32,
+        )
+
+        # Ensure all pipeline components are on the correct device
+        self.chronos_pipeline.model = self.chronos_pipeline.model.to(device)
+        # Register the chronos model as a submodule so it's included in parameters() count
+        self.chronos_model = self.chronos_pipeline.model
+
+        # Get embedding dimension from chronos-bolt model
+        self.chronos_embedding_dim = self.chronos_pipeline.model.config.d_model
+
+        # Get patch configuration from ChronosBolt
+        self.patch_size = self.chronos_pipeline.model.chronos_config.input_patch_size
+        self.patch_stride = (
+            self.chronos_pipeline.model.chronos_config.input_patch_stride
+        )
+        self.context_length = self.chronos_pipeline.model.chronos_config.context_length
+
+        # Check if REG token is used
+        self.use_reg_token = self.chronos_pipeline.model.chronos_config.use_reg_token
+        # Total embedding dim after concatenating all weather features
+        self.total_embedding_dim = self.chronos_embedding_dim * weather_dim
+
+    def calculate_num_patches(self, seq_len):
+        """
+        Calculate number of patches for a given sequence length
+        This is computed in the same way as ChronosBolt's Patch class
+        """
+        # Add padding if needed (same as ChronosBolt)
+        padded_len = seq_len
+        if seq_len % self.patch_size != 0:
+            padded_len = seq_len + (self.patch_size - (seq_len % self.patch_size))
+        return (padded_len - self.patch_size) // self.patch_stride + 1
 
     def get_chronos_embeddings(self, context):
         """
-        Extract embeddings from Chronos model for weather time series
+        Extract embeddings from Chronos-Bolt model for weather time series
         """
+        embeddings, _, _, _ = self.chronos_pipeline.model.encode(context=context)
 
-        token_ids, attention_mask, tokenizer_state = (
-            self.chronos_pipeline.tokenizer.context_input_transform(context)
-        )
-        embeddings = self.chronos_pipeline.model.encode(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-        )
         return embeddings
 
     def yield_model(
@@ -150,17 +141,23 @@ class ChronosYieldModel(BaseModel):
             batch_size * weather_dim, seq_len
         )
 
-        # Get embeddings and remove extra token that Chronos adds
+        # Get embeddings from ChronosBolt
         embeddings = self.get_chronos_embeddings(weather_reshaped)
-        # Remove extra CLS-like token
-        embeddings = embeddings[:, :seq_len, :]
 
-        # Reshape and concatenate embeddings from all weather variables
+        # If REG token is used, exclude it from the embeddings (it's the last token)
+        if self.use_reg_token:
+            embeddings = embeddings[:, :-1, :]  # Remove last token (REG token)
+
+        num_embeddings = embeddings.shape[1]
+
+        # Reshape embeddings from all weather variables
         embeddings = embeddings.reshape(
-            batch_size, weather_dim, seq_len, self.chronos_embedding_dim
+            batch_size, weather_dim, num_embeddings, self.chronos_embedding_dim
         )
+
+        # Use attention pooling across the patch dimension instead of assuming seq_len match
         embeddings = embeddings.permute(0, 2, 1, 3).reshape(
-            batch_size, seq_len, weather_dim * self.chronos_embedding_dim
+            batch_size, num_embeddings, weather_dim * self.chronos_embedding_dim
         )
 
         output = self.yield_model(
