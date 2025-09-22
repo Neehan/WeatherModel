@@ -421,7 +421,20 @@ def read_usa_dataset(data_dir: str):
 def read_non_us_dataset(data_dir: str, country: str):
     full_filename = f"khaki_soybeans/khaki_{country}_multi_crop.csv"
     df = pd.read_csv(data_dir + full_filename)
-    df = df.sort_values(["loc_ID", "year"])
+    if country == "brazil":
+        # "Goiás", "Mato Grosso", "Mato Grosso do Sul", "Paraná",
+        df = df[
+            df["State"].isin(
+                [
+                    "Goiás",
+                    "Mato Grosso",
+                    "Mato Grosso do Sul",
+                    "Paraná",
+                    "Rio Grande do Sul",
+                ]
+            )
+        ].copy()
+    df = df.sort_values(["loc_ID", "year"])  # type: ignore
     return df
 
 
