@@ -199,8 +199,7 @@ def run_test(
         return None, None, None, None, None
 
 
-def save_results_to_list(
-    results_list: list,
+def save_single_result(
     model: str,
     crop_type: str,
     country: str,
@@ -211,7 +210,14 @@ def save_results_to_list(
     avg_r2: Optional[float],
     std_r2: Optional[float],
 ):
-    """Add test results to results list"""
+    """Save a single test result immediately to TSV file (append mode for HPC safety)"""
+    output_dir = "data/best_config_tests"
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_file = os.path.join(
+        output_dir, f"best_config_tests_{model}_{crop_type}_{country}_{test_type}.tsv"
+    )
+
     # Format results like grid search with ± notation
     rmse_str = f"{avg_rmse:.3f} ± {std_rmse:.3f}" if avg_rmse is not None else "FAILED"
     r2_str = f"{avg_r2:.3f} ± {std_r2:.3f}" if avg_r2 is not None else "FAILED"
@@ -226,26 +232,24 @@ def save_results_to_list(
         "r2": r2_str,
     }
 
-    results_list.append(row)
+    # Check if file exists to determine if we need header
+    file_exists = os.path.exists(output_file)
 
+    # Create DataFrame and append to file
+    df = pd.DataFrame([row])
 
-def save_all_results(
-    results_list: list, model: str, crop_type: str, country: str, test_type: str
-):
-    """Save all test results to TSV file"""
-    output_dir = "data/best_config_tests"
-    os.makedirs(output_dir, exist_ok=True)
+    if file_exists:
+        # Append without header
+        df.to_csv(output_file, sep="\t", index=False, mode="a", header=False)
+        logger.info(f"Appended result to: {output_file}")
+    else:
+        # Create new file with header
+        df.to_csv(output_file, sep="\t", index=False, mode="w", header=True)
+        logger.info(f"Created new results file: {output_file}")
 
-    output_file = os.path.join(
-        output_dir, f"best_config_tests_{model}_{crop_type}_{country}_{test_type}.tsv"
+    logger.info(
+        f"Saved result: {test_type} {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
     )
-
-    # Create DataFrame and save as TSV
-    df = pd.DataFrame(results_list)
-    df.to_csv(output_file, sep="\t", index=False)
-
-    logger.info(f"All results saved to: {output_file}")
-    logger.info(f"Saved {len(results_list)} test result(s)")
 
 
 def main():
@@ -283,9 +287,6 @@ def main():
     else:  # ahead_pred
         years_to_test = [15]
 
-    # Initialize results list
-    results_list = []
-
     # Run tests for each year configuration
     for n_train_years in years_to_test:
         logger.info(f"\n{'='*60}")
@@ -305,9 +306,8 @@ def main():
         # Run test
         avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
 
-        # Add results to list
-        save_results_to_list(
-            results_list,
+        # Save result immediately (HPC-safe)
+        save_single_result(
             args.model,
             args.crop_type,
             args.country,
@@ -322,15 +322,12 @@ def main():
         # Print summary
         if avg_rmse is not None:
             logger.info(
-                f"Test completed ({n_train_years}y): RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
+                f"Test completed and saved ({n_train_years}y): RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
             )
         else:
-            logger.info(f"Test FAILED ({n_train_years}y)")
+            logger.info(f"Test FAILED and logged ({n_train_years}y)")
 
-    # Save all results to single TSV file
-    save_all_results(
-        results_list, args.model, args.crop_type, args.country, args.test_type
-    )
+    logger.info(f"\nAll {args.test_type} tests completed and saved!")
 
 
 if __name__ == "__main__":
