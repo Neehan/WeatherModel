@@ -50,12 +50,13 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "Examples:"
     echo "  $0 --model weatherformer --crop corn"
     echo "  $0 --model weatherformer --crop corn --country argentina"
+    echo "  $0 --model weatherformer --crop wheat --country mexico"
     echo "  $0 --model weatherformer weatherformersinusoid --crop corn"
     echo "  $0 --model weatherformer --crop corn soybean"
     echo ""
     echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
     echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane"
-    echo "Available countries: usa, argentina, brazil (default: usa)"
+    echo "Available countries: usa, argentina, brazil, mexico (default: usa)"
     exit 1
 fi
 

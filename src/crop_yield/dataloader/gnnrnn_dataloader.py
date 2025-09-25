@@ -77,7 +77,7 @@ def standardize_weather_cols_gnn(data: pd.DataFrame, country: str) -> pd.DataFra
 
     if country.lower() != "usa":
         logger.warning("Using USA-based scalers for standardizing Non-US weather data")
-        # Use JSON-based scalers for Argentina weather data only
+        # Use JSON-based scalers for non-usa weather data only
         json_path = os.path.join(
             DATA_DIR, "khaki_soybeans", "weekly_weather_param_scalers.json"
         )
@@ -451,9 +451,7 @@ def get_gnnrnn_dataloaders(
     weather_cols = [f"W_{i}_{j}" for i in range(1, 7) for j in range(1, 53)]
     cols_to_exclude.extend(weather_cols)
 
-    cols_to_standardize = [
-        col for col in data.columns if col not in cols_to_exclude
-    ]
+    cols_to_standardize = [col for col in data.columns if col not in cols_to_exclude]
 
     # Standardize non-weather data (soil, practices, etc.)
     if cols_to_standardize:

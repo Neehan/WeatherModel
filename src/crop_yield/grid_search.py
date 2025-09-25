@@ -577,10 +577,10 @@ def setup_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--country",
-        help="country dataset to use: usa, argentina, or brazil",
+        help="country dataset to use: usa, argentina, brazil, or mexico",
         default="usa",
         type=str,
-        choices=["usa", "argentina", "brazil"],
+        choices=["usa", "argentina", "brazil", "mexico"],
     )
 
     return parser.parse_args()
