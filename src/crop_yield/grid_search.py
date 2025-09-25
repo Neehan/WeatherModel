@@ -45,9 +45,10 @@ class GridSearch:
         self.output_dir = output_dir
         self.method = "pretrained" if load_pretrained else "not_pretrained"
         self.country = country
+        self.n_past_years = 6 if country != "mexico" else 4
+        self.n_train_years_values = [15] if country != "mexico" else [10]
         # Grid search parameters
         self.beta_values = [0.0, 1e-4, 1e-3]
-        self.n_train_years_values = [15]
         self.batch_size_values = [16, 32, 64]
         self.init_lr_values = [2.5e-4, 5e-4, 1e-3]
 
@@ -141,7 +142,7 @@ class GridSearch:
         base_config = {
             "batch_size": batch_size,
             "country": self.country,
-            "n_past_years": 6,
+            "n_past_years": self.n_past_years,
             "n_epochs": 40,
             "init_lr": init_lr,
             "decay_factor": None,
