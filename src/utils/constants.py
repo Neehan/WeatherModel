@@ -41,6 +41,10 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
+    "beans": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31

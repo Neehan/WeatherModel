@@ -80,10 +80,10 @@ parser.add_argument(
 )
 parser.add_argument(
     "--crop-type",
-    help="crop type to predict: soybean, corn, wheat, sunflower, cotton, sugarcane",
+    help="crop type to predict: soybean, corn, wheat, sunflower, cotton, sugarcane, beans",
     default="soybean",
     type=str,
-    choices=["soybean", "corn", "wheat", "sunflower", "cotton", "sugarcane"],
+    choices=["soybean", "corn", "wheat", "sunflower", "cotton", "sugarcane", "beans"],
 )
 parser.add_argument(
     "--country",
