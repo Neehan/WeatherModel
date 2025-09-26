@@ -1,0 +1,9 @@
+transformers>=4.40,<4.45
+datasets
+huggingface_hub
+torch-lr-finder
+python-dotenv
+pandas
+tqdm
+dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
+chronos-forecasting
