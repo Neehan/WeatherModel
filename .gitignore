@@ -162,6 +162,7 @@ cython_debug/
 
 # datasets
 data/
+img/
 
 .DS_Store
 *.DS_Store

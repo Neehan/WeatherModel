@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, or chronos",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, decoder, decodersinusoid, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, or chronos",
     default="weatherformer",
     type=str,
 )
@@ -161,6 +161,12 @@ def main(args_dict=None):
     from src.crop_yield.trainers.weatherformer_yield_trainer import (
         weatherformer_yield_training_loop,
     )
+    from src.crop_yield.trainers.decoder_yield_trainer import (
+        decoder_yield_training_loop,
+    )
+    from src.crop_yield.trainers.decoder_sinusoid_yield_trainer import (
+        decoder_sinusoid_yield_training_loop,
+    )
     from src.crop_yield.trainers.linear_yield_trainer import (
         linear_yield_training_loop,
     )
@@ -177,6 +183,14 @@ def main(args_dict=None):
         )
     elif model_type == "weatherformer":
         cross_validation_results = weatherformer_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
+    elif model_type == "decoder":
+        cross_validation_results = decoder_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
+    elif model_type == "decodersinusoid":
+        cross_validation_results = decoder_sinusoid_yield_training_loop(
             args_dict, use_cropnet=False
         )
     elif model_type == "weatherformersinusoid":
@@ -221,7 +235,7 @@ def main(args_dict=None):
         )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', 'linear', or 'chronos'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'decoder', 'decodersinusoid', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', 'linear', or 'chronos'"
         )
 
     logger = logging.getLogger(__name__)

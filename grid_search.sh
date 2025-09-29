@@ -54,7 +54,7 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "  $0 --model weatherformer weatherformersinusoid --crop corn"
     echo "  $0 --model weatherformer --crop corn soybean"
     echo ""
-    echo "Available models: weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
+    echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
     echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane, beans"
     echo "Available countries: usa, argentina, brazil, mexico (default: usa)"
     exit 1
@@ -72,7 +72,7 @@ fi
 
 
 # Validate model names
-valid_models=("weatherbert" "weatherformer" "weatherformersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos")
+valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos")
 for model in "${MODELS[@]}"; do
     if [[ ! " ${valid_models[@]} " =~ " ${model} " ]]; then
         echo "Error: Invalid model '${model}'. Valid options: ${valid_models[@]}"
