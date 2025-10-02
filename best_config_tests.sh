@@ -44,10 +44,14 @@ done
 if [ -z "$MODEL" ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "Usage: $0 --model <model> --crop <crop1> [crop2] [--country <country>] [additional_python_args...]"
     echo ""
+    echo "Supported models: weatherformer, weatherautoencoder, weatherformersinusoid, simmtm, cnnrnn, linear, chronos, xgboost, randomforest"
+    echo ""
     echo "Examples:"
     echo "  $0 --model weatherformer --crop corn"
     echo "  $0 --model weatherformer --crop corn soybean"
     echo "  $0 --model weatherformer --crop corn --country usa"
+    echo "  $0 --model xgboost --crop soybean"
+    echo "  $0 --model randomforest --crop wheat --country argentina"
     exit 1
 fi
 

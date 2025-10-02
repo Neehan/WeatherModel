@@ -20,6 +20,11 @@ setup_logging(rank=0)
 logger = logging.getLogger(__name__)
 
 
+def is_baseline_model(model: str) -> bool:
+    """Check if model is a baseline model (no pretrained variant)"""
+    return model.lower() in ["xgboost", "randomforest"]
+
+
 def get_grid_search_file_path(
     model: str, crop_type: str, country: str, grid_search_results_dir: str
 ) -> str:
@@ -31,7 +36,12 @@ def get_grid_search_file_path(
             f"Grid search results directory not found: {results_dir}"
         )
 
-    filename = f"grid_search_{model}_pretrained_{crop_type}_{country}.tsv"
+    # Baseline models use different file naming (no "pretrained" suffix)
+    if is_baseline_model(model):
+        filename = f"baseline_grid_search_{model}_{crop_type}_{country}.tsv"
+    else:
+        filename = f"grid_search_{model}_pretrained_{crop_type}_{country}.tsv"
+
     file_path = os.path.join(results_dir, filename)
 
     if not os.path.exists(file_path):
@@ -51,19 +61,10 @@ def load_grid_search_results(file_path: str) -> pd.DataFrame:
         raise Exception(f"Failed to load grid search results from {file_path}: {e}")
 
 
-def find_best_config(df: pd.DataFrame) -> Dict:
+def find_best_config(df: pd.DataFrame, model: str) -> Dict:
     """Find the best configuration based on R² score"""
     if df.empty:
         raise ValueError("No grid search results found")
-
-    r2_col = "year_15_r2"
-    if r2_col not in df.columns:
-        raise ValueError(f"Expected column {r2_col} not found in results")
-
-    valid_df = df[df[r2_col] != "FAILED"].copy()
-
-    if valid_df.empty:
-        raise ValueError("No successful experiments found in grid search results")
 
     def extract_r2_mean(r2_str):
         """Extract mean R² value from 'X.XXX ± Y.YYY' format"""
@@ -74,26 +75,63 @@ def find_best_config(df: pd.DataFrame) -> Dict:
         except:
             return float("-inf")
 
+    # Baseline models use "r2" column, regular models use "year_15_r2" column
+    if is_baseline_model(model):
+        r2_col = "r2"
+    else:
+        r2_col = "year_15_r2"
+
+    if r2_col not in df.columns:
+        raise ValueError(f"Expected column {r2_col} not found in results")
+
+    valid_df = df[df[r2_col] != "FAILED"].copy()
+
+    if valid_df.empty:
+        raise ValueError("No successful experiments found in grid search results")
+
     valid_df["r2_mean"] = valid_df[r2_col].apply(extract_r2_mean)  # type: ignore
     best_idx = valid_df["r2_mean"].idxmax()  # type: ignore
     best_row = valid_df.loc[best_idx]
 
-    best_config = {
-        "model": best_row["model"],
-        "method": best_row["method"],
-        "beta": best_row["beta"],
-        "batch_size": int(best_row["batch_size"]),
-        "init_lr": best_row["init_lr"],
-        "r2_score": best_row["r2_mean"],
-    }
+    # Build config based on model type
+    if is_baseline_model(model):
+        best_config = {
+            "model": best_row["model"],
+            "n_estimators": int(best_row["n_estimators"]),
+            "max_depth": (
+                int(best_row["max_depth"]) if pd.notna(best_row["max_depth"]) else None
+            ),
+            "learning_rate": (
+                float(best_row["learning_rate"])
+                if "learning_rate" in best_row and pd.notna(best_row["learning_rate"])
+                else None
+            ),
+            "r2_score": best_row["r2_mean"],
+        }
 
-    logger.info(f"Best configuration found:")
-    logger.info(f"  Model: {best_config['model']}")
-    logger.info(f"  Method: {best_config['method']}")
-    logger.info(f"  Beta: {best_config['beta']}")
-    logger.info(f"  Batch size: {best_config['batch_size']}")
-    logger.info(f"  Learning rate: {best_config['init_lr']}")
-    logger.info(f"  R² score: {best_config['r2_score']:.4f}")
+        logger.info(f"Best configuration found:")
+        logger.info(f"  Model: {best_config['model']}")
+        logger.info(f"  n_estimators: {best_config['n_estimators']}")
+        logger.info(f"  max_depth: {best_config['max_depth']}")
+        logger.info(f"  Learning rate: {best_config['learning_rate']}")
+        logger.info(f"  R² score: {best_config['r2_score']:.4f}")
+    else:
+        best_config = {
+            "model": best_row["model"],
+            "method": best_row["method"],
+            "beta": best_row["beta"],
+            "batch_size": int(best_row["batch_size"]),
+            "init_lr": best_row["init_lr"],
+            "r2_score": best_row["r2_mean"],
+        }
+
+        logger.info(f"Best configuration found:")
+        logger.info(f"  Model: {best_config['model']}")
+        logger.info(f"  Method: {best_config['method']}")
+        logger.info(f"  Beta: {best_config['beta']}")
+        logger.info(f"  Batch size: {best_config['batch_size']}")
+        logger.info(f"  Learning rate: {best_config['init_lr']}")
+        logger.info(f"  R² score: {best_config['r2_score']:.4f}")
 
     return best_config
 
@@ -129,40 +167,50 @@ def create_test_config(
         }
     )
 
-    # Set model size parameters
-    config["model_size_params"] = get_model_params("small")
-
-    # Set pretrained model path
-    pretrained_paths = {
-        "weatherformer": "data/trained_models/pretraining/weatherformer_1.9m_latest.pth",
-        "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
-        "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
-        "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.0m_latest.pth",
-        "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
-        "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
-        "simmtm": "data/trained_models/pretraining/simmtm_1.9m_latest.pth",
-        "chronos": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
-    }
-    config["pretrained_model_path"] = pretrained_paths.get(config["model"], None)
-
-    # Set additional required parameters
+    # Set common parameters
+    n_past_years = 6 if country != "mexico" else 4
     config.update(
         {
-            "n_past_years": 6,
-            "n_epochs": 40,
-            "decay_factor": None,
-            "n_warmup_epochs": 10,
-            "model_size": "small",
-            "use_optimal_lr": False,
+            "n_past_years": n_past_years,
             "seed": 1234,
-            "n_mixture_components": 1,
             "test_year": None,
             "rank": 0,
             "world_size": 1,
             "local_rank": 0,
-            "resume_from_checkpoint": None,
         }
     )
+
+    # Baseline models don't need neural network specific parameters
+    if not is_baseline_model(model):
+        # Set model size parameters
+        config["model_size_params"] = get_model_params("small")
+
+        # Set pretrained model path
+        pretrained_paths = {
+            "weatherformer": "data/trained_models/pretraining/weatherformer_1.9m_latest.pth",
+            "weatherautoencoder": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
+            "weatherformersinusoid": "data/trained_models/pretraining/weatherformer_sinusoid_2.0m_latest.pth",
+            "weatherformermixture": "data/trained_models/pretraining/weatherformer_mixture_2.0m_latest.pth",
+            "weatherautoencodermixture": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
+            "weatherautoencodersinusoid": "data/trained_models/pretraining/weatherautoencoder_2.0m_latest.pth",
+            "simmtm": "data/trained_models/pretraining/simmtm_1.9m_latest.pth",
+            "chronos": "data/trained_models/pretraining/weatherautoencoder_1.9m_latest.pth",
+            "linear": None,
+        }
+        config["pretrained_model_path"] = pretrained_paths.get(config["model"], None)
+
+        # Set additional neural network parameters
+        config.update(
+            {
+                "n_epochs": 40,
+                "decay_factor": None,
+                "n_warmup_epochs": 10,
+                "model_size": "small",
+                "use_optimal_lr": False,
+                "n_mixture_components": 1,
+                "resume_from_checkpoint": None,
+            }
+        )
 
     return config
 
@@ -279,7 +327,7 @@ def main():
         args.model, args.crop_type, args.country, args.grid_search_results_dir
     )
     df = load_grid_search_results(file_path)
-    best_config = find_best_config(df)
+    best_config = find_best_config(df, args.model)
 
     # Determine years to test based on test type
     if args.test_type == "overall":
