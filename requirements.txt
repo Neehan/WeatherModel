@@ -7,3 +7,5 @@ pandas
 tqdm
 dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
 chronos-forecasting
+xgboost
+scikit-learn

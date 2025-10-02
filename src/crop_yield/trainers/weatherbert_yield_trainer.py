@@ -16,39 +16,10 @@ from src.crop_yield.dataloader.cropnet_dataloader import (
     read_cropnet_dataset,
 )
 from src.base_trainer.cross_validator import CrossValidator
+from src.utils.constants import EXTREME_YEARS, TEST_YEARS
 import os
 
-# Test years for 5-fold cross validation
-TEST_YEARS = [2014, 2015, 2016, 2017, 2018]
 FOLD_IDX = 0
-
-EXTREME_YEARS = {
-    "usa": {
-        "corn": [2002, 2004, 2009, 2012, 2014],
-        "soybean": [2003, 2004, 2009, 2012, 2016],
-    },
-    "argentina": {
-        "corn": [2004, 2005, 2007, 2009, 2015],
-        "soybean": [2003, 2006, 2007, 2009, 2015],
-        "wheat": [2002, 2003, 2005, 2009, 2011],
-        "sunflower": [2002, 2007, 2008, 2009, 2011],
-    },
-    "brazil": {
-        "corn": [2001, 2003, 2007, 2010, 2015],
-        "soybean": [2001, 2003, 2005, 2011, 2017],
-        "sugarcane": [2002, 2003, 2008, 2012, 2017],
-        "wheat": [2001, 2003, 2010, 2015, 2016],
-        "cotton": [2004, 2008, 2013, 2017, 2018],
-    },
-    "mexico": {
-        "beans": [2016, 2017, 2018, 2021, 2023],
-        "beans_rainfed": [2013, 2014, 2017, 2018, 2021],
-        "corn": [2014, 2017, 2019, 2022, 2023],
-        "corn_rainfed": [2014, 2017, 2021, 2023, 2024],
-        "sugarcane": [2013, 2014, 2018, 2020, 2021],
-        "wheat": [2013, 2021, 2022, 2023, 2024],
-    },
-}
 
 
 def _reset_fold_index():

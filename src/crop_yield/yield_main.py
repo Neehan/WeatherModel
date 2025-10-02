@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
-    help="model name weatherformer, weatherformersinusoid, weatherformermixture, decoder, decodersinusoid, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, or chronos",
+    help="model name weatherformer, weatherformersinusoid, weatherformermixture, decoder, decodersinusoid, weatherbert, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, chronos, xgboost, or randomforest",
     default="weatherformer",
     type=str,
 )
@@ -183,6 +183,12 @@ def main(args_dict=None):
     from src.crop_yield.trainers.chronos_yield_trainer import (
         chronos_yield_training_loop,
     )
+    from src.crop_yield.trainers.xgboost_yield_trainer import (
+        xgboost_yield_training_loop,
+    )
+    from src.crop_yield.trainers.random_forest_yield_trainer import (
+        random_forest_yield_training_loop,
+    )
 
     # Determine which training function to use based on model type
     model_type = args_dict["model"].lower()
@@ -243,9 +249,17 @@ def main(args_dict=None):
         cross_validation_results = chronos_yield_training_loop(
             args_dict, use_cropnet=False
         )
+    elif model_type == "xgboost":
+        cross_validation_results = xgboost_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
+    elif model_type == "randomforest":
+        cross_validation_results = random_forest_yield_training_loop(
+            args_dict, use_cropnet=False
+        )
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'decoder', 'decodersinusoid', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', 'linear', or 'chronos'"
+            f"Unknown model type: {model_type}. Choose 'weatherbert', 'weatherformer', 'decoder', 'decodersinusoid', 'weatherformersinusoid', 'weatherformermixture', 'weatherautoencodermixture', 'weatherautoencoder', 'weatherautoencodersine', 'simmtm', 'cnnrnn', 'gnnrnn', 'linear', 'chronos', 'xgboost', or 'randomforest'"
         )
 
     logger = logging.getLogger(__name__)

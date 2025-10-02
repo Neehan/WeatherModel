@@ -53,10 +53,13 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "  $0 --model weatherformer --crop wheat --country mexico"
     echo "  $0 --model weatherformer weatherformersinusoid --crop corn"
     echo "  $0 --model weatherformer --crop corn soybean"
+    echo "  $0 --model xgboost --crop soybean"
     echo ""
-    echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
+    echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos, xgboost, randomforest"
     echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane, beans, corn_rainfed, beans_rainfed"
     echo "Available countries: usa, argentina, brazil, mexico (default: usa)"
+    echo ""
+    echo "Note: Baseline models (xgboost, randomforest) don't have pretrained variants and use a separate grid search."
     exit 1
 fi
 
@@ -72,7 +75,8 @@ fi
 
 
 # Validate model names
-valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos")
+valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos" "xgboost" "randomforest")
+baseline_models=("xgboost" "randomforest")
 for model in "${MODELS[@]}"; do
     if [[ ! " ${valid_models[@]} " =~ " ${model} " ]]; then
         echo "Error: Invalid model '${model}'. Valid options: ${valid_models[@]}"
@@ -103,20 +107,56 @@ run_experiment() {
         >> "log/gpu$1.log" 2>&1
 }
 
-if [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 1 ]; then
-    run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-    run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-    wait
-elif [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 1 ]; then
-    run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-    run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-    run_experiment 2 "${MODELS[1]}" "${CROPS[0]}" "" &
-    run_experiment 3 "${MODELS[1]}" "${CROPS[0]}" "--load-pretrained" &
-    wait
-elif [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 2 ]; then
-    run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-    run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-    run_experiment 2 "${MODELS[0]}" "${CROPS[1]}" "" &
-    run_experiment 3 "${MODELS[0]}" "${CROPS[1]}" "--load-pretrained" &
-    wait
+run_baseline_experiment() {
+    TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.baseline_grid_search \
+        --model "$1" --crop-type "$2" --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
+        >> "log/baseline_$1_$2.log" 2>&1
+}
+
+is_baseline_model() {
+    local model=$1
+    for baseline in "${baseline_models[@]}"; do
+        if [[ "$model" == "$baseline" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Check if all models are baseline models
+all_baseline=true
+for model in "${MODELS[@]}"; do
+    if ! is_baseline_model "$model"; then
+        all_baseline=false
+        break
+    fi
+done
+
+if $all_baseline; then
+    # Baseline models don't have pretrained variants, run them sequentially
+    for model in "${MODELS[@]}"; do
+        for crop in "${CROPS[@]}"; do
+            echo "Running baseline model ${model} on ${crop}..."
+            run_baseline_experiment "${model}" "${crop}"
+        done
+    done
+else
+    # Regular models with pretrained/not-pretrained variants
+    if [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 1 ]; then
+        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
+        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
+        wait
+    elif [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 1 ]; then
+        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
+        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
+        run_experiment 2 "${MODELS[1]}" "${CROPS[0]}" "" &
+        run_experiment 3 "${MODELS[1]}" "${CROPS[0]}" "--load-pretrained" &
+        wait
+    elif [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 2 ]; then
+        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
+        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
+        run_experiment 2 "${MODELS[0]}" "${CROPS[1]}" "" &
+        run_experiment 3 "${MODELS[0]}" "${CROPS[1]}" "--load-pretrained" &
+        wait
+    fi
 fi 
