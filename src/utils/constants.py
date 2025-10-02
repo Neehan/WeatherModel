@@ -45,6 +45,18 @@ CROP_YIELD_STATS = {
         "mean": [],
         "std": [],
     },
+    "beans_rainfed": {
+        "mean": [],
+        "std": [],
+    },
+    "beans_irrigated": {
+        "mean": [],
+        "std": [],
+    },
+    "corn_rainfed": {
+        "mean": [],
+        "std": [],
+    },
 }
 
 TOTAL_WEATHER_VARS = 31

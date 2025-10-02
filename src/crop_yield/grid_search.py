@@ -577,8 +577,10 @@ def setup_args() -> argparse.Namespace:
             "cotton",
             "sugarcane",
             "beans",
+            "corn_rainfed",
+            "beans_rainfed",
         ],
-        help="Crop type to predict: soybean, corn, wheat, sunflower, cotton, sugarcane, or beans",
+        help="Crop type to predict: soybean, corn, wheat, sunflower, cotton, sugarcane, beans, corn_rainfed, or beans_rainfed",
     )
 
     parser.add_argument(

@@ -366,7 +366,17 @@ def main():
     parser.add_argument(
         "--crop-type",
         default="soybean",
-        choices=["soybean", "corn", "wheat", "sunflower"],
+        choices=[
+            "soybean",
+            "corn",
+            "wheat",
+            "sunflower",
+            "cotton",
+            "sugarcane",
+            "beans",
+            "corn_rainfed",
+            "beans_rainfed",
+        ],
     )
 
     parser.add_argument(
