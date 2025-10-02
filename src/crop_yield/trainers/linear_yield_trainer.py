@@ -20,6 +20,10 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
     Inherits from WeatherBERTYieldTrainer but overrides compute_train_loss to add L2 regularization.
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.criterion = nn.MSELoss(reduction="mean")
+
     def compute_train_loss(
         self,
         padded_weather,
@@ -51,17 +55,44 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
         # L2 regularization term
         beta = self._current_beta()
         # Compute L2 regularization directly
-        l2_reg = torch.sum(self.model.linear.weight**2)
+        l2_reg = self.model.compute_l2_regularization()  # type: ignore
         ridge_loss = beta * l2_reg
 
         # Total loss
         total_loss = mse_loss + ridge_loss
 
-        return {
-            "total_loss": total_loss,
-            "mse_loss": mse_loss,
-            "l2_regularization": ridge_loss,
-        }
+        return {"total_loss": total_loss}
+
+    def compute_validation_loss(
+        self,
+        padded_weather,
+        coord_processed,
+        year_expanded,
+        interval,
+        weather_feature_mask,
+        practices,
+        soil,
+        y_past,
+        target_yield,
+    ):
+        """
+        Compute validation loss (just MSE, no regularization).
+        """
+        # Forward pass through linear model
+        yield_pred = self.model(
+            padded_weather,
+            coord_processed,
+            year_expanded,
+            interval,
+            weather_feature_mask,
+            y_past,
+        )
+
+        # MSE loss only (no regularization for validation)
+        mse_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
+
+        # Return RMSE for validation since that's standard for comparison
+        return {"total_loss": mse_loss**0.5}
 
 
 def linear_yield_training_loop(args_dict, use_cropnet: bool):
