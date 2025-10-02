@@ -462,7 +462,8 @@ class GridSearch:
             for init_lr in self.init_lr_values:
                 for n_train_years in self.n_train_years_values:
                     for beta in self.beta_values:
-                        # Skip beta > 0 for weatherautoencoder, simmtm, cnnrnn, gnnrnn, linear, and chronos since they don't use beta parameter
+                        # Skip beta > 0 for weatherautoencoder, simmtm, cnnrnn, gnnrnn, and chronos since they don't use beta parameter
+                        # Note: linear model now uses beta for ridge regression
                         if (
                             self.model
                             in [
@@ -470,7 +471,6 @@ class GridSearch:
                                 "simmtm",
                                 "cnnrnn",
                                 "gnnrnn",
-                                "linear",
                                 "chronos",
                             ]
                             and beta > 0

@@ -25,7 +25,7 @@ class LinearYieldModel(BaseModel):
         input_dim = self.max_len * weather_dim + n_past_years + 1
         self.linear = nn.Linear(input_dim, 1)
 
-    def load_pretrained(self, pretrained_model: Optional["LinearYieldModel"]):
+    def load_pretrained(self, pretrained_model: Optional["BaseModel"]):
         """
         Load pretrained model parameters. For linear model, this is optional.
         """
@@ -78,3 +78,10 @@ class LinearYieldModel(BaseModel):
         output = self.linear(linear_input)
 
         return output
+
+    def compute_l2_regularization(self):
+        """
+        Compute L2 regularization term for ridge regression.
+        Returns the sum of squared weights of the linear layer.
+        """
+        return torch.sum(self.linear.weight**2)
