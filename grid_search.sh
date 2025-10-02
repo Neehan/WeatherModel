@@ -43,9 +43,13 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "Usage: $0 --model <model1> [model2] --crop <crop1> [crop2] [additional_python_args...]"
     echo ""
     echo "Supported configurations:"
-    echo "  --model <model> --crop <crop>                    # Single model, single crop (2 GPUs)"
-    echo "  --model <model1> <model2> --crop <crop>          # Two models, single crop (4 GPUs)"
-    echo "  --model <model> --crop <crop1> <crop2>           # Single model, two crops (4 GPUs)"
+    echo "  Non-baseline models (with pretrained variants):"
+    echo "    --model <model> --crop <crop>                    # Single model, single crop (2 GPUs: pretrained/not)"
+    echo "    --model <model1> <model2> --crop <crop>          # Two models, single crop (4 GPUs)"
+    echo "    --model <model> --crop <crop1> <crop2>           # Single model, two crops (4 GPUs)"
+    echo "  Baseline models (xgboost, randomforest):"
+    echo "    --model <model> --crop <crop>                    # Single model, single crop (1 GPU)"
+    echo "    --model <model1> <model2> --crop <crop1> <crop2> # Two models, two crops (4 GPUs)"
     echo ""
     echo "Examples:"
     echo "  $0 --model weatherformer --crop corn"
@@ -54,6 +58,7 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "  $0 --model weatherformer weatherformersinusoid --crop corn"
     echo "  $0 --model weatherformer --crop corn soybean"
     echo "  $0 --model xgboost --crop soybean"
+    echo "  $0 --model xgboost randomforest --crop soybean wheat"
     echo ""
     echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos, xgboost, randomforest"
     echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane, beans, corn_rainfed, beans_rainfed"
@@ -62,17 +67,6 @@ if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
     echo "Note: Baseline models (xgboost, randomforest) don't have pretrained variants and use a separate grid search."
     exit 1
 fi
-
-# Check for unsupported case: 2 models + 2 crops = 8 experiments (we only have 4 GPUs)
-if [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 2 ]; then
-    echo "Error: Cannot run 2 models with 2 crops (would require 8 GPUs, but only 4 available)"
-    echo "Supported configurations:"
-    echo "  - 1 model + 1 crop (2 experiments: pretrained vs not pretrained)"
-    echo "  - 2 models + 1 crop (4 experiments: 2 models × pretrained/not pretrained)"
-    echo "  - 1 model + 2 crops (4 experiments: 2 crops × pretrained/not pretrained)"
-    exit 1
-fi
-
 
 # Validate model names
 valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos" "xgboost" "randomforest")
@@ -131,6 +125,18 @@ for model in "${MODELS[@]}"; do
         break
     fi
 done
+
+# Check for unsupported case: 2 models + 2 crops = 8 experiments (only for non-baseline models)
+if ! $all_baseline && [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 2 ]; then
+    echo "Error: Cannot run 2 non-baseline models with 2 crops (would require 8 GPUs, but only 4 available)"
+    echo "Supported configurations for non-baseline models:"
+    echo "  - 1 model + 1 crop (2 experiments: pretrained vs not pretrained)"
+    echo "  - 2 models + 1 crop (4 experiments: 2 models × pretrained/not pretrained)"
+    echo "  - 1 model + 2 crops (4 experiments: 2 crops × pretrained/not pretrained)"
+    echo ""
+    echo "Note: Baseline models (xgboost, randomforest) support 2 models + 2 crops (4 experiments total)"
+    exit 1
+fi
 
 if $all_baseline; then
     # Baseline models don't have pretrained variants, run them using GPUs
