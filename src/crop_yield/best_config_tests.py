@@ -36,9 +36,9 @@ def get_grid_search_file_path(
             f"Grid search results directory not found: {results_dir}"
         )
 
-    # Baseline models use different file naming (no "pretrained" suffix)
+    # Baseline models use different file naming (includes test_type suffix)
     if is_baseline_model(model):
-        filename = f"baseline_grid_search_{model}_{crop_type}_{country}.tsv"
+        filename = f"baseline_grid_search_{model}_{crop_type}_{country}_extreme.tsv"
     else:
         filename = f"grid_search_{model}_pretrained_{crop_type}_{country}.tsv"
 
