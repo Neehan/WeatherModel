@@ -47,6 +47,7 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
             interval,
             weather_feature_mask,
             y_past,
+            soil,
         )
 
         # MSE loss
@@ -86,6 +87,7 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
             interval,
             weather_feature_mask,
             y_past,
+            soil,
         )
 
         # MSE loss only (no regularization for validation)
