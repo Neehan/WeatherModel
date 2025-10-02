@@ -29,19 +29,26 @@ class NumpyCropDataset:
 
             # Flatten all features into a single vector
             weather_flat = padded_weather.numpy().flatten()
-            coord_flat = coord_processed.numpy().flatten()
-            year_flat = year_expanded.numpy().flatten()
-            practices_flat = practices.flatten()
+
+            # Coords: use once and normalize (lat/360, lng/180)
+            coord_flat = coord_processed.numpy()
+            coord_flat = np.array([coord_flat[0] / 360, coord_flat[1] / 180])
+
+            # Year: extract one value per year (not per week) and normalize
+            n_years = len(practices)
+            year_flat = year_expanded.numpy()[::52]  # Take first week of each year
+            year_flat = np.floor(year_flat)  # Remove fractional part
+            year_flat = (year_flat - 1970) / 100.0  # Normalize
+
             soil_flat = soil.flatten()
             y_past_flat = y_past.flatten()
 
-            # Concatenate all features
+            # Concatenate all features (skip practices)
             features = np.concatenate(
                 [
                     weather_flat,
                     coord_flat,
                     year_flat,
-                    practices_flat,
                     soil_flat,
                     y_past_flat,
                 ]
