@@ -127,11 +127,11 @@ class BaselineGridSearch:
         if "rmse" not in matching_rows.columns:
             return False
 
-        rmse_values = matching_rows["rmse"].values
-        if len(rmse_values) == 0:
+        rmse_list = matching_rows["rmse"].tolist()
+        if len(rmse_list) == 0:
             return False
 
-        value = rmse_values[0]
+        value = rmse_list[0]
         if pd.isna(value) or not isinstance(value, str):
             return False
 
@@ -204,6 +204,8 @@ class BaselineGridSearch:
                     random_state=seed,
                     n_jobs=-1,
                 )
+            else:
+                raise ValueError(f"Unknown model: {self.model}")
 
             model.fit(X_train, y_train)
 

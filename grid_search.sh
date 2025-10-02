@@ -109,8 +109,8 @@ run_experiment() {
 
 run_baseline_experiment() {
     TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.baseline_grid_search \
-        --model "$1" --crop-type "$2" --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
-        >> "log/baseline_$1_$2.log" 2>&1
+        --model "$2" --crop-type "$3" --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
+        >> "log/gpu$1.log" 2>&1
 }
 
 is_baseline_model() {
@@ -133,13 +133,16 @@ for model in "${MODELS[@]}"; do
 done
 
 if $all_baseline; then
-    # Baseline models don't have pretrained variants, run them sequentially
+    # Baseline models don't have pretrained variants, run them using GPUs
+    gpu_idx=0
     for model in "${MODELS[@]}"; do
         for crop in "${CROPS[@]}"; do
-            echo "Running baseline model ${model} on ${crop}..."
-            run_baseline_experiment "${model}" "${crop}"
+            echo "Running baseline model ${model} on ${crop} on GPU ${gpu_idx}..."
+            run_baseline_experiment "${gpu_idx}" "${model}" "${crop}" &
+            gpu_idx=$((gpu_idx + 1))
         done
     done
+    wait
 else
     # Regular models with pretrained/not-pretrained variants
     if [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 1 ]; then
