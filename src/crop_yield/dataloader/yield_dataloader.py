@@ -281,19 +281,20 @@ class CropDataset(Dataset):
             # Create temporal interval (weekly data)
             interval = torch.full((1,), 7, dtype=torch.float32)
 
-            # Apply lead gap: truncate last 26 weeks (weeks 27-52 of current year)
-            truncate_len = 26
+            # Apply lead gap: truncate after week 30 (end of July)
+            # Keep weeks 1-30, remove weeks 31-52
+            truncate_len = 22
             padded_weather = padded_weather[:-truncate_len]
             year_expanded = year_expanded[:-truncate_len]
             weather_feature_mask = weather_feature_mask[:-truncate_len]
 
             self.data.append(
                 (
-                    padded_weather,  # (n_years * 52 - 26, TOTAL_WEATHER_VARS)
+                    padded_weather,  # (n_years * 52 - 22, TOTAL_WEATHER_VARS)
                     coord_processed,  # (2,)
-                    year_expanded,  # (n_years * 52 - 26,)
+                    year_expanded,  # (n_years * 52 - 22,)
                     interval,  # (1,)
-                    weather_feature_mask,  # (n_years * 52 - 26, TOTAL_WEATHER_VARS)
+                    weather_feature_mask,  # (n_years * 52 - 22, TOTAL_WEATHER_VARS)
                     practices,  # (n_years, 14)
                     soil,  # (n_years, 11, 6)
                     y_past,  # (n_years,)
