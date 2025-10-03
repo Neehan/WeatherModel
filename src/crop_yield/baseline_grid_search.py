@@ -37,15 +37,14 @@ class BaselineGridSearch:
         self.test_type = test_type
         self.n_past_years = 6 if country != "mexico" else 4
         self.n_train_years = 15 if country != "mexico" else 10
+        self.n_estimators_values = [100, 500, 1000]
 
         # Grid search parameters
         if model == "xgboost":
-            self.n_estimators_values = [1000, 3000, 5000]
             self.max_depth_values = [4, 6, 8]
             self.learning_rate_values = [0.03, 0.05, 0.10]
             self.min_samples_leaf_values = [None]  # Not used for XGBoost
         elif model == "randomforest":
-            self.n_estimators_values = [500, 1000, 2000]
             self.max_depth_values = [None, 10, 20]
             self.learning_rate_values = [None]  # RF doesn't use learning rate
             self.min_samples_leaf_values = [1, 5, 20]
