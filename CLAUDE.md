@@ -18,8 +18,10 @@ WeatherModel is a comprehensive machine learning framework for agricultural weat
 
 - **Crop Yield Models** (`src/crop_yield/`): Supervised learning for yield prediction
   - Transfer learning from pretrained weather models
-  - Support for corn, soybean, and winter wheat prediction
-  - Multiple baseline models (CNN-RNN, GNN-RNN, Linear)
+  - Support for corn, soybean, wheat, and other crops across multiple countries
+  - Multiple baseline models (CNN-RNN, GNN-RNN, Linear, Chronos, XGBoost, RandomForest)
+  - Hyperparameter tuning via `grid_search.py`
+  - Best config evaluation via `best_config_tests.py`
 
 - **Base Models** (`src/base_models/`): Shared model components
   - Transformer encoders with spatiotemporal and vanilla positional encodings
@@ -28,8 +30,12 @@ WeatherModel is a comprehensive machine learning framework for agricultural weat
 
 ### Data Pipeline
 - **Weather Data**: NASA POWER daily/weekly/monthly weather datasets (31 meteorological features)
-- **Crop Data**: County-level yield data from US Corn Belt (2000-2020)
+- **Crop Data**: County-level yield data across multiple countries (2000-2020)
+  - USA: Corn Belt counties
+  - International: Argentina, Brazil, Mexico
+  - Crops: corn, soybean, wheat, sunflower, cotton, sugarcane, beans
 - **Preprocessing**: Automated data downloaders and scalers in `src/weather_preprocessing/`
+- **Data Storage**: PyTorch tensors for efficient loading (100+ files for weather data)
 
 ## Development Commands
 
@@ -58,9 +64,18 @@ python -m src.pretraining.pretraining_main \
     --init-lr 1e-6 \
     --model-size small
 
-# Multi-GPU with SLURM
-chmod +x pretraining.sh
-sbatch pretraining.sh --model weatherformer --batch-size 128 --model-size small
+# Multi-GPU with SLURM (4 GPUs)
+sbatch pretraining.sh weatherformer --batch-size 128 --model-size small
+
+# Train multiple models sequentially
+sbatch pretraining.sh weatherformer weatherbert --batch-size 128 --model-size small
+
+# Resume from checkpoint
+python -m src.pretraining.pretraining_main \
+    --model weatherformer \
+    --resume-from-checkpoint data/trained_models/pretraining/checkpoint.pth \
+    --batch-size 64 \
+    --n-epochs 30
 ```
 
 #### Crop Yield Prediction
@@ -73,19 +88,43 @@ python -m src.crop_yield.yield_main \
     --n-past-years 6 \
     --cross-validation-k 5
 
+# Without pretraining
+python -m src.crop_yield.yield_main \
+    --model weatherformer \
+    --batch-size 128 \
+    --n-past-years 6 \
+    --cross-validation-k 5
+
 # SLURM cluster
-chmod +x crop_yield.sh
 sbatch crop_yield.sh --model weatherbert --n-past-years 8
 ```
 
-#### Grid Search
+#### Grid Search (Hyperparameter Tuning)
 ```bash
-# Single model comparison (pretrained vs not pretrained)
-chmod +x grid_search.sh
-sbatch grid_search.sh weatherformer corn
+# Single model: pretrained vs not pretrained (2 GPUs)
+sbatch grid_search.sh --model weatherformer --crop corn
 
-# Two model comparison  
-sbatch grid_search.sh weatherformer weatherformersinusoid soybean
+# Two models: each with pretrained vs not (4 GPUs)
+sbatch grid_search.sh --model weatherformer weatherformersinusoid --crop corn
+
+# One model, two crops (4 GPUs)
+sbatch grid_search.sh --model weatherformer --crop corn soybean
+
+# Baseline models (no pretrained variants)
+sbatch grid_search.sh --model xgboost randomforest --crop soybean wheat
+
+# With country specification
+sbatch grid_search.sh --model weatherformer --crop corn --country argentina
+```
+
+#### Best Config Tests (Extreme Year Evaluation)
+```bash
+# Run best configurations on extreme year test
+# Requires 2 models × 2 crops = 4 GPUs
+sbatch best_config_tests.sh --models weatherformer weatherautoencoder --crops soybean corn
+
+# With country specification
+sbatch best_config_tests.sh --models weatherformer linear --crops soybean wheat --country argentina
 ```
 
 ### Model Sizes and Parameters
@@ -95,13 +134,31 @@ sbatch grid_search.sh weatherformer weatherformersinusoid soybean
 - **large**: ~56M parameters (maximum performance)
 
 ### Key Arguments
-- `--model`: Model type (weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, etc.)
-- `--pretrained-model-path`: Path to pretrained weights for transfer learning
+
+#### Pretraining Arguments
+- `--model`: Model type (weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, weatherautoencoder, simmtm, mlp)
+- `--model-size`: Model capacity (mini, small, medium, large)
+- `--batch-size`: Training batch size (higher for multi-GPU)
+- `--n-epochs`: Number of training epochs
+- `--init-lr`: Initial learning rate
+- `--beta`: Variational loss weight (WeatherFormer models only)
+- `--masking-prob`: Feature masking probability (WeatherBERT only)
+- `--n-masked-features`: Number of features to predict (WeatherFormer models)
+- `--resume-from-checkpoint`: Path to resume training from checkpoint
+
+#### Crop Yield Arguments
+- `--model`: Model type (weatherbert, weatherformer, weatherformersinusoid, weatherformermixture, decoder, decodersinusoid, weatherautoencoder, weatherautoencodersine, simmtm, cnnrnn, gnnrnn, linear, chronos, xgboost, randomforest)
+- `--pretrained-model-path`: Path to pretrained weights for transfer learning (if omitted, trains from scratch)
+- `--crop-type`: Crop to predict (corn, soybean, wheat, sunflower, cotton, sugarcane, beans)
+- `--country`: Country dataset (usa, argentina, brazil, mexico; default: usa)
 - `--n-past-years`: Historical years of weather data (4-10 recommended)
 - `--cross-validation-k`: Number of CV folds for robust evaluation
-- `--beta`: Variational loss weight for WeatherFormer models
-- `--masking-prob`: Feature masking probability for WeatherBERT
-- `--n-masked-features`: Number of features to predict for WeatherFormer
+- `--batch-size`: Training batch size
+- `--n-epochs`: Number of training epochs
+- `--init-lr`: Initial learning rate
+- `--decay-factor`: Learning rate exponential decay factor
+- `--n-warmup-epochs`: Number of warmup epochs
+- `--beta`: Uncertainty regularization (WeatherFormer yield models)
 
 ## Data Organization
 
@@ -131,12 +188,25 @@ The framework uses K-fold cross-validation across counties for robust evaluation
 - Linear regression baselines  
 - Non-pretrained vs pretrained model variants
 
-## Multi-GPU Training
+## Multi-GPU and Distributed Training
 
 The repository supports distributed training using PyTorch DDP:
-- Use `torchrun` for multi-GPU on single node
-- SLURM scripts automatically handle multi-node distributed training
-- All training scripts support `--resume-from-checkpoint` for fault tolerance
+- **Pretraining**: Uses `torchrun` with 4 GPUs via [pretraining.sh](pretraining.sh)
+- **Crop Yield**: Single GPU via [crop_yield.sh](crop_yield.sh)
+- **Grid Search**: Parallel experiments on 4 GPUs via [grid_search.sh](grid_search.sh)
+  - Each GPU runs an independent experiment (model/crop/pretrained combination)
+  - Non-baseline models: 2 experiments per model (pretrained vs not pretrained)
+  - Baseline models (xgboost, randomforest): 1 experiment per model
+- **Best Config Tests**: Parallel evaluation on 4 GPUs via [best_config_tests.sh](best_config_tests.sh)
+  - Each GPU evaluates one model/crop combination using best hyperparameters
+  - Runs extreme year tests with weather cutoff at week 26
+
+### SLURM Configuration
+All SLURM scripts are configured for MIT Supercloud with:
+- Partition: `mit_preemptable`
+- Account: `mit_general`
+- GPU types: H100 (pretraining), L40S (grid search/tests)
+- Environment: `miniforge/24.3.0-0`
 
 ## File Naming Conventions
 
@@ -161,7 +231,20 @@ Format: `{model}_{task}_{param_count}_{status}.pth`
 - Cross-validation splits are deterministic by county ID
 - Model configurations saved in output JSON files
 
-### SLURM Integration
-- All shell scripts configured for MIT Supercloud SLURM
-- Automatic GPU allocation and environment loading
-- Progress monitoring with real-time log files
+### Model Name Mappings (Paper Submission)
+For anonymous submission, the following model name mappings are used:
+- **T-BERT** → `weatherautoencoder`
+- **VITA with std normal prior** → `weatherformer`
+- **VITA with sinusoidal prior** → `weatherformersinusoid`
+- **SimMTM** → `simmtm`
+- **25-6 feature prediction experiment** → `mlp`
+
+### Grid Search GPU Allocation Rules
+- **Single model + single crop**: 2 GPUs (pretrained vs not pretrained)
+- **Two models + single crop**: 4 GPUs (2 models × pretrained/not)
+- **Single model + two crops**: 4 GPUs (2 crops × pretrained/not)
+- **Baseline models**: No pretrained variants, 1 GPU per model/crop combination
+- **Unsupported**: 2 non-baseline models + 2 crops (would need 8 GPUs)
+
+### Checkpoint Resumption
+All training scripts support `--resume-from-checkpoint` for fault tolerance during long training runs.

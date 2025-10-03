@@ -207,15 +207,6 @@ class CropDataset(Dataset):
                 .values.astype("float32")
                 .reshape((-1, 6, 52))
             )  # 6 measurements, 52 weeks
-
-            # Apply lead gap: cut off current year at week 26 (July)
-            if len(weather) > 0:
-                # Current year is the last year in the sequence
-                current_year_weather = weather[-1]  # Shape: (6, 52)
-                # Keep only first 26 weeks for current year, pad the rest with zeros
-                current_year_weather_padded = np.zeros_like(current_year_weather)
-                current_year_weather_padded[:, :26] = current_year_weather[:, :26]
-                weather[-1] = current_year_weather_padded
             practices = (
                 query_data[self.practice_cols]
                 .values.astype("float32")
@@ -290,13 +281,19 @@ class CropDataset(Dataset):
             # Create temporal interval (weekly data)
             interval = torch.full((1,), 7, dtype=torch.float32)
 
+            # Apply lead gap: truncate last 26 weeks (weeks 27-52 of current year)
+            truncate_len = 26
+            padded_weather = padded_weather[:-truncate_len]
+            year_expanded = year_expanded[:-truncate_len]
+            weather_feature_mask = weather_feature_mask[:-truncate_len]
+
             self.data.append(
                 (
-                    padded_weather,  # (n_years * 52, TOTAL_WEATHER_VARS)
+                    padded_weather,  # (n_years * 52 - 26, TOTAL_WEATHER_VARS)
                     coord_processed,  # (2,)
-                    year_expanded,  # (n_years * 52,)
+                    year_expanded,  # (n_years * 52 - 26,)
                     interval,  # (1,)
-                    weather_feature_mask,  # (n_years * 52, TOTAL_WEATHER_VARS)
+                    weather_feature_mask,  # (n_years * 52 - 26, TOTAL_WEATHER_VARS)
                     practices,  # (n_years, 14)
                     soil,  # (n_years, 11, 6)
                     y_past,  # (n_years,)
