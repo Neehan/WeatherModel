@@ -38,14 +38,17 @@ class BaselineGridSearch:
         self.n_past_years = 6 if country != "mexico" else 4
         self.n_train_years = 15 if country != "mexico" else 10
 
-        # Grid search parameters - same ranges for fair comparison
-        self.n_estimators_values = [50, 100, 200]
-        self.max_depth_values = [3, 6, 9]
-
+        # Grid search parameters
         if model == "xgboost":
-            self.learning_rate_values = [0.05, 0.1, 0.3]
+            self.n_estimators_values = [1000, 3000, 5000]
+            self.max_depth_values = [4, 6, 8]
+            self.learning_rate_values = [0.03, 0.05, 0.10]
+            self.min_samples_leaf_values = [None]  # Not used for XGBoost
         elif model == "randomforest":
+            self.n_estimators_values = [500, 1000, 2000]
+            self.max_depth_values = [None, 10, 20]
             self.learning_rate_values = [None]  # RF doesn't use learning rate
+            self.min_samples_leaf_values = [1, 5, 20]
         else:
             raise ValueError(f"Unknown model: {model}")
 
@@ -96,6 +99,7 @@ class BaselineGridSearch:
         n_estimators: int,
         max_depth: Optional[int],
         learning_rate: Optional[float],
+        min_samples_leaf: Optional[int],
     ) -> bool:
         """Check if specific experiment already exists"""
         if self.existing_results.empty or "model" not in self.existing_results.columns:
@@ -118,6 +122,15 @@ class BaselineGridSearch:
         # Add learning_rate check for XGBoost
         if learning_rate is not None:
             mask = mask & (self.existing_results["learning_rate"] == learning_rate)
+
+        # Add min_samples_leaf check for Random Forest
+        if (
+            min_samples_leaf is not None
+            and "min_samples_leaf" in self.existing_results.columns
+        ):
+            mask = mask & (
+                self.existing_results["min_samples_leaf"] == min_samples_leaf
+            )
 
         matching_rows = self.existing_results[mask]
         if matching_rows.empty:
@@ -143,6 +156,7 @@ class BaselineGridSearch:
         n_estimators: int,
         max_depth: Optional[int],
         learning_rate: Optional[float],
+        min_samples_leaf: Optional[int],
         seed: int = 1234,
     ) -> Tuple[List[float], List[float]]:
         """Train and evaluate model on all test folds"""
@@ -190,24 +204,60 @@ class BaselineGridSearch:
 
             # Train model
             if self.model == "xgboost":
+                # For XGBoost: use early stopping with validation split (last year of training)
+                # Split training data: use last year's data as validation
+                val_year = test_year - test_gap - 1
+
+                CROP_YIELD_STATS[self.crop_type]["mean"].clear()
+                CROP_YIELD_STATS[self.crop_type]["std"].clear()
+
+                (X_train_reduced, y_train_reduced), (X_val, y_val) = (
+                    get_numpy_train_test_data(
+                        crop_df,
+                        self.n_train_years - 1,
+                        val_year,
+                        self.n_past_years,
+                        self.crop_type,
+                        self.country,
+                        test_gap=0,
+                    )
+                )
+
                 model = xgb.XGBRegressor(
                     n_estimators=n_estimators,
                     max_depth=max_depth,
                     learning_rate=learning_rate,
                     random_state=seed,
                     n_jobs=-1,
+                    objective="reg:squarederror",
+                    tree_method="hist",
+                    min_child_weight=5,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    reg_lambda=10,
+                    early_stopping_rounds=100,
+                )
+
+                model.fit(
+                    X_train_reduced,
+                    y_train_reduced,
+                    eval_set=[(X_val, y_val)],
+                    verbose=False,
                 )
             elif self.model == "randomforest":
                 model = RandomForestRegressor(
                     n_estimators=n_estimators,
                     max_depth=max_depth,
+                    min_samples_leaf=(
+                        min_samples_leaf if min_samples_leaf is not None else 1
+                    ),
+                    max_features="sqrt",  # type: ignore
                     random_state=seed,
                     n_jobs=-1,
                 )
+                model.fit(X_train, y_train)
             else:
                 raise ValueError(f"Unknown model: {self.model}")
-
-            model.fit(X_train, y_train)
 
             # Predict
             y_pred = model.predict(X_test)
@@ -228,6 +278,7 @@ class BaselineGridSearch:
         n_estimators: int,
         max_depth: Optional[int],
         learning_rate: Optional[float],
+        min_samples_leaf: Optional[int],
         fold_rmses: List[float],
         fold_stds: List[float],
         runtime_seconds: float,
@@ -262,6 +313,9 @@ class BaselineGridSearch:
         if learning_rate is not None:
             new_row["learning_rate"] = learning_rate
 
+        if min_samples_leaf is not None:
+            new_row["min_samples_leaf"] = min_samples_leaf
+
         # Check if row already exists
         if not df.empty:
             if max_depth is None:
@@ -279,6 +333,9 @@ class BaselineGridSearch:
 
             if learning_rate is not None:
                 mask = mask & (df["learning_rate"] == learning_rate)
+
+            if min_samples_leaf is not None and "min_samples_leaf" in df.columns:
+                mask = mask & (df["min_samples_leaf"] == min_samples_leaf)
 
             if mask.any():
                 # Update existing row
@@ -301,6 +358,7 @@ class BaselineGridSearch:
             n_estimators,
             max_depth,
             learning_rate,
+            min_samples_leaf,
             fold_rmses,
             fold_stds,
             r_squared_values,
@@ -309,7 +367,8 @@ class BaselineGridSearch:
 
         self.logger.info(
             f"Saved results: n_estimators={n_estimators}, max_depth={max_depth}, "
-            f"lr={learning_rate}, RMSE={avg_rmse:.3f}±{std_rmse:.3f}, R²={avg_r2:.3f}±{std_r2:.3f}"
+            f"lr={learning_rate}, min_samples_leaf={min_samples_leaf}, "
+            f"RMSE={avg_rmse:.3f}±{std_rmse:.3f}, R²={avg_r2:.3f}±{std_r2:.3f}"
         )
 
     def _save_detailed_results(
@@ -317,6 +376,7 @@ class BaselineGridSearch:
         n_estimators: int,
         max_depth: Optional[int],
         learning_rate: Optional[float],
+        min_samples_leaf: Optional[int],
         fold_rmses: List[float],
         fold_stds: List[float],
         r_squared_values: List[float],
@@ -330,9 +390,10 @@ class BaselineGridSearch:
         # Create experiment key
         lr_str = f"_lr_{learning_rate}" if learning_rate is not None else ""
         md_str = f"{max_depth}" if max_depth is not None else "None"
+        msl_str = f"_msl_{min_samples_leaf}" if min_samples_leaf is not None else ""
         experiment_key = (
             f"{self.model}_{self.crop_type}_{self.country}_{self.test_type}_"
-            f"n_{n_estimators}_depth_{md_str}{lr_str}"
+            f"n_{n_estimators}_depth_{md_str}{lr_str}{msl_str}"
         )
 
         # Convert to bu/acre
@@ -343,6 +404,7 @@ class BaselineGridSearch:
             "n_estimators": n_estimators,
             "max_depth": max_depth,
             "learning_rate": learning_rate,
+            "min_samples_leaf": min_samples_leaf,
             "mean_rmse": float(np.mean(rmse_bu_acre)),
             "std_rmse": float(np.std(rmse_bu_acre)),
             "mean_r2": float(np.mean(r_squared_values)),
@@ -375,6 +437,7 @@ class BaselineGridSearch:
             len(self.n_estimators_values)
             * len(self.max_depth_values)
             * len(self.learning_rate_values)
+            * len(self.min_samples_leaf_values)
         )
 
         self.logger.info(f"Total parameter combinations to test: {total_combinations}")
@@ -382,6 +445,8 @@ class BaselineGridSearch:
         self.logger.info(f"max_depth values: {self.max_depth_values}")
         if self.model == "xgboost":
             self.logger.info(f"learning_rate values: {self.learning_rate_values}")
+        elif self.model == "randomforest":
+            self.logger.info(f"min_samples_leaf values: {self.min_samples_leaf_values}")
 
         completed_experiments = 0
         skipped_experiments = 0
@@ -390,45 +455,50 @@ class BaselineGridSearch:
         for n_estimators in self.n_estimators_values:
             for max_depth in self.max_depth_values:
                 for learning_rate in self.learning_rate_values:
-                    # Check if experiment already exists
-                    if self._experiment_exists(n_estimators, max_depth, learning_rate):
+                    for min_samples_leaf in self.min_samples_leaf_values:
+                        # Check if experiment already exists
+                        if self._experiment_exists(
+                            n_estimators, max_depth, learning_rate, min_samples_leaf
+                        ):
+                            self.logger.info(
+                                f"Skipping n_estimators={n_estimators}, max_depth={max_depth}, "
+                                f"lr={learning_rate}, min_samples_leaf={min_samples_leaf} (already completed)"
+                            )
+                            skipped_experiments += 1
+                            continue
+
                         self.logger.info(
-                            f"Skipping n_estimators={n_estimators}, max_depth={max_depth}, "
-                            f"lr={learning_rate} (already completed)"
-                        )
-                        skipped_experiments += 1
-                        continue
-
-                    self.logger.info(
-                        f"Running experiment: n_estimators={n_estimators}, max_depth={max_depth}, lr={learning_rate}"
-                    )
-
-                    start_time = time.time()
-                    try:
-                        fold_rmses, fold_stds = self._train_and_evaluate(
-                            n_estimators, max_depth, learning_rate
-                        )
-                        end_time = time.time()
-                        runtime_seconds = end_time - start_time
-
-                        # Save results
-                        self._save_results(
-                            n_estimators,
-                            max_depth,
-                            learning_rate,
-                            fold_rmses,
-                            fold_stds,
-                            runtime_seconds,
+                            f"Running experiment: n_estimators={n_estimators}, max_depth={max_depth}, "
+                            f"lr={learning_rate}, min_samples_leaf={min_samples_leaf}"
                         )
 
-                        completed_experiments += 1
+                        start_time = time.time()
+                        try:
+                            fold_rmses, fold_stds = self._train_and_evaluate(
+                                n_estimators, max_depth, learning_rate, min_samples_leaf
+                            )
+                            end_time = time.time()
+                            runtime_seconds = end_time - start_time
 
-                    except Exception as e:
-                        self.logger.error(
-                            f"Failed experiment n_estimators={n_estimators}, max_depth={max_depth}, "
-                            f"lr={learning_rate}: {str(e)}",
-                            exc_info=True,
-                        )
+                            # Save results
+                            self._save_results(
+                                n_estimators,
+                                max_depth,
+                                learning_rate,
+                                min_samples_leaf,
+                                fold_rmses,
+                                fold_stds,
+                                runtime_seconds,
+                            )
+
+                            completed_experiments += 1
+
+                        except Exception as e:
+                            self.logger.error(
+                                f"Failed experiment n_estimators={n_estimators}, max_depth={max_depth}, "
+                                f"lr={learning_rate}, min_samples_leaf={min_samples_leaf}: {str(e)}",
+                                exc_info=True,
+                            )
 
         self.logger.info(f"Grid search completed!")
         self.logger.info(

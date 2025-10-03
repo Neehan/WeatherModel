@@ -106,6 +106,12 @@ def find_best_config(df: pd.DataFrame, model: str) -> Dict:
                 if "learning_rate" in best_row and pd.notna(best_row["learning_rate"])
                 else None
             ),
+            "min_samples_leaf": (
+                int(best_row["min_samples_leaf"])
+                if "min_samples_leaf" in best_row
+                and pd.notna(best_row["min_samples_leaf"])
+                else None
+            ),
             "r2_score": best_row["r2_mean"],
         }
 
@@ -114,6 +120,7 @@ def find_best_config(df: pd.DataFrame, model: str) -> Dict:
         logger.info(f"  n_estimators: {best_config['n_estimators']}")
         logger.info(f"  max_depth: {best_config['max_depth']}")
         logger.info(f"  Learning rate: {best_config['learning_rate']}")
+        logger.info(f"  min_samples_leaf: {best_config.get('min_samples_leaf')}")
         logger.info(f"  R² score: {best_config['r2_score']:.4f}")
     else:
         best_config = {
