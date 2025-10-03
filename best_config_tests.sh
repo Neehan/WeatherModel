@@ -76,23 +76,23 @@ echo "Running extreme year tests with weather cutoff at week 26"
 echo "Total tests: ${#MODELS[@]} models × ${#CROPS[@]} crops = $((${#MODELS[@]} * ${#CROPS[@]})) tests"
 
 mkdir -p data/best_config_tests log
-rm -rf log/best_config*.log
+rm -rf log/gpu*.log
 
 run_test() {
     local gpu_id=$1
     local model=$2
     local crop=$3
     local country=$4
-    local log_file="log/best_config_${model}_${crop}_${country}_extreme_weather_cutoff.log"
+    local log_file="log/gpu${gpu_id}.log"
     
-    echo "Running: $model / $crop / $country / extreme_weather_cutoff on GPU $gpu_id"
+    echo "Running: $model / $crop on GPU $gpu_id"
     
     CUDA_VISIBLE_DEVICES=$gpu_id TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.best_config_tests \
         --model "$model" --crop-type "$crop" --country "$country" \
         --grid-search-results-dir data/results "${EXTRA_ARGS[@]}" \
         >> "$log_file" 2>&1
     
-    echo "Completed: $model / $crop / $country / extreme_weather_cutoff"
+    echo "Completed: $model / $crop on GPU $gpu_id"
 }
 
 # Run extreme year test for each model/crop combination (1 GPU per test)
@@ -110,7 +110,7 @@ wait
 
 echo "All extreme year tests with weather cutoff completed!"
 echo "Results saved to: data/best_config_tests/"
-echo "Logs saved to: log/best_config_*.log"
+echo "Logs saved to: log/gpu*.log"
 
 # Summary of what was run
 echo ""

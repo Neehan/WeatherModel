@@ -213,7 +213,7 @@ class CropDataset(Dataset):
                 # Current year is the last year in the sequence
                 current_year_weather = weather[-1]  # Shape: (6, 52)
                 # Keep only first 26 weeks for current year, pad the rest with zeros
-                current_year_weather_padded = torch.zeros_like(current_year_weather)
+                current_year_weather_padded = np.zeros_like(current_year_weather)
                 current_year_weather_padded[:, :26] = current_year_weather[:, :26]
                 weather[-1] = current_year_weather_padded
             practices = (
