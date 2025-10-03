@@ -28,15 +28,14 @@ class NumpyCropDataset:
             ) = sample
 
             # Flatten all features into a single vector
-            # Only take the last 52 weeks (last year of weather)
-            weather_flat = padded_weather.numpy()[-52:, :].flatten()
+            weather_flat = padded_weather.numpy().flatten()
 
             # Coords: use once and normalize (lat/360, lng/180)
             coord_flat = coord_processed.numpy()
             coord_flat = np.array([coord_flat[0] / 360, coord_flat[1] / 180])
 
-            # Year: extract one value (last year)
-            year_flat = year_expanded.numpy()[-1:]
+            # Year: extract one value per year (not per week) and normalize
+            year_flat = year_expanded.numpy()[::52]  # Take first week of each year
             year_flat = np.floor(year_flat)  # Remove fractional part
             year_flat = (year_flat - 1970) / 100.0  # Normalize
 
