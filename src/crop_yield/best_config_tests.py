@@ -166,30 +166,19 @@ def create_test_config(
     model: str,
     crop_type: str,
     country: str,
-    test_type: str,
-    n_train_years: int,
     best_config: Dict,
 ) -> Dict:
     """Create configuration for the test"""
     config = best_config.copy()
 
-    # Set test parameters
-    if test_type == "overall":
-        description = f"Overall test with {n_train_years} years of history"
-    elif test_type == "ahead_pred":
-        description = f"Ahead prediction test with {n_train_years} years of history"
-    else:
-        raise ValueError(
-            f"Invalid test_type: {test_type}. Must be 'overall' or 'ahead_pred'"
-        )
-
+    # Set test parameters for extreme year test
     config.update(
         {
-            "test_type": test_type,
-            "n_train_years": n_train_years,
+            "test_type": "extreme",
+            "n_train_years": 15,  # Fixed to 15 years for extreme year test
             "crop_type": crop_type,
             "country": country,
-            "description": description,
+            "description": f"Extreme year test with 15 years of history (weather cutoff at week 26)",
         }
     )
 
@@ -281,7 +270,6 @@ def save_single_result(
     model: str,
     crop_type: str,
     country: str,
-    test_type: str,
     config: Dict,
     avg_rmse: Optional[float],
     std_rmse: Optional[float],
@@ -293,7 +281,8 @@ def save_single_result(
     os.makedirs(output_dir, exist_ok=True)
 
     output_file = os.path.join(
-        output_dir, f"best_config_tests_{model}_{crop_type}_{country}_{test_type}.tsv"
+        output_dir,
+        f"best_config_tests_{model}_{crop_type}_{country}_extreme_weather_cutoff.tsv",
     )
 
     # Format results like grid search with ± notation
@@ -304,7 +293,7 @@ def save_single_result(
         "model": model,
         "crop_type": crop_type,
         "country": country,
-        "test_type": test_type,
+        "test_type": "extreme_weather_cutoff",
         "n_train_years": config["n_train_years"],
         "rmse": rmse_str,
         "r2": r2_str,
@@ -326,7 +315,7 @@ def save_single_result(
         logger.info(f"Created new results file: {output_file}")
 
     logger.info(
-        f"Saved result: {test_type} {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
+        f"Saved result: extreme_weather_cutoff {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
     )
 
 
@@ -343,12 +332,6 @@ def main():
         default="data/results",
         help="Grid search results directory",
     )
-    parser.add_argument(
-        "--test-type",
-        choices=["overall", "ahead_pred"],
-        required=True,
-        help="Test type to run",
-    )
 
     args = parser.parse_args()
 
@@ -359,53 +342,43 @@ def main():
     df = load_grid_search_results(file_path)
     best_config = find_best_config(df, args.model)
 
-    # Determine years to test based on test type
-    if args.test_type == "overall":
-        years_to_test = [15, 30]
-    else:  # ahead_pred
-        years_to_test = [15]
+    # Run extreme year test with weather cutoff
+    logger.info(f"\n{'='*60}")
+    logger.info(f"Running extreme year test with weather cutoff at week 26")
+    logger.info(f"{'='*60}")
 
-    # Run tests for each year configuration
-    for n_train_years in years_to_test:
-        logger.info(f"\n{'='*60}")
-        logger.info(f"Running {args.test_type} test with {n_train_years} years")
-        logger.info(f"{'='*60}")
+    # Create test configuration
+    config = create_test_config(
+        args.model,
+        args.crop_type,
+        args.country,
+        best_config,
+    )
 
-        # Create test configuration
-        config = create_test_config(
-            args.model,
-            args.crop_type,
-            args.country,
-            args.test_type,
-            n_train_years,
-            best_config,
+    # Run test
+    avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
+
+    # Save result immediately (HPC-safe)
+    save_single_result(
+        args.model,
+        args.crop_type,
+        args.country,
+        config,
+        avg_rmse,
+        std_rmse,
+        avg_r2,
+        std_r2,
+    )
+
+    # Print summary
+    if avg_rmse is not None:
+        logger.info(
+            f"Test completed and saved: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
         )
+    else:
+        logger.info(f"Test FAILED and logged")
 
-        # Run test
-        avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
-
-        # Save result immediately (HPC-safe)
-        save_single_result(
-            args.model,
-            args.crop_type,
-            args.country,
-            args.test_type,
-            config,
-            avg_rmse,
-            std_rmse,
-            avg_r2,
-            std_r2,
-        )
-
-        # Print summary
-        if avg_rmse is not None:
-            logger.info(
-                f"Test completed and saved ({n_train_years}y): RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
-            )
-        else:
-            logger.info(f"Test FAILED and logged ({n_train_years}y)")
-
-    logger.info(f"\nAll {args.test_type} tests completed and saved!")
+    logger.info(f"\nExtreme year test with weather cutoff completed and saved!")
 
 
 if __name__ == "__main__":

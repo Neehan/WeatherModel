@@ -207,6 +207,15 @@ class CropDataset(Dataset):
                 .values.astype("float32")
                 .reshape((-1, 6, 52))
             )  # 6 measurements, 52 weeks
+
+            # Apply lead gap: cut off current year at week 26 (July)
+            if len(weather) > 0:
+                # Current year is the last year in the sequence
+                current_year_weather = weather[-1]  # Shape: (6, 52)
+                # Keep only first 26 weeks for current year, pad the rest with zeros
+                current_year_weather_padded = torch.zeros_like(current_year_weather)
+                current_year_weather_padded[:, :26] = current_year_weather[:, :26]
+                weather[-1] = current_year_weather_padded
             practices = (
                 query_data[self.practice_cols]
                 .values.astype("float32")

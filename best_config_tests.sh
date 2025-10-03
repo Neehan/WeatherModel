@@ -9,8 +9,9 @@
 #SBATCH --mem=64GB                     # Total memory
 #SBATCH -t 24:00:00                    # 12-hour wall time
 
+
 # Initialize variables
-MODEL=""
+MODELS=()
 CROPS=()
 COUNTRY="usa"
 EXTRA_ARGS=()
@@ -18,11 +19,14 @@ EXTRA_ARGS=()
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --model)
-            MODEL="$2"
-            shift 2
+        --models)
+            shift
+            while [[ $# -gt 0 && $1 != --* ]]; do
+                MODELS+=("$1")
+                shift
+            done
             ;;
-        --crop)
+        --crops)
             shift
             while [[ $# -gt 0 && $1 != --* ]]; do
                 CROPS+=("$1")
@@ -41,31 +45,35 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [ -z "$MODEL" ] || [ ${#CROPS[@]} -eq 0 ]; then
-    echo "Usage: $0 --model <model> --crop <crop1> [crop2] [--country <country>] [additional_python_args...]"
+if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
+    echo "Usage: $0 --models <model1> <model2> --crops <crop1> <crop2> [--country <country>] [additional_python_args...]"
     echo ""
     echo "Supported models: weatherformer, weatherautoencoder, weatherformersinusoid, simmtm, cnnrnn, linear, chronos, xgboost, randomforest"
     echo ""
     echo "Examples:"
-    echo "  $0 --model weatherformer --crop corn"
-    echo "  $0 --model weatherformer --crop corn soybean"
-    echo "  $0 --model weatherformer --crop corn --country usa"
-    echo "  $0 --model xgboost --crop soybean"
-    echo "  $0 --model randomforest --crop wheat --country argentina"
+    echo "  $0 --models weatherformer weatherautoencoder --crops soybean corn"
+    echo "  $0 --models weatherformer linear --crops soybean corn --country argentina"
+    echo "  $0 --models xgboost randomforest --crops soybean wheat"
     exit 1
 fi
 
-# Check for too many crops (max 2 crops = 4 GPUs)
-if [ ${#CROPS[@]} -gt 2 ]; then
-    echo "Error: Too many crops (${#CROPS[@]}). Maximum 2 crops allowed (4 GPUs available: 2 per crop)"
+# Check for exactly 2 models and 2 crops (4 total tests = 4 GPUs)
+if [ ${#MODELS[@]} -ne 2 ]; then
+    echo "Error: Exactly 2 models required (got ${#MODELS[@]})"
+    exit 1
+fi
+
+if [ ${#CROPS[@]} -ne 2 ]; then
+    echo "Error: Exactly 2 crops required (got ${#CROPS[@]})"
     exit 1
 fi
 
 # Load your environment
 module load miniforge/24.3.0-0
 
-echo "Starting best config tests: $MODEL / ${CROPS[*]} / $COUNTRY"
-echo "Running overall and ahead_pred tests in parallel (2 GPUs per crop)"
+echo "Starting best config tests: ${MODELS[*]} / ${CROPS[*]} / $COUNTRY"
+echo "Running extreme year tests with weather cutoff at week 26"
+echo "Total tests: ${#MODELS[@]} models × ${#CROPS[@]} crops = $((${#MODELS[@]} * ${#CROPS[@]})) tests"
 
 mkdir -p data/best_config_tests log
 rm -rf log/best_config*.log
@@ -75,42 +83,41 @@ run_test() {
     local model=$2
     local crop=$3
     local country=$4
-    local test_type=$5
-    local log_file="log/best_config_${model}_${crop}_${country}_${test_type}.log"
+    local log_file="log/best_config_${model}_${crop}_${country}_extreme_weather_cutoff.log"
     
-    echo "Running: $model / $crop / $country / $test_type on GPU $gpu_id"
+    echo "Running: $model / $crop / $country / extreme_weather_cutoff on GPU $gpu_id"
     
     CUDA_VISIBLE_DEVICES=$gpu_id TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.best_config_tests \
-        --model "$model" --crop-type "$crop" --country "$country" --test-type "$test_type" \
+        --model "$model" --crop-type "$crop" --country "$country" \
         --grid-search-results-dir data/results "${EXTRA_ARGS[@]}" \
         >> "$log_file" 2>&1
     
-    echo "Completed: $model / $crop / $country / $test_type"
+    echo "Completed: $model / $crop / $country / extreme_weather_cutoff"
 }
 
-# Run tests for each crop (2 GPUs per crop: one for overall, one for ahead_pred)
+# Run extreme year test for each model/crop combination (1 GPU per test)
 gpu_counter=0
-for crop in "${CROPS[@]}"; do
-    # Run overall test on one GPU
-    run_test $gpu_counter "$MODEL" "$crop" "$COUNTRY" "overall" &
-    ((gpu_counter++))
-    
-    # Run ahead_pred test on another GPU
-    run_test $gpu_counter "$MODEL" "$crop" "$COUNTRY" "ahead_pred" &
-    ((gpu_counter++))
+for model in "${MODELS[@]}"; do
+    for crop in "${CROPS[@]}"; do
+        # Run extreme year test with weather cutoff
+        run_test $gpu_counter "$model" "$crop" "$COUNTRY" &
+        ((gpu_counter++))
+    done
 done
 
 # Wait for all background jobs to complete
 wait
 
-echo "All best config tests completed!"
+echo "All extreme year tests with weather cutoff completed!"
 echo "Results saved to: data/best_config_tests/"
 echo "Logs saved to: log/best_config_*.log"
 
 # Summary of what was run
 echo ""
 echo "Summary:"
-echo "Model: $MODEL"
+echo "Models: ${MODELS[*]}"
 echo "Crops: ${CROPS[*]}"
 echo "Country: $COUNTRY"
-echo "Total GPUs used: $gpu_counter"
+echo "Test type: extreme year with weather cutoff at week 26"
+echo "Total tests run: $gpu_counter"
+echo "GPUs used: $gpu_counter"
