@@ -16,8 +16,8 @@ from src.crop_yield.trainers.weatherbert_yield_trainer import (
 
 class LinearYieldTrainer(WeatherBERTYieldTrainer):
     """
-    Trainer class for crop yield prediction models using ridge regression.
-    Inherits from WeatherBERTYieldTrainer but overrides compute_train_loss to add L2 regularization.
+    Trainer class for USDA-style linear regression crop yield model.
+    Simple MSE loss, no regularization.
     """
 
     def __init__(self, **kwargs):
@@ -37,9 +37,8 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
         target_yield,
     ):
         """
-        Compute ridge regression training loss: MSE + β * L2_regularization
+        Compute training loss: simple MSE
         """
-        # Forward pass through linear model
         yield_pred = self.model(
             padded_weather,
             coord_processed,
@@ -50,19 +49,9 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
             soil,
         )
 
-        # MSE loss
         mse_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
 
-        # L2 regularization term
-        beta = self._current_beta()
-        # Compute L2 regularization directly
-        l2_reg = self.model.compute_l2_regularization()  # type: ignore
-        ridge_loss = beta * l2_reg
-
-        # Total loss
-        total_loss = mse_loss + ridge_loss
-
-        return {"total_loss": total_loss}
+        return {"total_loss": mse_loss}
 
     def compute_validation_loss(
         self,
@@ -77,9 +66,8 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
         target_yield,
     ):
         """
-        Compute validation loss (just MSE, no regularization).
+        Compute validation loss: RMSE
         """
-        # Forward pass through linear model
         yield_pred = self.model(
             padded_weather,
             coord_processed,
@@ -90,10 +78,8 @@ class LinearYieldTrainer(WeatherBERTYieldTrainer):
             soil,
         )
 
-        # MSE loss only (no regularization for validation)
         mse_loss = self.criterion(yield_pred.squeeze(), target_yield.squeeze())
 
-        # Return RMSE for validation since that's standard for comparison
         return {"total_loss": mse_loss**0.5}
 
 
@@ -110,4 +96,5 @@ def linear_yield_training_loop(args_dict, use_cropnet: bool):
         trainer_class=LinearYieldTrainer,
         model_name=f"linear_{args_dict['crop_type']}_yield",
         args_dict=args_dict,
+        extra_model_kwargs={"crop_type": args_dict["crop_type"]},
     )

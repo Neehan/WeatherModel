@@ -25,6 +25,21 @@ def is_baseline_model(model: str) -> bool:
     return model.lower() in ["xgboost", "randomforest"]
 
 
+def model_uses_beta(model: str) -> bool:
+    """Check if model uses beta parameter"""
+    no_beta_models = [
+        "weatherautoencoder",
+        "simmtm",
+        "cnnrnn",
+        "gnnrnn",
+        "chronos",
+        "linear",
+        "xgboost",
+        "randomforest",
+    ]
+    return model.lower() not in no_beta_models
+
+
 def get_grid_search_file_path(
     model: str, crop_type: str, country: str, grid_search_results_dir: str
 ) -> str:
@@ -126,16 +141,20 @@ def find_best_config(df: pd.DataFrame, model: str) -> Dict:
         best_config = {
             "model": best_row["model"],
             "method": best_row["method"],
-            "beta": best_row["beta"],
             "batch_size": int(best_row["batch_size"]),
             "init_lr": best_row["init_lr"],
             "r2_score": best_row["r2_mean"],
         }
 
+        # Add beta only if model uses it
+        if model_uses_beta(model):
+            best_config["beta"] = best_row["beta"]
+
         logger.info(f"Best configuration found:")
         logger.info(f"  Model: {best_config['model']}")
         logger.info(f"  Method: {best_config['method']}")
-        logger.info(f"  Beta: {best_config['beta']}")
+        if model_uses_beta(model):
+            logger.info(f"  Beta: {best_config['beta']}")
         logger.info(f"  Batch size: {best_config['batch_size']}")
         logger.info(f"  Learning rate: {best_config['init_lr']}")
         logger.info(f"  R² score: {best_config['r2_score']:.4f}")
@@ -218,6 +237,10 @@ def create_test_config(
                 "resume_from_checkpoint": None,
             }
         )
+
+        # Set beta to 0.0 for models that don't use it
+        if not model_uses_beta(model) and "beta" not in config:
+            config["beta"] = 0.0
 
     return config
 

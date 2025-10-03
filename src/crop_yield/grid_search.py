@@ -463,7 +463,6 @@ class GridSearch:
                 for n_train_years in self.n_train_years_values:
                     for beta in self.beta_values:
                         # Skip beta > 0 for models that don't use beta parameter
-                        # Note: linear model now uses beta for ridge regression
                         if (
                             self.model
                             in [
@@ -472,6 +471,7 @@ class GridSearch:
                                 "cnnrnn",
                                 "gnnrnn",
                                 "chronos",
+                                "linear",
                             ]
                             and beta > 0
                         ):
