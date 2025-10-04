@@ -187,7 +187,7 @@ def create_test_config(
     )
 
     # Set common parameters
-    n_past_years = 4
+    n_past_years = 6 if country != "mexico" else 4
     config.update(
         {
             "n_past_years": n_past_years,
@@ -279,6 +279,7 @@ def save_single_result(
     std_rmse: Optional[float],
     avg_r2: Optional[float],
     std_r2: Optional[float],
+    seed: int,
 ):
     """Save a single test result immediately to TSV file (append mode for HPC safety)"""
     output_dir = "data/best_config_tests"
@@ -299,6 +300,7 @@ def save_single_result(
         "country": country,
         "test_type": "extreme_weather_cutoff",
         "n_train_years": config["n_train_years"],
+        "seed": seed,
         "rmse": rmse_str,
         "r2": r2_str,
     }
@@ -319,7 +321,7 @@ def save_single_result(
         logger.info(f"Created new results file: {output_file}")
 
     logger.info(
-        f"Saved result: extreme_weather_cutoff {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
+        f"Saved result: extreme_weather_cutoff {config['n_train_years']}y seed={seed} - RMSE: {rmse_str}, R²: {r2_str}"
     )
 
 
@@ -346,43 +348,56 @@ def main():
     df = load_grid_search_results(file_path)
     best_config = find_best_config(df, args.model)
 
-    # Run extreme year test with weather cutoff
+    # Define seeds to run
+    seeds = [1234, 5678, 2025]
+
+    # Run extreme year test with weather cutoff for each seed
     logger.info(f"\n{'='*60}")
     logger.info(f"Running extreme year test with weather cutoff at week 26")
+    logger.info(f"Running with {len(seeds)} different seeds: {seeds}")
     logger.info(f"{'='*60}")
 
-    # Create test configuration
-    config = create_test_config(
-        args.model,
-        args.crop_type,
-        args.country,
-        best_config,
-    )
+    for seed in seeds:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Running test with seed: {seed}")
+        logger.info(f"{'='*60}")
 
-    # Run test
-    avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
-
-    # Save result immediately (HPC-safe)
-    save_single_result(
-        args.model,
-        args.crop_type,
-        args.country,
-        config,
-        avg_rmse,
-        std_rmse,
-        avg_r2,
-        std_r2,
-    )
-
-    # Print summary
-    if avg_rmse is not None:
-        logger.info(
-            f"Test completed and saved: RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
+        # Create test configuration
+        config = create_test_config(
+            args.model,
+            args.crop_type,
+            args.country,
+            best_config,
         )
-    else:
-        logger.info(f"Test FAILED and logged")
 
-    logger.info(f"\nExtreme year test with weather cutoff completed and saved!")
+        # Update seed
+        config["seed"] = seed
+
+        # Run test
+        avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
+
+        # Save result immediately (HPC-safe)
+        save_single_result(
+            args.model,
+            args.crop_type,
+            args.country,
+            config,
+            avg_rmse,
+            std_rmse,
+            avg_r2,
+            std_r2,
+            seed,
+        )
+
+        # Print summary
+        if avg_rmse is not None:
+            logger.info(
+                f"Test completed and saved (seed={seed}): RMSE = {avg_rmse:.3f} ± {std_rmse:.3f}, R² = {avg_r2:.3f} ± {std_r2:.3f}"
+            )
+        else:
+            logger.info(f"Test FAILED and logged (seed={seed})")
+
+    logger.info(f"\nAll extreme year tests with weather cutoff completed and saved!")
 
 
 if __name__ == "__main__":
