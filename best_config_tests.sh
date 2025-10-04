@@ -86,7 +86,7 @@ echo "Total tests: ${#MODELS[@]} models × ${#CROPS[@]} crops = $((${#MODELS[@]}
 
 # Determine log prefix based on number of GPUs
 if [ $total_tests -eq 2 ]; then
-    LOG_PREFIX="mit_log"
+    LOG_PREFIX="mit_gpu"
 else
     LOG_PREFIX="gpu"
 fi
