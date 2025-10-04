@@ -84,15 +84,21 @@ echo "Starting best config tests: ${MODELS[*]} / ${CROPS[*]} / $COUNTRY"
 echo "Running extreme year tests with weather cutoff at week 26"
 echo "Total tests: ${#MODELS[@]} models × ${#CROPS[@]} crops = $((${#MODELS[@]} * ${#CROPS[@]})) tests"
 
+# Determine log prefix based on number of GPUs
+if [ $total_tests -eq 2 ]; then
+    LOG_PREFIX="mit_log"
+else
+    LOG_PREFIX="gpu"
+fi
+
 mkdir -p data/best_config_tests log
-rm -rf log/gpu*.log
 
 run_test() {
     local gpu_id=$1
     local model=$2
     local crop=$3
     local country=$4
-    local log_file="log/gpu${gpu_id}.log"
+    local log_file="log/${LOG_PREFIX}${gpu_id}.log"
     
     echo "Running: $model / $crop on GPU $gpu_id"
     
@@ -119,7 +125,7 @@ wait
 
 echo "All extreme year tests with weather cutoff completed!"
 echo "Results saved to: data/best_config_tests/"
-echo "Logs saved to: log/gpu*.log"
+echo "Logs saved to: log/${LOG_PREFIX}*.log"
 
 # Summary of what was run
 echo ""
