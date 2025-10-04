@@ -13,6 +13,7 @@ import time
 from typing import Dict, Tuple, Optional, List
 
 from src.crop_yield.yield_main import main as yield_main_func
+from src.crop_yield.trainers.weatherbert_yield_trainer import _reset_fold_index
 from src.utils.utils import setup_logging, get_model_params
 
 # Setup logging
@@ -183,7 +184,7 @@ def create_test_config(
             "n_train_years": 15,  # Fixed to 15 years for extreme year test
             "crop_type": crop_type,
             "country": country,
-            "description": f"Extreme year test with 15 years of history (weather cutoff at week 26)",
+            "description": f"Extreme year test with 15 years of history",
         }
     )
 
@@ -354,7 +355,6 @@ def main():
 
     # Run extreme year test with weather cutoff for each seed
     logger.info(f"\n{'='*60}")
-    logger.info(f"Running extreme year test with weather cutoff at week 26")
     logger.info(f"Running with {len(seeds)} different seeds: {seeds}")
     logger.info(f"{'='*60}")
 
@@ -362,6 +362,9 @@ def main():
         logger.info(f"\n{'='*60}")
         logger.info(f"Running test with seed: {seed}")
         logger.info(f"{'='*60}")
+
+        # Reset fold index before each run to ensure reproducibility
+        _reset_fold_index()
 
         # Create test configuration
         config = create_test_config(
