@@ -77,12 +77,8 @@ class LinearYieldModel(BaseModel):
 
         june_weeks = slice(22, 26)
 
-        # Corn: July only (weeks 26-30)
-        # Soybean: July-August (weeks 26-34)
-        if self.crop_type == "corn":
-            critical_weeks = slice(26, 30)
-        else:
-            critical_weeks = slice(26, 34)
+        # July only (weeks 26-30)
+        critical_weeks = slice(26, 30)
 
         critical_temp = avg_temp[:, critical_weeks].mean(dim=1, keepdim=True)
         critical_precip = precip[:, critical_weeks].mean(dim=1, keepdim=True)
