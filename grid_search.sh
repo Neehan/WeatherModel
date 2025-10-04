@@ -14,22 +14,21 @@ MODELS=()
 CROPS=()
 EXTRA_ARGS=()
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --model)
             shift
-            while [[ $# -gt 0 && $1 != --* ]]; do
-                MODELS+=("$1")
-                shift
-            done
+            MODELS+=("$1")
+            shift
+            MODELS+=("$1")
+            shift
             ;;
         --crop)
             shift
-            while [[ $# -gt 0 && $1 != --* ]]; do
-                CROPS+=("$1")
-                shift
-            done
+            CROPS+=("$1")
+            shift
+            CROPS+=("$1")
+            shift
             ;;
         *)
             EXTRA_ARGS+=("$1")
@@ -38,39 +37,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate required arguments
-if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
-    echo "Usage: $0 --model <model1> [model2] --crop <crop1> [crop2] [additional_python_args...]"
+if [ ${#MODELS[@]} -ne 2 ] || [ ${#CROPS[@]} -ne 2 ]; then
+    echo "Usage: $0 --model <model1> <model2> --crop <crop1> <crop2> [additional_python_args...]"
     echo ""
-    echo "Supported configurations:"
-    echo "  Non-baseline models (with pretrained variants):"
-    echo "    --model <model> --crop <crop>                    # Single model, single crop (2 GPUs: pretrained/not)"
-    echo "    --model <model1> <model2> --crop <crop>          # Two models, single crop (4 GPUs)"
-    echo "    --model <model> --crop <crop1> <crop2>           # Single model, two crops (4 GPUs)"
-    echo "  Baseline models (xgboost, randomforest):"
-    echo "    --model <model> --crop <crop>                    # Single model, single crop (1 GPU)"
-    echo "    --model <model1> <model2> --crop <crop1> <crop2> # Two models, two crops (4 GPUs)"
+    echo "Example: $0 --model weatherformer weatherformersinusoid --crop corn soybean"
     echo ""
-    echo "Examples:"
-    echo "  $0 --model weatherformer --crop corn"
-    echo "  $0 --model weatherformer --crop corn --country argentina"
-    echo "  $0 --model weatherformer --crop wheat --country mexico"
-    echo "  $0 --model weatherformer weatherformersinusoid --crop corn"
-    echo "  $0 --model weatherformer --crop corn soybean"
-    echo "  $0 --model xgboost --crop soybean"
-    echo "  $0 --model xgboost randomforest --crop soybean wheat"
-    echo ""
-    echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos, xgboost, randomforest"
+    echo "Available models: weatherbert, weatherformer, decoder, weatherformersinusoid, decodersinusoid, weatherformermixture, weatherautoencodermixture, weatherautoencoder, weatherautoencodersinusoid, simmtm, cnnrnn, gnnrnn, linear, chronos"
     echo "Available crops: corn, soybean, wheat, sunflower, cotton, sugarcane, beans, corn_rainfed, beans_rainfed"
-    echo "Available countries: usa, argentina, brazil, mexico (default: usa)"
-    echo ""
-    echo "Note: Baseline models (xgboost, randomforest) don't have pretrained variants and use a separate grid search."
     exit 1
 fi
 
-# Validate model names
-valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos" "xgboost" "randomforest")
-baseline_models=("xgboost" "randomforest")
+valid_models=("weatherbert" "weatherformer" "decoder" "weatherformersinusoid" "decodersinusoid" "weatherformermixture" "weatherautoencodermixture" "weatherautoencoder" "weatherautoencodersinusoid" "simmtm" "cnnrnn" "gnnrnn" "linear" "chronos")
 for model in "${MODELS[@]}"; do
     if [[ ! " ${valid_models[@]} " =~ " ${model} " ]]; then
         echo "Error: Invalid model '${model}'. Valid options: ${valid_models[@]}"
@@ -78,7 +55,6 @@ for model in "${MODELS[@]}"; do
     fi
 done
 
-# Validate crop names
 valid_crops=("corn" "soybean" "wheat" "sunflower" "cotton" "sugarcane" "beans" "corn_rainfed" "beans_rainfed")
 for crop in "${CROPS[@]}"; do
     if [[ ! " ${valid_crops[@]} " =~ " ${crop} " ]]; then
@@ -87,85 +63,21 @@ for crop in "${CROPS[@]}"; do
     fi
 done
 
-# Load your environment
 module load miniforge/24.3.0-0
 
-echo "Starting grid search: ${MODELS[*]} / ${CROPS[*]}"
+echo "Starting grid search: ${MODELS[*]} / ${CROPS[*]} (pretrained only)"
 
 mkdir -p data/grid_search log
 rm -rf data/trained_models/crop_yield/* log/gpu*.log
 
 run_experiment() {
     CUDA_VISIBLE_DEVICES=$1 TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.grid_search \
-        --model "$2" --crop-type "$3" $4 --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
+        --model "$2" --crop-type "$3" --load-pretrained --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
         >> "log/gpu$1.log" 2>&1
 }
 
-run_baseline_experiment() {
-    TRANSFORMERS_NO_TORCHVISION=1 python -m src.crop_yield.baseline_grid_search \
-        --model "$2" --crop-type "$3" --output-dir data/grid_search "${EXTRA_ARGS[@]}" \
-        >> "log/gpu$1.log" 2>&1
-}
-
-is_baseline_model() {
-    local model=$1
-    for baseline in "${baseline_models[@]}"; do
-        if [[ "$model" == "$baseline" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Check if all models are baseline models
-all_baseline=true
-for model in "${MODELS[@]}"; do
-    if ! is_baseline_model "$model"; then
-        all_baseline=false
-        break
-    fi
-done
-
-# Check for unsupported case: 2 models + 2 crops = 8 experiments (only for non-baseline models)
-if ! $all_baseline && [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 2 ]; then
-    echo "Error: Cannot run 2 non-baseline models with 2 crops (would require 8 GPUs, but only 4 available)"
-    echo "Supported configurations for non-baseline models:"
-    echo "  - 1 model + 1 crop (2 experiments: pretrained vs not pretrained)"
-    echo "  - 2 models + 1 crop (4 experiments: 2 models × pretrained/not pretrained)"
-    echo "  - 1 model + 2 crops (4 experiments: 2 crops × pretrained/not pretrained)"
-    echo ""
-    echo "Note: Baseline models (xgboost, randomforest) support 2 models + 2 crops (4 experiments total)"
-    exit 1
-fi
-
-if $all_baseline; then
-    # Baseline models don't have pretrained variants, run them using GPUs
-    gpu_idx=0
-    for model in "${MODELS[@]}"; do
-        for crop in "${CROPS[@]}"; do
-            echo "Running baseline model ${model} on ${crop} on GPU ${gpu_idx}..."
-            run_baseline_experiment "${gpu_idx}" "${model}" "${crop}" &
-            gpu_idx=$((gpu_idx + 1))
-        done
-    done
-    wait
-else
-    # Regular models with pretrained/not-pretrained variants
-    if [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 1 ]; then
-        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-        wait
-    elif [ ${#MODELS[@]} -eq 2 ] && [ ${#CROPS[@]} -eq 1 ]; then
-        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-        run_experiment 2 "${MODELS[1]}" "${CROPS[0]}" "" &
-        run_experiment 3 "${MODELS[1]}" "${CROPS[0]}" "--load-pretrained" &
-        wait
-    elif [ ${#MODELS[@]} -eq 1 ] && [ ${#CROPS[@]} -eq 2 ]; then
-        run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" "" &
-        run_experiment 1 "${MODELS[0]}" "${CROPS[0]}" "--load-pretrained" &
-        run_experiment 2 "${MODELS[0]}" "${CROPS[1]}" "" &
-        run_experiment 3 "${MODELS[0]}" "${CROPS[1]}" "--load-pretrained" &
-        wait
-    fi
-fi 
+run_experiment 0 "${MODELS[0]}" "${CROPS[0]}" &
+run_experiment 1 "${MODELS[0]}" "${CROPS[1]}" &
+run_experiment 2 "${MODELS[1]}" "${CROPS[0]}" &
+run_experiment 3 "${MODELS[1]}" "${CROPS[1]}" &
+wait 
