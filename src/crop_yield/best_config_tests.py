@@ -138,8 +138,12 @@ def find_best_config(df: pd.DataFrame, model: str) -> Dict:
         logger.info(f"  min_samples_leaf: {best_config.get('min_samples_leaf')}")
         logger.info(f"  R² score: {best_config['r2_score']:.4f}")
     else:
+
+        best_model = (
+            "weatherautoencoder" if best_row["model"] == "bert" else best_row["model"]
+        )
         best_config = {
-            "model": best_row["model"],
+            "model": best_model,
             "method": best_row["method"],
             "batch_size": int(best_row["batch_size"]),
             "init_lr": best_row["init_lr"],
