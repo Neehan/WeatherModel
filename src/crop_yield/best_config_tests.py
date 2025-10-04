@@ -187,7 +187,7 @@ def create_test_config(
     )
 
     # Set common parameters
-    n_past_years = 6 if country != "mexico" else 4
+    n_past_years = 4
     config.update(
         {
             "n_past_years": n_past_years,
