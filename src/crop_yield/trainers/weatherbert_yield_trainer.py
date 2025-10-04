@@ -366,6 +366,7 @@ def _run_yield_cross_validation(
         trainer_class=trainer_class,
         trainer_kwargs=trainer_kwargs,
         k_folds=setup_params["cross_validation_k"],
+        seed=args_dict["seed"],
     )
 
     return cross_validator.run_cross_validation(

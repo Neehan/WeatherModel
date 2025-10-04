@@ -25,7 +25,8 @@ class CrossValidator:
         model_kwargs: Dict[str, Any],
         trainer_class: Type[BaseTrainer],
         trainer_kwargs: Dict[str, Any],
-        k_folds: int = 5,
+        k_folds: int,
+        seed: int,
     ):
         """
         Initialize CrossValidator.
@@ -34,13 +35,14 @@ class CrossValidator:
             trainer_class: BaseTrainer subclass to use for training
             trainer_kwargs: Arguments to pass to trainer constructor
             k_folds: Number of folds for cross validation
-            random_seed: Random seed for reproducible fold generation
+            seed: Random seed for reproducible behavior
         """
         self.model_class = model_class
         self.model_kwargs = model_kwargs
         self.trainer_class = trainer_class
         self.trainer_kwargs = trainer_kwargs
         self.k_folds = k_folds
+        self.seed = seed
         self.logger = logging.getLogger(__name__)
 
     def run_cross_validation(self, use_optimal_lr: bool = True) -> Dict[str, Any]:
@@ -61,12 +63,12 @@ class CrossValidator:
         for fold in range(self.k_folds):
             self.logger.info(f"Starting fold {fold + 1}/{self.k_folds}")
 
-            # Reset all random seeds to ensure identical behavior across folds
+            # Reset all random seeds to ensure reproducible behavior
             os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-            random.seed(1234)
-            np.random.seed(1234)
-            torch.manual_seed(1234)
-            torch.cuda.manual_seed(1234)
+            random.seed(self.seed)
+            np.random.seed(self.seed)
+            torch.manual_seed(self.seed)
+            torch.cuda.manual_seed(self.seed)
             torch.use_deterministic_algorithms(True)
 
             # Create model for this fold
