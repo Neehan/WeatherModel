@@ -8,6 +8,7 @@ Results are saved to data/best_config_tests/ as TSV files
 
 import os
 import logging
+import json
 import pandas as pd
 import time
 from typing import Dict, Tuple, Optional, List
@@ -272,6 +273,81 @@ def run_test(
         return None, None, None, None, None
 
 
+def save_detailed_results(
+    model: str,
+    crop_type: str,
+    country: str,
+    config: Dict,
+    avg_rmse: Optional[float],
+    std_rmse: Optional[float],
+    avg_r2: Optional[float],
+    std_r2: Optional[float],
+    r_squared_values: Optional[List[float]],
+    seed: int,
+):
+    """Save detailed results with individual R² values to JSON file"""
+
+    output_dir = "data/best_config_tests"
+    os.makedirs(output_dir, exist_ok=True)
+
+    detailed_output_file = os.path.join(
+        output_dir,
+        f"best_config_tests_{model}_{crop_type}_{country}_extreme_weather_cutoff_detailed.json",
+    )
+
+    # Load existing detailed results
+    if os.path.exists(detailed_output_file):
+        try:
+            with open(detailed_output_file, "r") as f:
+                detailed_results = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load existing detailed results: {e}")
+            detailed_results = {}
+    else:
+        detailed_results = {}
+
+    # Create experiment key
+    experiment_key = f"seed_{seed}"
+
+    if r_squared_values is not None:
+        detailed_results[experiment_key] = {
+            "model": model,
+            "crop_type": crop_type,
+            "country": country,
+            "test_type": "extreme_weather_cutoff",
+            "n_train_years": config["n_train_years"],
+            "seed": seed,
+            "mean_rmse": avg_rmse,
+            "std_rmse": std_rmse,
+            "mean_r2": avg_r2,
+            "std_r2": std_r2,
+            "individual_r2_values": r_squared_values,
+            "fold_count": len(r_squared_values),
+        }
+    else:
+        detailed_results[experiment_key] = {
+            "model": model,
+            "crop_type": crop_type,
+            "country": country,
+            "test_type": "extreme_weather_cutoff",
+            "n_train_years": config["n_train_years"],
+            "seed": seed,
+            "mean_rmse": None,
+            "std_rmse": None,
+            "mean_r2": None,
+            "std_r2": None,
+            "individual_r2_values": None,
+            "fold_count": 0,
+            "status": "FAILED",
+        }
+
+    # Save detailed results to JSON file
+    with open(detailed_output_file, "w") as f:
+        json.dump(detailed_results, f, indent=2)
+
+    logger.info(f"Saved detailed results to: {detailed_output_file}")
+
+
 def save_single_result(
     model: str,
     crop_type: str,
@@ -281,6 +357,7 @@ def save_single_result(
     std_rmse: Optional[float],
     avg_r2: Optional[float],
     std_r2: Optional[float],
+    r_squared_values: Optional[List[float]],
     seed: int,
 ):
     """Save a single test result immediately to TSV file (append mode for HPC safety)"""
@@ -324,6 +401,20 @@ def save_single_result(
 
     logger.info(
         f"Saved result: extreme_weather_cutoff {config['n_train_years']}y seed={seed} - RMSE: {rmse_str}, R²: {r2_str}"
+    )
+
+    # Also save detailed results with individual R² values
+    save_detailed_results(
+        model,
+        crop_type,
+        country,
+        config,
+        avg_rmse,
+        std_rmse,
+        avg_r2,
+        std_r2,
+        r_squared_values,
+        seed,
     )
 
 
@@ -387,6 +478,7 @@ def main():
             std_rmse,
             avg_r2,
             std_r2,
+            r_squared_values,
             seed,
         )
 
