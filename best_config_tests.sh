@@ -46,25 +46,34 @@ done
 
 # Validate required arguments
 if [ ${#MODELS[@]} -eq 0 ] || [ ${#CROPS[@]} -eq 0 ]; then
-    echo "Usage: $0 --models <model1> <model2> --crops <crop1> <crop2> [--country <country>] [additional_python_args...]"
+    echo "Usage: $0 --models <model1> [model2] --crops <crop1> <crop2> [--country <country>] [additional_python_args...]"
     echo ""
     echo "Supported models: weatherformer, weatherautoencoder, weatherformersinusoid, simmtm, cnnrnn, linear, chronos, xgboost, randomforest"
+    echo "GPU requirements: 1 model × 2 crops = 2 GPUs, or 2 models × 2 crops = 4 GPUs"
     echo ""
     echo "Examples:"
-    echo "  $0 --models weatherformer weatherautoencoder --crops soybean corn"
+    echo "  $0 --models weatherformer --crops soybean corn                          # 2 GPUs"
+    echo "  $0 --models weatherformer weatherautoencoder --crops soybean corn       # 4 GPUs"
     echo "  $0 --models weatherformer linear --crops soybean corn --country argentina"
-    echo "  $0 --models xgboost randomforest --crops soybean wheat"
     exit 1
 fi
 
-# Check for exactly 2 models and 2 crops (4 total tests = 4 GPUs)
-if [ ${#MODELS[@]} -ne 2 ]; then
-    echo "Error: Exactly 2 models required (got ${#MODELS[@]})"
+# Validate GPU requirements
+total_tests=$((${#MODELS[@]} * ${#CROPS[@]}))
+
+if [ ${#MODELS[@]} -lt 1 ] || [ ${#MODELS[@]} -gt 2 ]; then
+    echo "Error: 1 or 2 models required (got ${#MODELS[@]})"
     exit 1
 fi
 
 if [ ${#CROPS[@]} -ne 2 ]; then
     echo "Error: Exactly 2 crops required (got ${#CROPS[@]})"
+    exit 1
+fi
+
+if [ $total_tests -ne 2 ] && [ $total_tests -ne 4 ]; then
+    echo "Error: Only 2 GPUs (1 model × 2 crops) or 4 GPUs (2 models × 2 crops) configurations supported"
+    echo "Got: ${#MODELS[@]} models × ${#CROPS[@]} crops = $total_tests tests"
     exit 1
 fi
 
