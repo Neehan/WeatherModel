@@ -73,11 +73,11 @@ def xgboost_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
 
         logger.info(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
-        # Train XGBoost
+        # Train XGBoost with hyperparameters from config
         model = xgb.XGBRegressor(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
+            n_estimators=args_dict["n_estimators"],
+            max_depth=args_dict["max_depth"],
+            learning_rate=args_dict["learning_rate"],
             random_state=args_dict["seed"],
             n_jobs=-1,
         )
