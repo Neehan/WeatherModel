@@ -64,8 +64,8 @@ class LinearYieldModel(BaseModel):
 
         Weather indices: 1=max_temp, 2=min_temp, 7=precip
         """
-        n_weeks_per_year = 52
-        current_year_weather = padded_weather[:, -n_weeks_per_year:, :]
+        n_weeks_current_year = 30
+        current_year_weather = padded_weather[:, -n_weeks_current_year:, :]
 
         max_temp = current_year_weather[:, :, 1]
         min_temp = current_year_weather[:, :, 2]
