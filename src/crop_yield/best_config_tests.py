@@ -182,7 +182,7 @@ def create_test_config(
             "n_train_years": 15,  # Fixed to 15 years for extreme year test
             "crop_type": crop_type,
             "country": country,
-            "description": f"Extreme year test with 15 years of history (weather cutoff at week 26)",
+            "description": f"Extreme year test with 15 years of history (weather cutoff at week 30)",
         }
     )
 
@@ -286,7 +286,7 @@ def save_single_result(
 
     output_file = os.path.join(
         output_dir,
-        f"best_config_tests_{model}_{crop_type}_{country}_extreme_weather_cutoff.tsv",
+        f"best_config_tests_{model}_{crop_type}_{country}_lead_gap.tsv",
     )
 
     # Format results like grid search with ± notation
@@ -297,7 +297,7 @@ def save_single_result(
         "model": model,
         "crop_type": crop_type,
         "country": country,
-        "test_type": "extreme_weather_cutoff",
+        "test_type": "lead_gap",
         "n_train_years": config["n_train_years"],
         "rmse": rmse_str,
         "r2": r2_str,
@@ -319,7 +319,7 @@ def save_single_result(
         logger.info(f"Created new results file: {output_file}")
 
     logger.info(
-        f"Saved result: extreme_weather_cutoff {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
+        f"Saved result: lead_gap {config['n_train_years']}y - RMSE: {rmse_str}, R²: {r2_str}"
     )
 
 
@@ -348,7 +348,7 @@ def main():
 
     # Run extreme year test with weather cutoff
     logger.info(f"\n{'='*60}")
-    logger.info(f"Running extreme year test with weather cutoff at week 26")
+    logger.info(f"Running extreme year test with weather cutoff at week 30")
     logger.info(f"{'='*60}")
 
     # Create test configuration
