@@ -171,6 +171,7 @@ def create_test_config(
     crop_type: str,
     country: str,
     best_config: Dict,
+    seed: int,
 ) -> Dict:
     """Create configuration for the test"""
     config = best_config.copy()
@@ -191,7 +192,7 @@ def create_test_config(
     config.update(
         {
             "n_past_years": n_past_years,
-            "seed": 1234,
+            "seed": seed,
             "test_year": None,
             "rank": 0,
             "world_size": 1,
@@ -368,11 +369,8 @@ def main():
             args.crop_type,
             args.country,
             best_config,
+            seed,
         )
-
-        # Update seed
-        config["seed"] = seed
-
         # Run test
         avg_rmse, std_rmse, avg_r2, std_r2, r_squared_values = run_test(config)
 
