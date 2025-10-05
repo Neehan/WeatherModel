@@ -286,7 +286,7 @@ def save_single_result(
 
     output_file = os.path.join(
         output_dir,
-        f"best_config_tests_{model}_{crop_type}_{country}_extreme_weather_cutoff.tsv",
+        f"best_config_tests_{model}_{crop_type}_{country}_shorter_history.tsv",
     )
 
     # Format results like grid search with ± notation
