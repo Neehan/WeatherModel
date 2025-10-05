@@ -54,11 +54,16 @@ def xgboost_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
     )
 
     fold_rmses = []
+    fold_stds = []
 
     for test_year in test_years:
         logger.info(f"Training fold for test year {test_year}")
 
         test_gap = 4 if test_type == "ahead_pred" else 0
+
+        # Clear CROP_YIELD_STATS for this fold
+        CROP_YIELD_STATS[crop_type]["mean"].clear()
+        CROP_YIELD_STATS[crop_type]["std"].clear()
 
         # Get numpy data
         (X_train, y_train), (X_test, y_test) = get_numpy_train_test_data(
@@ -73,23 +78,56 @@ def xgboost_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
 
         logger.info(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
-        # Train XGBoost
+        # Train XGBoost - use hyperparameters from args_dict if provided
+        # Match the configuration used in baseline_grid_search.py
         model = xgb.XGBRegressor(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
+            n_estimators=args_dict.get("n_estimators", 100),
+            max_depth=args_dict.get("max_depth", 6),
+            learning_rate=args_dict.get("learning_rate", 0.1),
             random_state=args_dict["seed"],
             n_jobs=-1,
+            objective="reg:squarederror",
+            tree_method="hist",
+            min_child_weight=5,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=10,
+            early_stopping_rounds=100,
         )
 
-        model.fit(X_train, y_train)
+        # Use validation set for early stopping (same as grid search)
+        val_year = test_year - test_gap - 1
+        CROP_YIELD_STATS[crop_type]["mean"].clear()
+        CROP_YIELD_STATS[crop_type]["std"].clear()
+
+        (X_train_reduced, y_train_reduced), (X_val, y_val) = get_numpy_train_test_data(
+            crop_df,
+            n_train_years - 1,
+            val_year,
+            n_past_years,
+            crop_type,
+            country,
+            test_gap=0,
+        )
+
+        model.fit(
+            X_train_reduced,
+            y_train_reduced,
+            eval_set=[(X_val, y_val)],
+            verbose=False,
+        )
 
         # Predict
         y_pred = model.predict(X_test)
 
-        # Compute RMSE
+        # Compute RMSE (on standardized values)
         rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
+
+        # Get the std used for this fold
+        fold_std = CROP_YIELD_STATS[crop_type]["std"][0]
+
         fold_rmses.append(rmse)
+        fold_stds.append(fold_std)
 
         logger.info(f"Test year {test_year}: RMSE = {rmse:.4f}")
 

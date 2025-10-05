@@ -73,11 +73,12 @@ def random_forest_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
 
         logger.info(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
-        # Train Random Forest
+        # Train Random Forest - use hyperparameters from args_dict if provided
         model = RandomForestRegressor(
-            n_estimators=100,
-            max_depth=None,
-            min_samples_split=2,
+            n_estimators=args_dict.get("n_estimators", 100),
+            max_depth=args_dict.get("max_depth"),
+            min_samples_leaf=args_dict.get("min_samples_leaf", 1),
+            max_features="sqrt",  # type: ignore
             random_state=args_dict["seed"],
             n_jobs=-1,
         )
