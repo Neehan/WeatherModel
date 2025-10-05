@@ -74,12 +74,19 @@ def xgboost_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
         logger.info(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
         # Train XGBoost with hyperparameters from config
+        # Must match baseline_grid_search.py exactly
         model = xgb.XGBRegressor(
             n_estimators=args_dict["n_estimators"],
             max_depth=args_dict["max_depth"],
             learning_rate=args_dict["learning_rate"],
             random_state=args_dict["seed"],
             n_jobs=-1,
+            objective="reg:squarederror",
+            tree_method="hist",
+            min_child_weight=5,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=10,
         )
 
         model.fit(X_train, y_train)

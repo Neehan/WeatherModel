@@ -74,10 +74,12 @@ def random_forest_yield_training_loop(args_dict, use_cropnet: bool) -> dict:
         logger.info(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
         # Train Random Forest with hyperparameters from config
+        # Must match baseline_grid_search.py exactly
         model = RandomForestRegressor(
             n_estimators=args_dict["n_estimators"],
             max_depth=args_dict["max_depth"],
             min_samples_leaf=args_dict["min_samples_leaf"],
+            max_features="sqrt",  # type: ignore
             random_state=args_dict["seed"],
             n_jobs=-1,
         )
